@@ -41,24 +41,50 @@ class GameCommands(commands.Component):
         except Exception as e:
             await ctx.send(f"❌ Erreur: {e}")
 
-    @commands.command(name="gamecache", aliases=["gc"])
-    async def game_cache_command(self, ctx: commands.Context, *, game_name: str | None = None):
-        """🗂️ Recherche dans le cache de jeux uniquement"""
-        if not game_name:
-            await ctx.send("🗂️ Usage: !gamecache <nom du jeu>")
-            return
-
+    @commands.command(name="gamecategory", aliases=["gc"])
+    async def game_category_command(self, ctx: commands.Context):
+        """🎮 Auto-détecte le jeu du stream actuel et recherche ses infos"""
         try:
             bot = ctx.bot
-            if hasattr(bot, 'game_cache'):
-                result = bot.game_cache.get(game_name)
+            
+            # Récupérer les infos du stream via Twitch API
+            broadcaster_name = ctx.channel.name if ctx.channel else None
+            if not broadcaster_name:
+                await ctx.send("❌ Impossible de déterminer le channel")
+                return
+            
+            # Utiliser l'API Helix pour récupérer le stream
+            users = await bot.fetch_users(names=[broadcaster_name])
+            if not users:
+                await ctx.send(f"❌ Utilisateur '{broadcaster_name}' non trouvé")
+                return
+            
+            user = users[0]
+            streams = await bot.fetch_streams(user_ids=[user.id])
+            
+            if not streams:
+                await ctx.send(f"🎮 @{broadcaster_name} n'est pas sur un jeu Nullos !")
+                return
+            
+            stream = streams[0]
+            game_name = stream.game_name
+            
+            if not game_name:
+                await ctx.send(f"🎮 @{broadcaster_name} n'est pas sur un jeu Nullos !")
+                return
+            
+            # Rechercher les infos du jeu via GameLookup (comme !gameinfo)
+            if hasattr(bot, 'config'):
+                lookup = GameLookup(bot.config)
+                result = await lookup.search_game(game_name)
+                
                 if result:
-                    response = f"🗂️ Cache: {result['name']} ({result.get('released', 'N/A')})"
+                    response = lookup.format_result(result)
                     await ctx.send(response)
                 else:
-                    await ctx.send(f"❌ '{game_name}' non trouvé dans le cache")
+                    await ctx.send(f"❌ Jeu '{game_name}' non trouvé dans les bases de données")
             else:
-                await ctx.send("❌ Cache non disponible")
+                await ctx.send("❌ Service de jeux non disponible")
                 
         except Exception as e:
-            await ctx.send(f"❌ Erreur cache: {e}")
+            await ctx.send(f"❌ Erreur: {e}")

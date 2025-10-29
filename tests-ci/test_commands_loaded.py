@@ -89,3 +89,15 @@ class TestCriticalCommands:
         from commands.translation import TranslationCommands
         trad = TranslationCommands()
         assert hasattr(trad, 'translate_text')
+    
+    def test_gameinfo_command_exists(self):
+        """Vérifie que !gameinfo existe"""
+        from commands.game_commands import GameCommands
+        game = GameCommands()
+        assert hasattr(game, 'game_command')
+    
+    def test_gamecategory_command_exists(self):
+        """Vérifie que !gamecategory / !gc existe"""
+        from commands.game_commands import GameCommands
+        game = GameCommands()
+        assert hasattr(game, 'game_category_command')

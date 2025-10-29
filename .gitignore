@@ -32,6 +32,11 @@ wheels/
 .coverage
 htmlcov/
 
+# Debug scripts (commit README only)
+debug/*.log
+debug/test_*.local.py
+debug/personal_*
+
 # Environment
 .env
 .venv
