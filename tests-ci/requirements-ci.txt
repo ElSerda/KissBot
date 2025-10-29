@@ -1,0 +1,17 @@
+# Dependencies pour CI/CD
+# KissBot Neural V2 - TwitchIO 3.x
+
+# Core dependencies (from main requirements.txt)
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-timeout>=2.2.0
+pytest-cov>=4.1.0  # Coverage reports
+
+# Testing utilities
+aioresponses>=0.7.6  # Mock aiohttp requests
+pytest-mock>=3.12.0  # Mocking utilities
+
+# Code quality (optional pour CI)
+# ruff>=0.1.0        # Fast Python linter
+# black>=23.0.0      # Code formatter
+# mypy>=1.7.0        # Type checking

@@ -1,0 +1,88 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.tox/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+kissbot-venv/
+
+# Cache
+cache/
+*.log
+*.pyc
+
+# Backups & Archives
+_archive/
+*_backup*/
+*.tar.gz
+*.backup
+
+# Config secrets
+config.yaml
+config_real.yaml
+config_local.yaml
+
+# Temporary
+temp/
+tmp/
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 🔐 Credentials sensibles
+config/credentials/
+config/credentials/*.json
+!config/credentials/*.template
+token_storage.json
+.tio.tokens.json
+
+# 🔐 Patterns sensibles supplémentaires
+*.token
+*.key
+*.secret
+*.pem
+*.cert
+
+
+# 🔐 Configuration avec vraies clés
+config/config.yaml
+config/config.private.yaml
+config/*.private.yaml.ruff_cache/

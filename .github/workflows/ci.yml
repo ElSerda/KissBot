@@ -1,0 +1,115 @@
+# GitHub Actions CI/CD Workflow
+# KissBot Neural V2 - TwitchIO 3.x
+# 
+# Test Strategy:
+# - tests/ → Shannon mathematical validation (15 tests)
+# - tests-ci/ → Structure + imports with mocks (86 tests, 60 pass, 26 skip)
+# - tests-local/ → Real pipeline with API keys (NOT run in CI)
+
+name: KissBot CI
+
+on:
+  push:
+    branches: [ main, develop, dev ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: 📦 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov
+    
+    - name: � Run Shannon tests (mathematical validation)
+      run: |
+        echo "::group::Shannon Entropy Tests (Sacred Formulas)"
+        pytest tests/ -v --tb=short
+        echo "::endgroup::"
+    
+    - name: 🏗️ Run CI tests (structure validation with mocks)
+      run: |
+        echo "::group::CI Tests (Structure + Imports)"
+        pytest tests-ci/ -c tests-ci/pytest-ci.ini -v --tb=short
+        echo "::endgroup::"
+    
+    - name: 📊 Generate test summary
+      if: always()
+      run: |
+        echo "## 🎯 KissBot Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🧮 Shannon Tests (Mathematical - 15 tests)" >> $GITHUB_STEP_SUMMARY
+        pytest tests/ --tb=no -q >> $GITHUB_STEP_SUMMARY 2>&1 || true
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🏗️ CI Tests (Structure - 86 tests)" >> $GITHUB_STEP_SUMMARY
+        pytest tests-ci/ -c tests-ci/pytest-ci.ini --tb=no -q >> $GITHUB_STEP_SUMMARY 2>&1 || true
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**ℹ️ Note**: Local tests (7 tests with real API keys) are not run in CI" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Total Coverage**: 101 tests (15 Shannon + 86 CI)" >> $GITHUB_STEP_SUMMARY
+    
+    - name: ✅ All tests passed
+      run: echo "🎉 All CI tests passed! Shannon formulas validated + Structure confirmed"
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    
+    - name: 📦 Install linting tools
+      run: |
+        pip install ruff mypy
+      continue-on-error: true
+    
+    - name: 🔍 Lint with Ruff (fast Python linter)
+      run: |
+        ruff check . --select E,F,W --ignore E501
+      continue-on-error: true
+    
+    - name: 🔍 Type check with MyPy
+      run: |
+        mypy intelligence/ commands/ core/ backends/ --ignore-missing-imports
+      continue-on-error: true
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    
+    - name: 🔒 Security audit (dependencies)
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety
+        safety check --json || true
+      continue-on-error: true

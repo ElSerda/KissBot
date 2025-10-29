@@ -1,0 +1,30 @@
+[tool.pylint]
+disable = [
+    "too-many-lines",
+    "too-many-instance-attributes", 
+    "too-many-arguments",
+    "too-many-locals",
+    "broad-except",
+    "logging-fstring-interpolation",
+    "unused-argument",
+    "import-error",
+    "no-name-in-module"
+]
+
+[tool.pyright]
+reportMissingImports = false
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportGeneralTypeIssues = false
+
+[tool.ruff]
+# Ignore certaines erreurs pour le Neural V2.0
+ignore = [
+    "F401",  # Unused imports
+    "F841",  # Unused variables  
+    "E722",  # Bare except
+    "C901",  # Complex functions
+    "PLR0913",  # Too many arguments
+]
