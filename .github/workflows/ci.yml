@@ -66,18 +66,21 @@ jobs:
           COLOR="red"
         fi
         
-        # Create badge JSON for shields.io endpoint
+        # Generate SVG badge using shields.io
         mkdir -p badges
-        cat > badges/coverage.json << EOF
-        {
-          "schemaVersion": 1,
-          "label": "coverage",
-          "message": "${COVERAGE}%",
-          "color": "${COLOR}"
-        }
-        EOF
+        curl -o badges/coverage.svg "https://img.shields.io/badge/coverage-${COVERAGE}%25-${COLOR}"
         
-        cat badges/coverage.json
+        echo "Badge generated: coverage-${COVERAGE}%-${COLOR}"
+    
+    - name: 📤 Deploy coverage badge
+      if: matrix.python-version == '3.12' && github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./badges
+        publish_branch: badges
+        keep_files: false
+        commit_message: 'Update coverage badge'
     
     - name: 📤 Upload coverage artifact
       if: matrix.python-version == '3.12'

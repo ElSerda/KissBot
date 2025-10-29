@@ -13,7 +13,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![TwitchIO](https://img.shields.io/badge/TwitchIO-3.x-blueviolet)](https://github.com/TwitchIO/TwitchIO)
 [![CI Tests](https://github.com/ElSerda/KissBot/actions/workflows/ci.yml/badge.svg)](https://github.com/ElSerda/KissBot/actions)
-[![Coverage](https://img.shields.io/badge/coverage-calculating-yellow)](#testing)
+![Coverage](https://raw.githubusercontent.com/ElSerda/KissBot/badges/coverage.svg)
 [![KISS](https://img.shields.io/badge/architecture-KISS-brightgreen)](#architecture)
 [![Neural V2](https://img.shields.io/badge/intelligence-Neural%20V2-purple)](#neural-v2)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
