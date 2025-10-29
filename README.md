@@ -2,27 +2,30 @@
 
 # 🎮 KissBot V1 - Twitch Bot KISS
 
-**Ultra-lean Twitch bot with 3-Pillar architecture + Revolutionary Quantum Cache System**
+**Ultra-lean Twitch bot with Neural V2 Intelligence + Quantum Code Inference**
 
-<table>
-<tr>
-<td align="center">
-<img src="assets/screenshots/kissbot_logo_v1.png" width="180" alt="KissBot Logo V1"/>
-<br><em>Logo Design V1</em>
-</td>
-<td align="center">
-<img src="assets/screenshots/kissbot_logo_v2.png" width="180" alt="KissBot Logo V2"/>
-<br><em>Logo Design V2</em>
-</td>
-</tr>
-</table>
+![KissBot Logo](assets/logo.png)
 
-[![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![TwitchIO](https://img.shields.io/badge/TwitchIO-2.7.0-blueviolet)](https://github.com/TwitchIO/TwitchIO)
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![TwitchIO](https://img.shields.io/badge/TwitchIO-3.x-blueviolet)](https://github.com/TwitchIO/TwitchIO)
 [![KISS](https://img.shields.io/badge/architecture-KISS-brightgreen)](#architecture)
-[![Quantum](https://img.shields.io/badge/physics-quantum%20cache-blueviolet)](#quantum-system)
-[![Tests](https://img.shields.io/badge/tests-15%2F15-success)](#testing)
-[![TwitchIO 3.x](https://img.shields.io/badge/TwitchIO%203.x-EventSub%20Ready-ff6b35)](#twitchio-3x)
+[![Neural V2](https://img.shields.io/badge/intelligence-Neural%20V2-purple)](#neural-v2)
+[![Tests](https://img.shields.io/badge/tests-93%20total-success)](#testing)
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen)](https://github.com/ElSerda/KissBot/actions)
+
+</div>
+
+---
+
+## 📸 Screenshots
+
+<div align="center">
+
+### Bot Interaction
+![Interaction Example](assets/interaction.png)
+
+### System Architecture
+![Architecture Infographic](assets/infographic.png)
 
 </div>
 
