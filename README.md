@@ -12,10 +12,11 @@
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![TwitchIO](https://img.shields.io/badge/TwitchIO-3.x-blueviolet)](https://github.com/TwitchIO/TwitchIO)
+[![CI Tests](https://github.com/ElSerda/KissBot/actions/workflows/ci.yml/badge.svg)](https://github.com/ElSerda/KissBot/actions)
+[![Coverage](https://img.shields.io/badge/coverage-calculating-yellow)](#testing)
 [![KISS](https://img.shields.io/badge/architecture-KISS-brightgreen)](#architecture)
 [![Neural V2](https://img.shields.io/badge/intelligence-Neural%20V2-purple)](#neural-v2)
-[![Tests](https://img.shields.io/badge/tests-93%20total-success)](#testing)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen)](https://github.com/ElSerda/KissBot/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
 
@@ -640,52 +641,12 @@ Step 3: Response
 ## 🛣️ Roadmap
 
 ### v1.1 (Next)
-- [ ] **Cache consistency fix:** Proactive enrichment system (see Implementation Plan below)
-- [ ] **Format harmonization:** Unified output between !gc and !gameinfo  
+- [x] ~~**Cache consistency fix**~~ ✅ **DONE** (IGDB as ground truth via `enrich_game_from_igdb_name()`)
+- [x] ~~**Format harmonization**~~ ✅ **DONE** (both commands use `GameLookup.format_result()`)
 - [x] ~~TwitchIO v3.x migration~~ ✅ **DONE**
 - [x] ~~Twitch EventSub support~~ ✅ **DONE**
 - [x] ~~CI/CD with GitHub Actions~~ ✅ **DONE**
-- [ ] Coverage badges
-
-#### 🔧 Implementation Plan: Cache Enrichment System
-
-**Problem:** !gc (Twitch API) and !gameinfo (RAWG+Steam) create inconsistent cache data
-
-**Solution:** Proactive cache enrichment - !gc does heavy lifting once, !gameinfo gets free cache hits
-
-**Workflow:**
-```python
-# !gc "Hades" execution:
-# 1. Twitch Helix API → detect stream game name
-# 2. AUTO-ENRICHMENT: Call RAWG+Steam APIs in background  
-# 3. Cache RICH data (full gameinfo format)
-# 4. Return !gc format response (simple)
-
-# !gameinfo "Hades" (later):
-# → Cache hit with enriched data → instant detailed response
-```
-
-**Files to modify:**
-1. `commands/game_commands.py`:
-   - Modify `_get_current_game()` to trigger enrichment
-   - Add `_enrich_game_data()` background function
-   - Cache enriched data, return simple format
-
-2. `backends/game_cache.py`:
-   - Add enrichment flags and metadata
-   - Unified cache structure for both commands
-
-**Benefits:**
-- ✅ Cache-first principle maintained
-- ✅ !gc stays fast (simple response)  
-- ✅ !gameinfo instant (enriched cache hit)
-- ✅ Single enrichment logic
-- ✅ No duplicate API calls
-
-**Technical details:**
-- Use existing RAWG+Steam integration from !gameinfo
-- Async enrichment (non-blocking for !gc response)
-- Cache TTL: 30min (existing), enrichment flag permanent until TTL expires
+- [x] ~~Coverage badges~~ ✅ **DONE** (automated with GitHub Actions)
 
 ### v1.2 (Future)
 - [ ] C++ port of commands/ (performance)

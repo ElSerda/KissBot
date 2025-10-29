@@ -30,7 +30,10 @@ wheels/
 .tox/
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.json
 htmlcov/
+badges/
 
 # Debug scripts (commit README only)
 debug/*.log
