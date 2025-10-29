@@ -43,6 +43,24 @@ reportUnknownVariableType = false
 reportGeneralTypeIssues = false
 
 [tool.ruff]
+# Exclude directories from linting
+exclude = [
+    "kissbot-venv",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    "htmlcov",
+    "build",
+    "dist",
+    "*.egg-info",
+    "_archive",
+    "cache",
+    "tests-ci",
+    "tests-local",
+    "debug"
+]
+
 # Ignore certaines erreurs pour le Neural V2.0
 ignore = [
     "F401",  # Unused imports
