@@ -429,14 +429,14 @@ class QuantumGameCache(BaseCacheInterface):
         """Apprentissage automatique à partir d'un résultat d'API."""
         if not api_result:
             return False
-            
+
         try:
             # Créer une clé quantique normalisée
             quantum_key = f"game:{query.lower().strip()}"
-            
+
             # Confiance élevée pour résultats API directs
             confidence = 0.9
-            
+
             # Stocker avec métadonnées d'apprentissage
             enriched_result = {
                 "game_result": api_result,
@@ -445,18 +445,18 @@ class QuantumGameCache(BaseCacheInterface):
                 "original_query": query,
                 "observer": observer
             }
-            
+
             # Enregistrer dans le cache quantique
             self.quantum_cache.set(
-                quantum_key, 
-                enriched_result, 
+                quantum_key,
+                enriched_result,
                 confidence=confidence,
                 source="api_learning"
             )
-            
+
             self.logger.info(f"📚 Apprentissage automatique: {query} → confiance {confidence}")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Erreur apprentissage automatique {query}: {e}")
             return False

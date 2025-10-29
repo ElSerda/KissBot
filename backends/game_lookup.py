@@ -158,11 +158,11 @@ class GameLookup:
     async def enrich_game_from_igdb_name(self, igdb_name: str) -> GameResult | None:
         """
         Enrichit un jeu depuis son nom IGDB (catégorie Twitch = source fiable).
-        
+
         Différence vs search_game():
         - search_game(): Input user incertain → fuzzy search
         - enrich_from_igdb: Input IGDB fiable → priorité match exact
-        
+
         Flow:
         1. Check cache avec nom IGDB exact
         2. Enrichir avec RAWG+Steam (match exact prioritaire)
@@ -172,34 +172,34 @@ class GameLookup:
         if not igdb_name or not igdb_name.strip():
             self.logger.warning("❌ Nom IGDB vide")
             return None
-        
+
         igdb_name = igdb_name.strip()
         cache_key = f"igdb:{igdb_name.lower()}"
-        
+
         # 1. Check cache d'abord
         if self.cache is not None:
             cached = self.cache.get(cache_key)
             if cached:
                 self.logger.info(f"✅ Cache hit (IGDB): {igdb_name}")
                 return cached
-        
+
         try:
             # 2. Enrichissement RAWG + Steam (parallèle)
             rawg_task = self._fetch_rawg(igdb_name)
             steam_task = self._fetch_steam(igdb_name)
-            
+
             results = await asyncio.gather(rawg_task, steam_task, return_exceptions=True)
-            
+
             # Process results
             def process_result(data: Any, api: str) -> dict | None:
                 if isinstance(data, Exception):
                     self.logger.warning(f"{api} error: {data}")
                     return None
                 return data if isinstance(data, dict) else None
-            
+
             rawg_dict = process_result(results[0], "RAWG")
             steam_dict = process_result(results[1], "Steam")
-            
+
             # 3. Build GameResult
             if rawg_dict is not None or steam_dict is not None:
                 result = self._merge_data(rawg_dict, steam_dict, igdb_name)
@@ -211,30 +211,30 @@ class GameLookup:
                     primary_source="IGDB",
                     api_sources=["IGDB"]
                 )
-            
+
             if result:
                 # Override avec nom IGDB original (pas le nom RAWG/Steam)
                 result.name = igdb_name
-                
+
                 # Calculer fiabilité
                 result.reliability_score = self._calculate_reliability(result, igdb_name)
                 result.confidence = "IGDB_VERIFIED"  # Flag spécial pour sources IGDB
                 result.primary_source = "IGDB+RAWG" if rawg_dict else "IGDB"
-                
+
                 # Pas de flag typo (source IGDB = ground truth)
                 result.possible_typo = False
-                
+
                 # 4. Cache avec metadata
                 if self.cache is not None:
                     self.cache.set(cache_key, result)
-                
+
                 sources = "+".join(result.api_sources) if result.api_sources else result.primary_source
                 self.logger.info(f"✅ IGDB enrichi: {result.name} [{sources}] - {result.confidence}")
                 return result
-            
+
             self.logger.warning(f"❌ Échec enrichissement IGDB: {igdb_name}")
             return None
-            
+
         except Exception as e:
             self.logger.error(f"Erreur enrichissement IGDB {igdb_name}: {e}")
             return None

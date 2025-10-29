@@ -61,10 +61,11 @@ exclude = [
     "debug"
 ]
 
+[tool.ruff.lint]
 # Ignore certaines erreurs pour le Neural V2.0
 ignore = [
     "F401",  # Unused imports
-    "F841",  # Unused variables  
+    "F841",  # Unused variables
     "E722",  # Bare except
     "C901",  # Complex functions
     "PLR0913",  # Too many arguments

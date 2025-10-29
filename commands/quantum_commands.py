@@ -4,7 +4,6 @@ import logging
 
 from twitchio.ext import commands
 
-from core.quantum_cache import QuantumCache
 
 
 class QuantumCommands(commands.Component):

@@ -21,17 +21,17 @@ class UtilsCommands(commands.Component):
     async def ping_command(self, ctx: commands.Context):
         """🏓 Test de latence et uptime du bot"""
         print("🔍 DEBUG: COMMANDE PING APPELÉE !")
-        
+
         # Version simple qui marche
         bot = ctx.bot
         start_time = getattr(bot, "start_time", None)
-        
+
         if start_time:
             uptime = time.time() - start_time
             uptime_str = f"{uptime:.1f}s"
         else:
             uptime_str = "N/A"
-            
+
         response = f"🏓 Pong! Uptime: {uptime_str} | TwitchIO 3.x EventSub ✅"
         print(f"🔍 DEBUG: Réponse ping: {response}")
         await ctx.send(response)
@@ -42,7 +42,7 @@ class UtilsCommands(commands.Component):
         """📊 Statistiques du bot et du cache"""
         bot = ctx.bot
         start_time = getattr(bot, "start_time", None)
-        
+
         # Uptime
         if start_time:
             uptime = time.time() - start_time

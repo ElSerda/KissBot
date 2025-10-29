@@ -155,7 +155,8 @@ class TranslationCommands(commands.Component):
                 with open(devs_file, encoding="utf-8") as f:
                     return json.load(f)
         except Exception as e:
-            ctx.bot.logger.error(f"Erreur lecture devs whitelist: {e}")
+            # Log error without ctx (static method)
+            print(f"⚠️ Erreur lecture devs whitelist: {e}")
 
         # Default data
         return {"devs": [], "auto_translate": True, "updated": datetime.utcnow().isoformat() + "Z"}
@@ -172,7 +173,8 @@ class TranslationCommands(commands.Component):
                 json.dump(data, f, indent=2, ensure_ascii=False)
             return True
         except Exception as e:
-            ctx.bot.logger.error(f"Erreur sauvegarde devs whitelist: {e}")
+            # Log error without ctx (static method)
+            print(f"⚠️ Erreur sauvegarde devs whitelist: {e}")
             return False
 
     def _is_broadcaster_or_mod(self, ctx: commands.Context) -> bool:

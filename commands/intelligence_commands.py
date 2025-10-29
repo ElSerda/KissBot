@@ -6,7 +6,7 @@ Commandes !ask et gestion des mentions pour LLM
 from twitchio.ext import commands
 
 from intelligence.neural_pathway_manager import NeuralPathwayManager
-from intelligence.core import extract_question_from_command, process_llm_request
+from intelligence.core import process_llm_request
 
 
 class IntelligenceCommands(commands.Component):
@@ -26,7 +26,7 @@ class IntelligenceCommands(commands.Component):
     @commands.command(name="ask")
     async def ask_command(self, ctx: commands.Context, *, question: str | None = None):
         """🧠 Pose une question à l'IA"""
-        
+
         # Initialiser LLMHandler
         bot = ctx.bot
         self._ensure_llm_handler(bot)
@@ -60,7 +60,7 @@ class IntelligenceCommands(commands.Component):
                 await ctx.send(f"@{ctx.author.name} ❌ Erreur IA, réessaye plus tard")
             else:
                 await ctx.send(f"@{ctx.author.name} {response}")
-                
+
         except Exception as e:
             await ctx.send(f"@{ctx.author.name} ❌ Erreur: {e}")
 
@@ -70,7 +70,7 @@ class IntelligenceCommands(commands.Component):
         if not message:
             await ctx.send("🧠 Usage: !chill <message> (utilise plutôt !ask ou @bot)")
             return
-        
+
         # Rediriger vers ask_command
         await self.ask_command(ctx, question=message)
 
@@ -79,21 +79,21 @@ class IntelligenceCommands(commands.Component):
 async def handle_mention_v3(bot, message):
     """
     🧠 Traite les mentions @bot dans TwitchIO 3.x
-    
+
     Args:
         bot: Instance du bot TwitchIO 3.x
         message: Message TwitchIO EventSub
-    
+
     Returns:
         str: Réponse générée ou None
     """
     from intelligence.core import extract_mention_message, process_llm_request
-    
+
     # 🧠 Créer handler une fois
     if not hasattr(bot, "_intelligence_handler"):
         bot._intelligence_handler = NeuralPathwayManager(bot.config)
         # Note: pas de update_bot_name dans cette version
-    
+
     # 📦 Extraction message - utiliser le nom de bot récupéré dynamiquement
     bot_name = getattr(bot, 'bot_login_name', bot.config.get("bot", {}).get("name", "serda_bot"))
     user_message = extract_mention_message(message.text, bot_name)
@@ -116,9 +116,9 @@ async def handle_mention_v3(bot, message):
             user_name=message.chatter.name or "unknown",
             game_cache=game_cache,
         )
-        
+
         return f"@{message.chatter.name} {response}" if response else None
-        
+
     except Exception as e:
         print(f"❌ Erreur mention LLM: {e}")
         return None

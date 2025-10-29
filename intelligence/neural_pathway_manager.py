@@ -3,13 +3,11 @@
 Orchestrateur neural avec sélection UCB pour synapses
 """
 
-import asyncio
 import logging
 import math
 import time
 import uuid
-from collections import defaultdict
-from typing import Any, Dict, List, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from .neural_prometheus import neural_prometheus_metrics
 from .unified_quantum_classifier import UnifiedQuantumClassifier
@@ -87,10 +85,9 @@ class NeuralPathwayManager:
         self.max_correlation_history = neural_config.get("max_correlation_history", 100)
 
         # 🌌 UNIFIED QUANTUM CLASSIFIER V3.0 - Classification quantique avec Enhanced Patterns
-        from .unified_quantum_classifier import UnifiedQuantumClassifier
         patterns_path = config.get("enhanced_patterns_path", None)
         self.stimulus_classifier = UnifiedQuantumClassifier(config, patterns_path)
-        
+
         # 📊 QUANTUM METRICS V3.0 - Observabilité quantique avancée
         from .quantum_metrics import QuantumMetrics
         quantum_metrics_config = neural_config.get("quantum_metrics", {})
@@ -114,7 +111,7 @@ class NeuralPathwayManager:
         start_time = time.time()
         quantum_result = self.stimulus_classifier.classify(stimulus, context)
         response_time_ms = (time.time() - start_time) * 1000
-        
+
         # 📊 Enregistrement dans QuantumMetrics
         self.quantum_metrics.record_classification(
             stimulus=stimulus,
@@ -127,23 +124,23 @@ class NeuralPathwayManager:
             method=quantum_result.get('method', 'quantum'),
             response_time_ms=response_time_ms
         )
-        
+
         # Log avec métadonnées quantiques
         self.logger.debug(
             f"🌌 Quantum: '{stimulus}' → {quantum_result['class']} "
             f"(conf: {quantum_result['confidence']:.3f}, entropy: {quantum_result['entropy']:.3f}, "
             f"certain: {quantum_result['is_certain']}, fallback: {quantum_result['should_fallback']})"
         )
-        
+
         # Retour de la classe pour compatibilité Neural V2.0
         return quantum_result['class']
-    
+
     def classify_with_entropy(self, stimulus: str, context: str = "general") -> dict:
         """🌌 NOUVELLE API - Classification quantique complète avec métadonnées"""
         start_time = time.time()
         result = self.stimulus_classifier.classify(stimulus, context)
         response_time_ms = (time.time() - start_time) * 1000
-        
+
         # 📊 Enregistrement dans QuantumMetrics avec classe attendue optionnelle
         self.quantum_metrics.record_classification(
             stimulus=stimulus,
@@ -156,7 +153,7 @@ class NeuralPathwayManager:
             method=result.get('method', 'quantum'),
             response_time_ms=response_time_ms
         )
-        
+
         return result
 
     def calculate_ucb_scores(self, stimulus_class: str) -> dict[str, float]:
@@ -420,7 +417,7 @@ class NeuralPathwayManager:
             "overall_success_rate": len([c for c in relevant_correlations if c["success"]])
             / len(relevant_correlations),
         }
-    
+
     def get_quantum_analytics(self) -> dict[str, Any]:
         """🌌 ANALYTICS QUANTUM METRICS AVANCÉES"""
         return {

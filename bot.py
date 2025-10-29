@@ -32,11 +32,11 @@ class KissBotV3Working(commands.Bot):
         twitch_config = config.get("twitch", {})
 
         # TwitchIO 3.x: EventSub WebSocket + IRC Fallback
-        # 🎯 STRATÉGIE: 
+        # 🎯 STRATÉGIE:
         #   - Primary: EventSub WebSocket (moderne, powerful)
         #   - Fallback: IRC (pragmatique, fiable, marche même sans bons scopes)
         # 📡 Les deux tournent en parallèle - meilleur des 2 mondes !
-        
+
         super().__init__(
             client_id=twitch_config.get("client_id", ""),
             client_secret=twitch_config.get("client_secret", ""),
@@ -66,32 +66,31 @@ class KissBotV3Working(commands.Bot):
         # TwitchIO 3.x nécessite les tokens POUR LES DEUX COMPTES:
         #   1. Bot token (pour recevoir les messages)
         #   2. Broadcaster token (pour les subscriptions EventSub)
-        import json
         # 🔑 Charger les tokens depuis config.yaml
         try:
             tokens_config = self.config.get("twitch", {}).get("tokens", {})
-            
+
             if not tokens_config:
                 LOGGER.warning("⚠️ Aucun token trouvé dans config.yaml!")
             else:
                 print(f"🔍 DEBUG: Tokens dans config: {list(tokens_config.keys())}")
-                
+
                 for account_name, token_info in tokens_config.items():
                     user_id = token_info.get("user_id")
                     token = token_info.get("access_token", "").replace("oauth:", "")
                     refresh = token_info.get("refresh_token", "")
-                    
+
                     print(f"🔍 DEBUG: Processing {account_name} (user_id={user_id})")
                     print(f"🔍 DEBUG: token={token[:20]}... (len: {len(token)})")
                     print(f"🔍 DEBUG: refresh={refresh[:20]}... (len: {len(refresh)})")
-                    
+
                     if token:
                         LOGGER.info(f"🔑 Ajout du token pour {account_name} ({user_id})...")
                         await self.add_token(token, refresh)
                         LOGGER.info(f"✅ Token ajouté pour {account_name}")
                     else:
                         LOGGER.warning(f"⚠️ Token vide pour {account_name}")
-                
+
                 print(f"✅ Tokens chargés: {len(tokens_config)} comptes")
                 LOGGER.info(f"✅ {len(tokens_config)} tokens chargés depuis config.yaml")
         except Exception as e:
@@ -161,7 +160,7 @@ class KissBotV3Working(commands.Bot):
 
                     broadcaster = users[0]
                     broadcaster_id = broadcaster.id
-                    
+
                     # 🔥 DEBUG: Vérifier les types
                     LOGGER.info(f"🔍 broadcaster_id: {broadcaster_id} (type: {type(broadcaster_id).__name__})")
                     LOGGER.info(f"🔍 bot_id: {self.bot_id} (type: {type(self.bot_id).__name__})")
@@ -179,14 +178,14 @@ class KissBotV3Working(commands.Bot):
                     # 🔥 FIX: Convertir broadcaster_id en STRING pour matcher les clés du dictionnaire de tokens!
                     broadcaster_id_str = str(broadcaster_id)
                     LOGGER.info(f"🔍 token_for value: {broadcaster_id_str} (type: {type(broadcaster_id_str).__name__})")
-                    
+
                     # Debug: Voir quels tokens sont disponibles
                     LOGGER.info(f"🔍 ManagedHTTPClient tokens: {list(self._http._tokens.keys()) if hasattr(self._http, '_tokens') else 'N/A'}")
                     LOGGER.info(f"🔍 WebSockets avant: {list(self._websockets.keys())}")
-                    
+
                     # Utiliser le token du broadcaster pour la subscription
                     await self.subscribe_websocket(chat_sub, token_for=broadcaster_id_str)
-                    
+
                     LOGGER.info(f"🔍 WebSockets après: {list(self._websockets.keys())}")
                     LOGGER.info(
                         f"✅ EventSub ChatMessageSubscription créée pour: "
@@ -211,11 +210,11 @@ class KissBotV3Working(commands.Bot):
         """Event ready - COMME DANS LES EXEMPLES"""
         LOGGER.info("🚀 Bot connecté: %s", self.user)
         print(f"🎉 TwitchIO 3.x Bot Ready: {self.user}")
-        
+
         # 🎯 EventSub WebSocket est déjà actif (configuré dans setup_hook)
         # Plus besoin d'IRC fallback avec TwitchIO 3.x EventSub !
         LOGGER.info("✅ Bot Ready - EventSub WebSocket opérationnel")
-        
+
         # 🎯 ENVOI MESSAGE DE COUCOU AUTOMATIQUE !
         await self.send_hello_message()
 
@@ -296,39 +295,39 @@ class KissBotV3Working(commands.Bot):
 
     async def event_message(self, payload: twitchio.ChatMessage) -> None:
         """Event message - FIXED selon TWITCHIO3_EVENTSUB_GUIDE_COMPLET
-        
+
         🎯 Basé sur la doc : traiter les messages correctement même avec same account (bot=broadcaster)
         """
         # Log le message
         LOGGER.info("[%s]: %s", payload.chatter.name, payload.text)
         print(f"💬 {payload.chatter.name}: {payload.text}")
-        
+
         # 🔍 DEBUG : Vérifier l'état du message
         print(f"🔍 DEBUG: chatter.id={payload.chatter.id}, bot_id={self.bot_id}")
         is_same_account = payload.chatter.id == self.bot_id
         print(f"🔍 Same account (bot=broadcaster): {is_same_account}")
-        
-        # 🎯 FIX CRUCIAL (de la doc) : 
+
+        # 🎯 FIX CRUCIAL (de la doc) :
         # TwitchIO 3.x ignore les messages du bot par défaut
         # MAIS nous on VEUT traiter nos propres commandes si bot=broadcaster !
-        
+
         # ✅ SOLUTION : Appel direct de process_commands
         # (Pas super().event_message() qui bloque same account)
         print("� Appel process_commands() directement")
         await self.process_commands(payload)
         print("✅ process_commands() terminé")
-        
+
         # 🧠 MENTIONS : Vérifier si le bot est mentionné
         # Seulement si ce n'est PAS un message du bot lui-même !
         if is_same_account:
             # Le bot ne doit pas répondre à ses propres mentions
             print("🚫 Message du bot lui-même - pas de mention handling")
             return
-            
+
         # TwitchIO 3.x : utiliser le nom récupéré via API
         bot_name = getattr(self, 'bot_login_name', self.config.get("bot", {}).get("name", "serda_bot")).lower()
-        
-        if (f"@{bot_name}" in payload.text.lower() or 
+
+        if (f"@{bot_name}" in payload.text.lower() or
                 bot_name in payload.text.lower()):
             print("🧠 DEBUG: Mention détectée !")
             try:
@@ -357,17 +356,17 @@ class TestCommands(commands.Component):
     @commands.command(aliases=["hello", "salut"])
     async def hi(self, ctx) -> None:
         """Commande Hi simple - COMME DANS LES EXEMPLES
-        
+
         !hi, !hello, !salut
         """
         try:
             # Utilisation de ctx.reply comme dans les exemples
             result = await ctx.reply(f"🧪 TwitchIO 3.x fonctionne! Salut {ctx.chatter.mention}!")
-            
+
             # TwitchIO 3.x: On a un VRAI résultat !
             print(f"✅ Message envoyé avec succès: {result}")
             LOGGER.info("✅ Hi command result: %s", result)
-            
+
         except Exception as e:
             print(f"❌ Erreur commande hi: {e}")
             LOGGER.error("❌ Hi command error: %s", e)
@@ -375,37 +374,37 @@ class TestCommands(commands.Component):
     @commands.command()
     async def test3(self, ctx) -> None:
         """Test TwitchIO 3.x feedback
-        
+
         !test3
         """
         try:
             # Test avec ctx.send
             result = await ctx.send("🔬 Test TwitchIO 3.x - Feedback disponible!")
-            
+
             print(f"🧪 Test3 result: {result}")
             print(f"🧪 Type: {type(result)}")
-            
+
             # TwitchIO 3.x donne de vraies infos !
             if hasattr(result, 'id'):
                 print(f"📋 Message ID: {result.id}")
-                
+
         except Exception as e:
             print(f"❌ Erreur test3: {e}")
 
     @commands.command()
     async def say(self, ctx, *, message: str) -> None:
         """Répète un message - COMME DANS LES EXEMPLES
-        
+
         !say votre message ici
         """
         # TwitchIO 3.x: Vérifier si l'utilisateur est modérateur ou broadcaster
         is_mod = any(badge.name == "moderator" for badge in ctx.chatter.badges) if ctx.chatter.badges else False
         is_broadcaster = ctx.chatter.id == ctx.broadcaster.id if ctx.broadcaster else False
-        
+
         if not is_mod and not is_broadcaster:
             await ctx.reply("❌ Commande réservée aux mods!")
             return
-            
+
         try:
             result = await ctx.send(message)
             print(f"🔊 Say result: {result}")
@@ -415,21 +414,21 @@ class TestCommands(commands.Component):
 
 async def main():
     """Point d'entrée principal - COMME DANS LES EXEMPLES"""
-    
+
     # Setup logging comme dans les exemples officiels
     twitchio.utils.setup_logging(level=logging.INFO)
-    
+
     print("🚀 KissBot V3 WORKING - TwitchIO 3.x Official Examples")
     print("=" * 60)
-    
+
     async def runner() -> None:
         # Utilisation du context manager comme dans les exemples
         async with KissBotV3Working() as bot:
             print("🎯 Bot créé, démarrage...")
-            
+
             # Pour tester, on peut créer des tokens manuellement
             # Ou utiliser le flow OAuth comme dans les exemples
-            
+
             await bot.start()
 
     try:
