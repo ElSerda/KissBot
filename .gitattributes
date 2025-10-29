@@ -1,0 +1,51 @@
+# Git attributes for cross-platform development (WSL/Linux ↔ Windows)
+# Ensures consistent line endings across different operating systems
+
+# Auto detect text files and normalize to LF in repository
+* text=auto eol=lf
+
+# Python files (always LF)
+*.py text eol=lf
+*.pyi text eol=lf
+*.pyw text eol=lf
+
+# Shell scripts (must be LF for Unix execution)
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Configuration files (LF)
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+
+# Documentation (LF)
+*.md text eol=lf
+*.txt text eol=lf
+*.rst text eol=lf
+
+# Windows scripts (keep CRLF)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files (no conversion)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.pyc binary
+*.pyo binary
+*.so binary
+*.dll binary
+*.exe binary
+*.zip binary
+*.tar.gz binary
+
+# Git diff settings for Python
+*.py diff=python
+*.pyi diff=python
