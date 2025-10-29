@@ -47,7 +47,7 @@ jobs:
     - name: 🧪 Run all CI tests (structure validation with mocks)
       run: |
         echo "::group::CI Tests (Structure + Shannon Validation)"
-        pytest tests-ci/ -c tests-ci/pytest-ci.ini -v --tb=short
+        pytest tests-ci/ -c tests-ci/pytest-ci.ini -v --tb=short --color=no
         echo "::endgroup::"
     
     - name: 📊 Generate test summary
@@ -56,7 +56,7 @@ jobs:
         echo "## 🎯 KissBot Test Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 🏗️ CI Tests (Structure + Shannon - 86 tests)" >> $GITHUB_STEP_SUMMARY
-        pytest tests-ci/ -c tests-ci/pytest-ci.ini --tb=no -q >> $GITHUB_STEP_SUMMARY 2>&1 || true
+        pytest tests-ci/ -c tests-ci/pytest-ci.ini --tb=no -q --color=no >> $GITHUB_STEP_SUMMARY 2>&1 || true
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**ℹ️ Note**: Local tests (7 tests with real API keys) are not run in CI" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
