@@ -94,4 +94,10 @@ token_storage.json
 # 🔐 Configuration avec vraies clés
 config/config.yaml
 config/config.private.yaml
-config/*.private.yaml.ruff_cache/
+config/*.private.yaml
+
+# 🧠 Brainstorming & Recherche (théories non finalisées)
+braindev/
+!braindev/README.md
+
+.ruff_cache/
