@@ -147,7 +147,7 @@ class TestTwitchConfig:
     
     @pytest.mark.skipif(not Path("config/config.yaml").exists(), reason="config.yaml requis")
     def test_config_has_tokens(self):
-        """Vérifie que config.yaml a des tokens"""
+        """Vérifie que config.yaml a des tokens (peut être placeholder en CI)"""
         import yaml
         from pathlib import Path
         
@@ -155,10 +155,12 @@ class TestTwitchConfig:
             config = yaml.safe_load(f)
         
         assert 'twitch' in config
-        # Tokens peuvent être dans twitch.tokens ou au root level
-        has_tokens = (
+        # Tokens peuvent être dans twitch.tokens, twitch.token, ou access_token
+        # En CI avec config.example, on accepte les placeholders
+        has_token_field = (
             'tokens' in config['twitch'] or
+            'token' in config['twitch'] or
             'access_token' in config['twitch']
         )
         
-        assert has_tokens
+        assert has_token_field, "Aucun champ token trouvé dans config.twitch"
