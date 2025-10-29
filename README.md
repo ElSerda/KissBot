@@ -21,7 +21,7 @@
 
 ---
 
-## � Documentation Navigation Rapide
+## 📖 Documentation Navigation Rapide
 
 📋 **[📚 Documentation Complète](docs/README.md)** - Hub central de toute la documentation organisée
 
@@ -42,7 +42,7 @@
 
 ---
 
-## �🚀 TwitchIO 3.x Migration Ready !
+## 🎉🚀 TwitchIO 3.x Migration Ready !
 
 ✨ **NOUVEAU** : Support complet de TwitchIO 3.x avec EventSub WebSocket !
 
@@ -79,7 +79,7 @@
 
 ---
 
-## �🎯 Philosophy
+## 🧠🎯 Philosophy
 
 **Keep It Simple, Stupid** + **Quantum Learning** - Rewrite from scratch de SerdaBot avec:
 - ✅ **3-Pillar architecture** (Commands, Intelligence, Twitch)
@@ -548,7 +548,7 @@ Step 3: Response
 
 ---
 
-## � Metrics
+## 📊 Metrics
 
 ### Codebase Comparison
 
@@ -580,7 +580,7 @@ Step 3: Response
 
 ---
 
-## � Troubleshooting
+## 🔧 Troubleshooting
 
 ### Bot doesn't receive messages
 
