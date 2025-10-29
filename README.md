@@ -4,7 +4,11 @@
 
 **Ultra-lean Twitch bot with Neural V2 Intelligence + Quantum Code Inference**
 
-<img src="assets/logo.jpg" alt="KissBot Logo" width="400"/>
+<p align="center">
+  <img src="assets/logo.jpg" alt="KissBot Logo" width="220"/>
+  <img src="assets/interaction.jpg" alt="Bot Interaction" width="220"/>
+  <img src="assets/infographic.jpg" alt="System Architecture" width="220"/>
+</p>
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![TwitchIO](https://img.shields.io/badge/TwitchIO-3.x-blueviolet)](https://github.com/TwitchIO/TwitchIO)
@@ -12,20 +16,6 @@
 [![Neural V2](https://img.shields.io/badge/intelligence-Neural%20V2-purple)](#neural-v2)
 [![Tests](https://img.shields.io/badge/tests-93%20total-success)](#testing)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen)](https://github.com/ElSerda/KissBot/actions)
-
-</div>
-
----
-
-## 📸 Screenshots
-
-<div align="center">
-
-### Bot Interaction
-<img src="assets/interaction.jpg" alt="Interaction Example" width="600"/>
-
-### System Architecture
-<img src="assets/infographic.jpg" alt="Architecture Infographic" width="600"/>
 
 </div>
 
