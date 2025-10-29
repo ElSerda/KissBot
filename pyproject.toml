@@ -1,3 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kissbot"
+version = "1.0.0"
+description = "Twitch Bot with Neural V2 Intelligence - Quantum Code Inference"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "twitchio>=2.9.0",
+    "aiohttp>=3.9.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["intelligence*", "commands*", "core*", "backends*", "twitch*"]
+exclude = ["tests*", "tests-ci*", "tests-local*", "cache*", "kissbot-venv*", "_archive*"]
+
 [tool.pylint]
 disable = [
     "too-many-lines",
