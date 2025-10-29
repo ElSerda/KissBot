@@ -48,12 +48,12 @@ async def test_gamecategory_logic():
     
     print(f"\n🎮 Jeu détecté: {mock_game_name}")
     
-    # 3. Test GameLookup
-    print(f"\n🔍 Recherche via GameLookup...")
+    # 3. Test enrich_game_from_igdb_name (nouvelle méthode)
+    print(f"\n🔍 Enrichissement IGDB via enrich_game_from_igdb_name()...")
     from backends.game_lookup import GameLookup
     
     lookup = GameLookup(config)
-    result = await lookup.search_game(mock_game_name)
+    result = await lookup.enrich_game_from_igdb_name(mock_game_name)
     
     if result:
         print(f"\n✅ Jeu trouvé:")
@@ -164,12 +164,12 @@ async def test_real_twitch_api():
                 print(f"👁️  Viewers: {stream.get('viewer_count')}")
                 print(f"📺 Titre: {stream.get('title')}")
                 
-                # Test GameLookup
-                print(f"\n🔍 Recherche infos via GameLookup...")
+                # Test enrich_game_from_igdb_name
+                print(f"\n🔍 Enrichissement IGDB via enrich_game_from_igdb_name()...")
                 from backends.game_lookup import GameLookup
                 
                 lookup = GameLookup(config)
-                result = await lookup.search_game(game_name)
+                result = await lookup.enrich_game_from_igdb_name(game_name)
                 
                 if result:
                     response = lookup.format_result(result)

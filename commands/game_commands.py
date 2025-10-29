@@ -73,10 +73,11 @@ class GameCommands(commands.Component):
                 await ctx.send(f"🎮 @{broadcaster_name} n'est pas sur un jeu Nullos !")
                 return
             
-            # Rechercher les infos du jeu via GameLookup (comme !gameinfo)
+            # Rechercher les infos du jeu via enrich_game_from_igdb_name
+            # (nom IGDB = source fiable, pas besoin de fuzzy search)
             if hasattr(bot, 'config'):
                 lookup = GameLookup(bot.config)
-                result = await lookup.search_game(game_name)
+                result = await lookup.enrich_game_from_igdb_name(game_name)
                 
                 if result:
                     response = lookup.format_result(result)
