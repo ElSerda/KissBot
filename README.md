@@ -642,9 +642,9 @@ Step 3: Response
 ### v1.1 (Next)
 - [ ] **Cache consistency fix:** Proactive enrichment system (see Implementation Plan below)
 - [ ] **Format harmonization:** Unified output between !gc and !gameinfo  
-- [ ] TwitchIO v3.x migration
-- [ ] Twitch EventSub support
-- [ ] CI/CD with GitHub Actions
+- [x] ~~TwitchIO v3.x migration~~ ✅ **DONE**
+- [x] ~~Twitch EventSub support~~ ✅ **DONE**
+- [x] ~~CI/CD with GitHub Actions~~ ✅ **DONE**
 - [ ] Coverage badges
 
 #### 🔧 Implementation Plan: Cache Enrichment System
