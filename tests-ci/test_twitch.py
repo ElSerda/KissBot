@@ -4,6 +4,8 @@ Vérifie les intégrations TwitchIO 3.x
 """
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
+from pathlib import Path
+import os
 
 
 @pytest.mark.integration
@@ -130,9 +132,11 @@ class TestTwitchHandlers:
 class TestTwitchConfig:
     """Tests de la configuration Twitch"""
     
+    @pytest.mark.skipif(not Path("config/config.yaml").exists(), reason="config.yaml requis")
     def test_config_has_twitch_section(self):
         """Vérifie que config.yaml a une section twitch"""
         import yaml
+        from pathlib import Path
         
         with open("config/config.yaml", "r") as f:
             config = yaml.safe_load(f)
@@ -141,9 +145,11 @@ class TestTwitchConfig:
         assert 'client_id' in config['twitch']
         assert 'channels' in config['twitch']
     
+    @pytest.mark.skipif(not Path("config/config.yaml").exists(), reason="config.yaml requis")
     def test_config_has_tokens(self):
         """Vérifie que config.yaml a des tokens"""
         import yaml
+        from pathlib import Path
         
         with open("config/config.yaml", "r") as f:
             config = yaml.safe_load(f)

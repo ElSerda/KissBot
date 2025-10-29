@@ -1,0 +1,277 @@
+# 🎯 Enhanced Patterns Configuration for StaticQuantumClassifier V3.0
+# Patterns avancés pour classification intention Twitch/Gaming
+# Structure: {class: {patterns: [], weight: float, context_modifiers: {}}}
+
+# 🎮 PING - Commandes directes et réflexes rapides
+ping:
+  patterns:
+    # Commandes explicites
+    - "!uptime"
+    - "!ping"
+    - "!status"
+    - "!help"
+    - "!commands"
+    - "!game"
+    - "!music"
+    - "!social"
+    - "!discord"
+    - "!youtube"
+    - "!twitter"
+    - "!tiktok"
+    - "!insta"
+    - "!follow"
+    - "!sub"
+    - "!prime"
+    # Raccourcis gaming
+    - "gg"
+    - "wp"
+    - "nt"
+    - "gl"
+    - "hf"
+    - "rip"
+    - "f"
+    # Emotes Twitch courts
+    - "kekw"
+    - "poggers"
+    - "pog"
+    - "sadge"
+    - "pepehands"
+    - "5head"
+    - "monkas"
+    - "copium"
+    - "hopium"
+  weight: 1.0
+  context_modifiers:
+    streaming: 1.2  # Boost en contexte streaming
+    gaming: 1.1
+
+# 💬 GEN_SHORT - Conversations courtes et interactions sociales
+gen_short:
+  patterns:
+    # Salutations
+    - "salut"
+    - "hello"
+    - "hi"
+    - "coucou"
+    - "yo"
+    - "bonjour"
+    - "bonsoir"
+    - "cc"
+    # Questions simples
+    - "comment ça va"
+    - "ça va ?"
+    - "quoi de neuf"
+    - "tu fais quoi"
+    - "comment tu vas"
+    - "ça roule"
+    - "tu en penses quoi"
+    - "ça fait quoi"
+    # Réactions courtes
+    - "lol"
+    - "mdr"
+    - "ptdr"
+    - "xd"
+    - "haha"
+    - "nice"
+    - "cool"
+    - "super"
+    - "top"
+    - "parfait"
+    - "merci"
+    - "thx"
+    - "ty"
+    - "de rien"
+    - "np"
+    # Encouragements gaming
+    - "allez"
+    - "go go"
+    - "tu peux le faire"
+    - "force"
+    - "courage"
+    # Twitch chat
+    - "first"
+    - "early squad"
+    - "notification squad"
+  weight: 0.8
+  context_modifiers:
+    casual: 1.2
+    social: 1.1
+
+# 🔍 LOOKUP - Recherches et demandes d'informations
+lookup:
+  patterns:
+    # Questions d'information
+    - "c'est quoi"
+    - "qu'est-ce que"
+    - "quel est"
+    - "quelle est"
+    - "qui est"
+    - "où est"
+    - "quand est"
+    - "combien"
+    - "pourquoi"
+    - "définition"
+    - "signification"
+    - "stats"
+    - "score"
+    - "classement"
+    - "leaderboard"
+    - "classement solo"
+    - "classement ranked"
+    - "info sur"
+    - "info sur le"
+    - "talent"
+    - "talent arbre"
+    - "talent build"
+    # Gaming lookup
+    - "build"
+    - "guide"
+    - "tuto"
+    - "tier list"
+    - "meta"
+    - "patch notes"
+    - "update"
+    - "changelog"
+    - "item"
+    - "arme"
+    - "weapon"
+    - "skill"
+    - "talent"
+    - "achievement"
+    - "succès"
+    # Recherche générale
+    - "info sur"
+    - "recherche"
+    - "trouve moi"
+    - "montre moi"
+    - "link"
+    - "lien"
+    - "source"
+    - "ref"
+    - "reference"
+  weight: 0.9
+  context_modifiers:
+    gaming: 1.3
+    educational: 1.2
+
+# 📚 GEN_LONG - Explications détaillées et conversations complexes
+gen_long:
+  patterns:
+    # Demandes d'aide complexes
+    - "peux-tu m'expliquer"
+    - "comment faire pour"
+    - "aide moi avec"
+    - "aide-moi à"
+    - "j'ai besoin d'aide"
+    - "comment ça marche"
+    - "comment fonctionne"
+    - "peux-tu me dire"
+    - "explique moi"
+    - "raconte moi"
+    - "parle moi de"
+    - "que penses-tu de"
+    - "ton avis sur"
+    - "recommandation"
+    - "conseil"
+    - "suggestion"
+    - "stratégie"
+    - "tactique"
+    - "optimiser"
+    - "améliorer"
+    - "progression"
+    # Questions ouvertes
+    - "pourquoi est-ce que"
+    - "comment se fait-il"
+    - "qu'est-ce qui"
+    - "dans quel cas"
+    - "quelle différence"
+    - "quelle différence entre"
+    - "avantages et inconvénients"
+    - "avantages et inconvénients de"
+    - "comparaison entre"
+    - "mieux entre"
+    - "choisir entre"
+    # Demandes créatives
+    - "idée pour"
+    - "inspiration"
+    - "créatif"
+    - "original"
+    - "unique"
+    - "personnalisé"
+    # Gaming avancé
+    - "mécaniques de jeu"
+    - "système de"
+    - "algorithme"
+    - "fonctionnement interne"
+    - "behind the scenes"
+    - "développement"
+    - "design choice"
+  weight: 1.1
+  context_modifiers:
+    educational: 1.4
+    complex_query: 1.3
+    gaming_advanced: 1.2
+
+# 🌟 Context Modifiers Globaux
+global_modifiers:
+  # Longueur du message
+  very_short: 0.8  # < 3 mots
+  short: 0.9       # 3-7 mots
+  medium: 1.0      # 8-15 mots
+  long: 1.1        # 16-25 mots
+  very_long: 1.2   # > 25 mots
+  
+  # Complexité linguistique
+  simple_vocab: 0.9
+  complex_vocab: 1.1
+  technical_terms: 1.2
+  
+  # Présence d'éléments spéciaux
+  has_question_mark: 1.1
+  has_mention: 1.2
+  has_emotes: 0.9
+  has_commands: 1.3
+  
+  # Context gaming
+  gaming_session: 1.1
+  stream_active: 1.1
+  raid_happening: 0.8  # Priorité aux réactions courtes
+
+# 🎛️ Weights Configuration
+classification_weights:
+  pattern_match: 0.6      # 60% basé sur patterns
+  length_analysis: 0.2    # 20% analyse longueur
+  complexity_analysis: 0.1 # 10% complexité
+  context_bonus: 0.1      # 10% bonus contexte
+
+# 🔧 Advanced Settings
+advanced_settings:
+  min_pattern_confidence: 0.3
+  context_boost_threshold: 0.1
+  fallback_to_length_based: true
+  enable_learning_mode: false  # Pour future HybridQuantumClassifier
+  
+# 🎮 Gaming-Specific Patterns
+gaming_contexts:
+  fps_games:
+    boost_patterns: ["aim", "spray", "recoil", "crosshair", "sens", "dpi"]
+    boost_weight: 1.2
+  
+  moba_games:
+    boost_patterns: ["lane", "jungle", "gank", "ward", "cs", "farm", "item build"]
+    boost_weight: 1.3
+    
+  rpg_games:
+    boost_patterns: ["level", "xp", "stats", "build", "class", "skill tree"]
+    boost_weight: 1.1
+    
+  racing_games:
+    boost_patterns: ["setup", "tune", "lap time", "track", "car"]
+    boost_weight: 1.1
+
+# 🔄 Dynamic Pattern Learning (Future)
+learning_config:
+  enabled: false
+  feedback_weight: 0.1
+  pattern_discovery_threshold: 5
+  confidence_adjustment_rate: 0.05

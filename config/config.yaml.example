@@ -1,0 +1,233 @@
+# ============================================
+# KissBot V1 - Configuration Template
+# ============================================
+# Copiez ce fichier vers "config.yaml" et configurez vos tokens
+# Voir TWITCH_SETUP_GUIDE.md pour aide détaillée
+# ============================================
+
+# ========================================
+# CONFIGURATION BOT
+# ========================================
+bot:
+  # MÉTHODE 1 (Compte Principal) : Votre pseudo Twitch
+  # MÉTHODE 2 (Bot Séparé) : Pseudo du compte bot (ex: "votre_pseudo_bot")
+  name: "VOTRE_NOM_BOT_ICI"
+  
+  # Personnalité du bot (influence les réponses LLM)
+  personality: "sympa, direct, et passionné de tech"
+  
+  # Channel principal (optionnel si spécifié dans twitch.channels)
+  channel: "VOTRE_CHANNEL_ICI"
+  
+  # Mode debug pour logs détaillés
+  debug: true
+  
+  # Cooldown entre messages en secondes
+  cooldown: 5
+
+# ========================================
+# CONFIGURATION TWITCH - ÉTAPES DÉTAILLÉES
+# ========================================
+twitch:
+  # TOKEN : Généré sur https://twitchtokengenerator.com/
+  # - Connectez-vous avec le compte qui ENVERRA les messages
+  # - MÉTHODE 1 : Votre compte principal
+  # - MÉTHODE 2 : Le compte bot séparé
+  token: "oauth:VOTRE_TOKEN_ICI"
+  
+  # CLIENT_ID : De https://dev.twitch.tv/console/apps
+  # - Créez une application
+  # - Name: "MonBot-KissBot" 
+  # - OAuth Redirect: "http://localhost:3000"
+  # - Category: "Chat Bot"
+  client_id: "VOTRE_CLIENT_ID_ICI"
+  
+  # CLIENT_SECRET : Généré après création app
+  client_secret: "VOTRE_CLIENT_SECRET_ICI"
+  
+  # BOT_ID : User ID numérique du compte qui envoie messages
+  # Trouvez sur : https://www.streamweasels.com/twitch-tools/username-converter/
+  # - MÉTHODE 1 : Votre User ID principal
+  # - MÉTHODE 2 : User ID du compte bot
+  bot_id: "VOTRE_BOT_USER_ID_ICI"
+  
+  # Préfixe des commandes
+  prefix: "!"
+  
+  # Liste des channels à rejoindre
+  # MÉTHODE 1 : ["votre_pseudo"] (votre propre channel)
+  # MÉTHODE 2 : ["pseudo_principal"] (le bot rejoint votre channel principal)
+  channels: ["VOTRE_CHANNEL_ICI"]
+
+# ========================================
+# CONFIGURATION APIs
+# ========================================
+apis:
+  # RAWG API pour infos jeux (!gameinfo)
+  # Gratuit : https://rawg.io/apidocs
+  # Créez compte → Settings → API → Generate key
+  rawg_key: "VOTRE_CLE_RAWG_API"
+  
+  # OpenAI API (optionnel, pour fallback LLM)
+  # Payant : https://platform.openai.com/api-keys
+  # Nécessaire seulement si pas de LLM local
+  openai_key: "VOTRE_CLE_OPENAI"
+
+# ========================================
+# CONFIGURATION LLM 
+# ========================================
+llm:
+  # Activer/désactiver les réponses LLM
+  enabled: true
+  
+  # Utiliser LLM local (LM Studio, Ollama, etc.)
+  local_llm: true
+  
+  # Provider principal ("local" ou "openai")
+  provider: "local"
+  
+  # Provider de fallback si principal échoue
+  fallback_provider: "openai"  # "openai" ou "none"
+  fallback_mode: fun
+  
+  # ========================================
+  # PARAMÈTRES PERSONNALITÉ
+  # ========================================
+  
+  # Utiliser personnalité sur @mentions (recommandé: true)
+  use_personality_on_mention: true
+  
+  # Utiliser personnalité sur !ask (recommandé: false pour rester factuel)
+  use_personality_on_ask: false
+  
+  # Personnalité uniquement sur GPT (économise tokens sur petits modèles locaux)
+  personality_only_on_cloud: true
+  
+  # ========================================
+  # CONFIGURATION LM STUDIO LOCAL
+  # ========================================
+  
+  # Endpoint LM Studio (port par défaut: 1234)
+  model_endpoint: "http://127.0.0.1:1234/v1/chat/completions"
+  
+  # Nom du modèle chargé dans LM Studio
+  # Exemples : "qwen2.5-7b-instruct", "llama-3.1-8b", "phi-3-mini"
+  model_name: "qwen2.5-7b-instruct"
+  
+  # ========================================
+  # CONFIGURATION OPENAI
+  # ========================================
+  
+  # Modèle OpenAI à utiliser
+  openai_model: "gpt-3.5-turbo"  # Ou "gpt-4" pour meilleure qualité
+  
+  # ========================================
+  # PARAMÈTRES GÉNÉRATION
+  # ========================================
+  
+  # Tokens maximum pour !ask (factuel)
+  max_tokens_ask: 200
+  
+  # Tokens maximum pour mentions (créatif)
+  max_tokens_chill: 150
+  
+  # Température pour !ask (0.5 = factuel)
+  temperature_ask: 0.5
+  
+  # Température pour mentions (0.8 = créatif)
+  temperature_chill: 0.8
+
+# ========================================
+# CONFIGURATION RAWG API (JEUX)
+# ========================================
+rawg:
+  # Même clé que apis.rawg_key
+  api_key: "VOTRE_CLE_RAWG_API"
+
+# ========================================
+# CONFIGURATION CACHE
+# ========================================
+cache:
+  # Durée de vie du cache en secondes (1 heure)
+  ttl_seconds: 3600
+  
+  # Taille maximum du cache
+  max_size: 1000
+
+# ========================================
+# CONFIGURATION SYSTÈME QUANTIQUE
+# ========================================
+quantum_cache:
+  # TTL États collapsed (vérifiés par utilisateurs)
+  ttl_verified_seconds: 86400        # 24h - États permanents
+  
+  # TTL États en superposition (non-vérifiés)  
+  ttl_unverified_seconds: 1800       # 30min - Particules virtuelles
+  
+  # Limite superposition simultanée (principe incertitude)
+  max_superposition_states: 3        # Max 3 états par clé
+  
+  # Activation système intrication
+  entanglement_enabled: true
+  
+  # Logs détaillés phénomènes quantiques
+  debug_quantum: false
+
+quantum_games:
+  # Seuil auto-intrication (genres similaires)
+  auto_entangle_threshold: 0.8       # Confiance min pour auto-lien
+  
+  # Boost confiance sur confirmation utilisateur
+  confirmation_confidence_boost: 0.3  # +30% confiance
+  
+  # Nombre max suggestions affichées
+  max_suggestions: 3
+  
+  # Cache file spécialisé jeux quantiques
+  cache_file: "cache/quantum_games.json"
+  
+  # Cleanup automatique (décohérence)
+  auto_cleanup_interval: 3600        # 1h entre nettoyages auto
+
+# ========================================
+# CONFIGURATION TRADUCTION
+# ========================================
+translation:
+  # Activer la traduction automatique
+  enabled: true
+  
+  # Langue cible pour traductions
+  target_language: "fr"
+  
+  # Cooldown entre traductions en secondes
+  rate_limit: 5
+
+# ========================================
+# CONFIGURATION LOGGING
+# ========================================
+logging:
+  # Niveau de log (DEBUG, INFO, WARNING, ERROR)
+  level: "INFO"
+  
+  # Fichier de log
+  file: "kissbot_v1.log"
+
+# ========================================
+# EXEMPLES CONFIGURATIONS COMPLÈTES
+# ========================================
+
+# EXEMPLE 1 - COMPTE PRINCIPAL COMME BOT :
+# bot:
+#   name: "mon_pseudo_twitch"
+# twitch:
+#   token: "oauth:abc123def456"
+#   bot_id: "123456789"
+#   channels: ["mon_pseudo_twitch"]
+
+# EXEMPLE 2 - BOT SÉPARÉ :
+# bot:
+#   name: "mon_pseudo_bot"
+# twitch:
+#   token: "oauth:xyz789uvw012"  # Token du compte bot
+#   bot_id: "987654321"         # User ID du compte bot
+#   channels: ["mon_pseudo_principal"]

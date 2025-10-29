@@ -38,6 +38,12 @@ jobs:
         pip install pytest pytest-asyncio pytest-cov
         pip install -e .  # Install package in editable mode for imports
     
+    - name: 🔧 Setup test environment
+      run: |
+        # Copy config example for tests
+        mkdir -p config
+        cp config/config.yaml.example config/config.yaml
+    
     - name: 🧪 Run all CI tests (structure validation with mocks)
       run: |
         echo "::group::CI Tests (Structure + Shannon Validation)"

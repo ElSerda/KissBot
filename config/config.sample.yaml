@@ -1,0 +1,73 @@
+# 🚀 KissBot Neural V3.0 - Configuration Template
+# 
+# ⚠️ IMPORTANT: Ceci est un TEMPLATE !
+# 1. Copier ce fichier vers config.yaml
+# 2. Remplacer toutes les valeurs "your_*_here" par vos vraies clés
+# 3. NE JAMAIS committer config.yaml avec de vraies clés !
+#
+# 🔐 Structure sécurisée:
+#   config.yaml         ← VOS vraies clés (gitignored)
+#   config.sample.yaml  ← Template public (safe pour Git)
+#   config.private.yaml ← Backup de vos vraies clés
+#
+
+apis:
+  openai_key: your_openai_key_here
+  rawg_key: your_rawg_key_here
+bot:
+  channel: test_channel
+  cooldown: 5
+  debug: true
+  name: serda_bot
+  personality: taquin, cash, second degré, amateur de roast amical et de tech
+cache:
+  max_size: 1000
+  ttl_seconds: 3600
+llm:
+  enabled: true
+  fallback_mode: fun
+  fallback_provider: none
+  local_llm: true
+  max_tokens_ask: 200
+  max_tokens_chill: 150
+  model_endpoint: http://127.0.0.1:1234/v1/chat/completions
+  model_name: qwen2.5-1.5b-instruct
+  openai_model: gpt-3.5-turbo
+  personality_only_on_cloud: true
+  provider: local
+  temperature_ask: 0.5
+  temperature_chill: 0.8
+  use_personality_on_ask: false
+  use_personality_on_mention: true
+logging:
+  file: serdabot_v2.log
+  level: INFO
+neural_llm:
+  cloud_failure_threshold: 5
+  cloud_recovery_time: 600
+  ema_alpha: 0.2
+  enabled: true
+  local_failure_threshold: 3
+  local_recovery_time: 300
+  max_correlation_history: 100
+  min_trials_per_synapse: 3
+  timeout_gen_long: 10.0
+  timeout_gen_short: 5.0
+  timeout_lookup: 5.0
+  timeout_ping: 3.0
+  ucb_exploration_factor: 1.4
+rawg:
+  api_key: your_api_key_here
+translation:
+  enabled: true
+  rate_limit: 5
+  target_language: fr
+twitch:
+  bot_id: '1209350837'
+  channels:
+  - el_serda
+  client_id: m60vyrfkbrrdo3xp6h4rpneq6bh9d6
+  client_secret: your_client_secret_here
+  prefix: '!'
+  refresh_token: your_refresh_token_here
+  token: your_token_here

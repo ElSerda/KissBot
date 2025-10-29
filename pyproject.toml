@@ -13,6 +13,9 @@ dependencies = [
     "aiohttp>=3.9.0",
 ]
 
+[tool.setuptools]
+py-modules = ["bot", "main"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["intelligence*", "commands*", "core*", "backends*", "twitch*"]

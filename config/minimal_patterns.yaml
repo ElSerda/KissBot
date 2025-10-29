@@ -1,0 +1,55 @@
+# 🌟 Enhanced Patterns - Version Minimale Apprenante
+# Seulement les patterns essentiels, le reste sera appris par UCB bandit
+
+patterns:
+  ping:
+    patterns:
+      - pattern: "!"
+        weight: 1.0
+        context_modifiers:
+          twitch: 1.5
+          discord: 1.2
+      - pattern: "?"
+        weight: 0.8
+        context_modifiers:
+          twitch: 1.2
+      # Seulement 2 patterns au lieu de 32 !
+    
+  gen_short:
+    patterns:
+      - pattern: "salut"
+        weight: 0.8
+        context_modifiers:
+          twitch: 1.2
+      - pattern: "hello"
+        weight: 0.8
+        context_modifiers:
+          twitch: 1.2
+      - pattern: "merci"
+        weight: 0.7
+      # Seulement 3 patterns au lieu de 37 !
+    
+  lookup:
+    patterns:
+      - pattern: "guide"
+        weight: 0.9
+        context_modifiers:
+          twitch: 1.3
+      - pattern: "comment"
+        weight: 0.8
+        context_modifiers:
+          twitch: 1.1
+      - pattern: "quête"
+        weight: 0.8
+      # Seulement 3 patterns au lieu de 42 !
+    
+  gen_long:
+    patterns:
+      - pattern: "explication"
+        weight: 0.8
+      - pattern: "détail"
+        weight: 0.7
+      # Seulement 2 patterns au lieu de 45 !
+
+# TOTAL: 10 patterns au lieu de 156 ! 🚀
+# Le reste sera découvert via apprentissage automatique !
