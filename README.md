@@ -96,6 +96,7 @@
 - `!gameinfo <name>` / `!gi` - Game info (RAWG + Steam APIs) *[90-99% reliable]*
 - `!gamecategory` / `!gc` - **NEW!** Auto-detect current stream game
 - `!ask <question>` - Ask LLM
+- `!joke` - **NEW!** Bot tells a short joke (French)
 - `!ping` - Bot latency
 - `!stats` - Bot statistics
 - `!help` - Commands list
@@ -173,7 +174,87 @@ Bot: 🔒 Hades | ██████████ 1.0 | COLLAPSED
 - **Rate limiting:** 15s cooldown per user
 - **Personality system:** Contextual responses
 
-### 🧠 Intelligence
+### 🧠 Intelligence System
+
+#### 🎯 Pre-Optimized Prompts
+KissBot includes a **pre-optimized prompt system** for commands that need specific LLM behavior without automatic wrapping:
+
+**Example: !joke command**
+```python
+# ✅ Pre-optimized prompt (validated pattern)
+prompt = "Réponds EN 1 PHRASE MAX EN FRANÇAIS, SANS TE PRÉSENTER, style humoristique : raconte une blague courte"
+
+response = await process_llm_request(
+    llm_handler=self.llm_handler,
+    prompt=prompt,
+    context="ask",
+    user_name=ctx.author.name,
+    game_cache=None,
+    pre_optimized=True,        # ← Skip automatic wrapping
+    stimulus_class="gen_short"  # ← Force short classification
+)
+```
+
+**How it works:**
+1. **Regular prompts** → Pipeline adds context wrapping (personality, game info)
+2. **Pre-optimized prompts** → Direct synapse call, no wrapping
+3. **Result:** Full control over LLM prompt for specialized commands
+
+**Benefits:**
+- ✅ **Pattern validation:** Test prompts in POC before production
+- ✅ **Performance:** No extra wrapping overhead
+- ✅ **Consistency:** Guaranteed prompt format
+- ✅ **Multilingual:** Language injected from config (`llm.language: fr`)
+
+**Adding new pre-optimized commands:**
+```python
+@commands.command(name="fact")
+async def fact_command(self, ctx: commands.Context):
+    """🔬 Bot shares an interesting science fact"""
+    
+    # Your validated prompt
+    prompt = "Réponds EN 1 PHRASE MAX EN FRANÇAIS, SANS TE PRÉSENTER : partage un fait scientifique intéressant"
+    
+    response = await process_llm_request(
+        llm_handler=self.llm_handler,
+        prompt=prompt,
+        context="ask",
+        user_name=ctx.author.name,
+        game_cache=None,
+        pre_optimized=True,       # Skip wrapping
+        stimulus_class="gen_short" # Short response
+    )
+    
+    if response:
+        await ctx.send(f"@{ctx.author.name} {response}")
+```
+
+**Available stimulus classes:**
+- `"ping"` - Ultra-short (<20 chars, 2s timeout)
+- `"gen_short"` - Short response (<120 chars, 4s timeout) 
+- `"gen_long"` - Long response (<400 chars, 8s timeout)
+
+**Defensive validation:**
+The system includes fork-safe validation for C++/Rust ports:
+- Null pointer checks on `llm_handler`
+- Type conversion for boolean parameters
+- Whitelist validation for stimulus classes
+- Graceful fallbacks with logging
+
+#### 🌐 Multilingual Support
+```yaml
+# config.yaml
+llm:
+  language: fr  # Supported: fr, en, es, de
+```
+
+Language is automatically injected into all prompts:
+- `fr` → "EN FRANÇAIS"
+- `en` → "IN ENGLISH"
+- `es` → "EN ESPAÑOL"
+- `de` → "AUF DEUTSCH"
+
+#### 🔄 LLM Cascade System
 - **LLM Cascade:** Local (LM Studio) → OpenAI → Fun fallbacks
 - **Anti-hallucination:** Minimal prompts (45 chars vs 250)
 - **Easter Egg:** 30% roast chance for El_Serda
@@ -225,6 +306,7 @@ twitch:
 llm:
   provider: "local"  # or "openai"
   local_llm: true
+  language: "fr"  # NEW! Supported: fr, en, es, de
   model_endpoint: "http://127.0.0.1:1234/v1/chat/completions"  # LM Studio
   # model_endpoint: "http://127.0.0.1:11434/v1/chat/completions"  # Ollama
   model_name: "llama-3.2-3b-instruct"  # LM Studio
