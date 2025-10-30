@@ -125,7 +125,7 @@ jobs:
     
     - name: 📦 Install linting tools
       run: |
-        pip install ruff mypy
+        pip install ruff mypy types-PyYAML
       continue-on-error: true
     
     - name: 🔍 Lint with Ruff (fast Python linter)
