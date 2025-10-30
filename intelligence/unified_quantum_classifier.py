@@ -228,8 +228,11 @@ class UnifiedQuantumClassifier:
 
         # 1. 🎯 CONTEXT OVERRIDE (priorité absolue)
         if context == "ask":
+            # NOTE: Cette classification en gen_long est redondante car local_synapse.py (ligne 313)
+            # utilise directement context="ask" AVANT de vérifier stimulus_class.
+            # Gardé comme sécurité défensive si context="ask" n'est pas passé correctement.
             class_scores["gen_long"] = 1.0
-            metadata["classification_reason"] = "context_override_ask"
+            metadata["classification_reason"] = "context_override_ask_redundant"
             return class_scores, metadata
 
         # 2. 🎤 ANALYSE DES MENTIONS
