@@ -64,7 +64,7 @@ class UtilsCommands(commands.Component):
         # LLM Stats (Neural Pathway + JokeCache)
         llm_info = "N/A"
         joke_cache_info = "N/A"
-        
+
         if hasattr(bot, '_intelligence_handler'):
             try:
                 # Neural metrics (synapse, circuit breaker, latency)
@@ -72,11 +72,11 @@ class UtilsCommands(commands.Component):
                 synapse_state = metrics.get('circuit_state', 'N/A')
                 success_rate = metrics.get('ema_success_rate', 0)
                 avg_latency = metrics.get('ema_latency', 0)
-                
+
                 llm_info = f"Circuit:{synapse_state} | Success:{success_rate*100:.0f}% | Lat:{avg_latency:.1f}s"
             except Exception:
                 llm_info = "Erreur"
-        
+
         # JokeCache stats (accéder via IntelligenceCommands)
         if hasattr(bot, '_components'):
             for component in bot._components:

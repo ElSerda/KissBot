@@ -4,7 +4,6 @@
 Connexions neuronales locales avec UCB, circuit-breaker et EMA
 """
 
-import asyncio
 import json
 import logging
 import re
@@ -49,11 +48,11 @@ class LocalSynapse:
         self.model_name = llm_config.get("model_name", "mistralai/mistral-7b-instruct-v0.3")
         self.is_enabled = llm_config.get("local_llm", True)
         self.language = llm_config.get("language", "fr")  # Langue des réponses
-        
+
         # 🎬 DEBUG MODE: Afficher chunks streaming en temps réel
         # Support: debug_streaming: true OU stream_response_debug: "on"
         self.debug_streaming = (
-            llm_config.get("debug_streaming", False) or 
+            llm_config.get("debug_streaming", False) or
             llm_config.get("stream_response_debug", "").lower() == "on"
         )
 
@@ -111,43 +110,43 @@ class LocalSynapse:
     def _hard_truncate(self, response: str, max_chars: int = 400) -> str:
         """
         🔪 TRONCATURE BRUTALE - Coupe à la dernière phrase complète avant limite
-        
+
         Recommandation Mistral AI: Post-traitement obligatoire car Mistral 7B
         ignore parfois les limites sur sujets complexes.
         """
         if len(response) <= max_chars:
             return response
-        
+
         # Coupe à la dernière phrase complète avant la limite
         truncated = response[:max_chars]
         last_period = truncated.rfind('.')
         last_exclamation = truncated.rfind('!')
         last_question = truncated.rfind('?')
-        
+
         # Trouver la dernière ponctuation forte
         last_punct = max(last_period, last_exclamation, last_question)
-        
+
         if last_punct != -1:
             return truncated[:last_punct + 1] + " 🔚"
         else:
             # Pas de ponctuation trouvée : coupe brutale
             return truncated.rstrip() + "... 🔚"
-    
+
     def _remove_derives(self, response: str) -> str:
         """
         🚫 SUPPRESSION DES MOTS DÉRIVANTS
-        
+
         Certains mots déclenchent des divagations chez Mistral 7B.
         Coupe la réponse dès qu'un trigger est détecté.
         """
         response_lower = response.lower()
-        
+
         for trigger in self.DERIVE_TRIGGERS:
             if trigger in response_lower:
                 # Coupe avant le trigger
                 idx = response_lower.index(trigger)
                 return response[:idx].rstrip() + " 🔚"
-        
+
         return response
 
     async def fire(
@@ -209,11 +208,11 @@ class LocalSynapse:
 
     def _optimize_signal_for_local(self, stimulus: str, context: str, stimulus_class: str = "gen_short") -> list[dict[str, str]]:
         """🎯 OPTIMISATION SIGNAL LOCAL V2.0"""
-        
+
         # BYPASS: Si context="direct", pas de wrapping (pour !joke POC)
         if context == "direct":
             return [{"role": "user", "content": stimulus}]
-        
+
         bot_config = self.config.get("bot", {})
         bot_name = bot_config.get("name", "KissBot")
         personality = bot_config.get("personality", "sympa, direct, et passionné de tech")
@@ -302,22 +301,22 @@ class LocalSynapse:
         self, messages: list[dict[str, str]], context: str, correlation_id: str, stimulus_class: str = "gen_short"
     ) -> str | None:
         """📡 TRANSMISSION LOCAL OPTIMISÉE - Compatible Mistral/Qwen"""
-        
+
         # Mistral 7B n'accepte PAS le role "system" - toujours user only
         # Conversion préventive pour éviter Channel Error
         if "mistral" in self.model_name.lower():
             messages = self._convert_to_user_only(messages)
-        
+
         # 🎯 PARAMÈTRES OPTIMISÉS (Recommandation Mistral AI)
         # max_tokens réduits pour sujets complexes + repeat_penalty + stop tokens
         if context == "ask":
             # 🎯 CONFIG OPTIMALE !ask (Mistral 7B Instruct v0.3)
             # Tests : 30/30 réussis (tech + sciences), 0% dépassements, longueur moy: 140 chars
-            # 
+            #
             # SYSTÈME À DOUBLE SÉCURITÉ :
             # - Limite souple (guidage) : max_tokens=200 → guide le modèle
             # - Limite brute (hard-cut) : 250 chars (+25% marge) → post-traitement ligne ~491
-            # 
+            #
             # Résultats prouvés par A+B :
             # - Tech (8 tests) : 0% dépassements, 138.8 chars moy
             # - Sciences (22 tests) : 0% dépassements, 142.0 chars moy
@@ -331,7 +330,7 @@ class LocalSynapse:
             # 🔥 GEN_LONG OPTIMAL (Mistral 7B Instruct v0.3)
             # Tests : 5/5 réussis, 0% dépassements >400 chars, ~130 chars moy
             # Optimisations Mistral AI : max_tokens=100 + post-processing anti-dérive
-            max_tokens = 100  
+            max_tokens = 100
             temperature = 0.4  # Moins de créativité = moins de divagations
             httpx_timeout = 20.0
             repeat_penalty = 1.2  # Évite les répétitions
@@ -376,11 +375,11 @@ class LocalSynapse:
                 # 🌊 STREAMING AVEC ACCUMULATION (pas de spam chat)
                 full_response = ""
                 finish_reason = "unknown"
-                
+
                 # 🎬 DEBUG: Header streaming
                 if self.debug_streaming:
                     print("\n🌊 [STREAMING START] ", end="", flush=True)
-                
+
                 async with client.stream("POST", self.endpoint, json=payload) as response:
                     if response.status_code == 400:
                         error_text = await response.aread()
@@ -392,7 +391,7 @@ class LocalSynapse:
                             # Retry avec user only
                             fallback_messages = self._convert_to_user_only(messages)
                             fallback_payload = {**payload, "messages": fallback_messages}
-                            
+
                             async with client.stream("POST", self.endpoint, json=fallback_payload) as retry_response:
                                 retry_response.raise_for_status()
                                 async for line in retry_response.aiter_lines():
@@ -438,21 +437,21 @@ class LocalSynapse:
                                         finish_reason = chunk_json["choices"][0].get("finish_reason", finish_reason)
                                 except json.JSONDecodeError:
                                     continue
-                
+
                 # 🎯 ENVOYER MESSAGE COMPLET APRÈS STOP_REASON
                 if not full_response:
                     return None
-                
-            except (httpx.RemoteProtocolError, httpx.ReadError) as e:
+
+            except (httpx.RemoteProtocolError, httpx.ReadError):
                 # LM Studio Channel Error = bug système/user incompatible
                 # Réessayer directement avec user only
                 self.logger.warning(
-                    f"💡 LM Studio Channel Error (system+user incompatible) - retry user only"
+                    "💡 LM Studio Channel Error (system+user incompatible) - retry user only"
                 )
-                
+
                 fallback_messages = self._convert_to_user_only(messages)
                 fallback_payload = {**payload, "messages": fallback_messages}
-                
+
                 # Retry avec streaming
                 full_response = ""
                 finish_reason = "unknown"
@@ -476,7 +475,7 @@ class LocalSynapse:
                                     finish_reason = chunk_json["choices"][0].get("finish_reason", finish_reason)
                             except json.JSONDecodeError:
                                 continue
-                
+
                 # 🎬 DEBUG: Footer streaming
                 if self.debug_streaming:
                     print(f" [STREAMING END] finish_reason={finish_reason}\n", flush=True)
@@ -487,24 +486,24 @@ class LocalSynapse:
                     f"⚠️ [LocalSynapse] Response TRUNCATED (finish_reason: length) "
                     f"- max_tokens={max_tokens} atteint ! Consider increasing."
                 )
-            
+
             # 🧹 POST-TRAITEMENT COMPLET
             cleaned = full_response.strip() if full_response else ""
             cleaned = self._remove_self_introduction(cleaned)
-            
+
             # 🎯 POST-TRAITEMENT ANTI-DÉRIVE (Recommandation Mistral AI)
             # OBLIGATOIRE pour gen_long car Mistral 7B dépasse parfois les limites
             if stimulus_class == "gen_long":
                 cleaned = self._remove_derives(cleaned)  # Coupe les divagations
                 cleaned = self._hard_truncate(cleaned, max_chars=400)  # Force ≤400 chars
-            
+
             # 🎯 SYSTÈME À DOUBLE SÉCURITÉ POUR !ask (Mistral 7B Instruct v0.3)
             # - Limite souple (guidage) : max_tokens=200 guide le modèle (voir ligne ~313)
             # - Limite brute (hard-cut) : 250 chars (200 + 25% marge) coupe brutalement
             # Tests prouvés : 30/30 réussis, 0% dépassements (tech: 138.8 chars, sciences: 142.0 chars)
             elif context == "ask":
                 cleaned = self._hard_truncate(cleaned, max_chars=250)  # 200 + 25% marge
-            
+
             # Ajouter ellipse si tronqué
             if finish_reason == "length" and cleaned and not cleaned.endswith("..."):
                 cleaned = cleaned.rstrip(".!?,;:") + "..."
@@ -516,10 +515,9 @@ class LocalSynapse:
 
     def _remove_self_introduction(self, response: str) -> str:
         """🧹 POST-TRAITEMENT : Supprimer auto-présentation (recommandation Mistral AI)"""
-        import re
-        
+
         bot_name = self.config.get("bot", {}).get("name", "KissBot")
-        
+
         # Patterns d'auto-présentation à supprimer
         patterns = [
             rf"Bonjour.*?{bot_name}[^.]*\.?\s*",  # "Bonjour ! Je suis KissBot..."
@@ -528,14 +526,14 @@ class LocalSynapse:
             rf"^Salut.*?{bot_name}[^.]*\.?\s*",   # "Salut ! Je suis KissBot..."
             rf"^{bot_name},\s*[^.]*\.?\s*",        # "KissBot, le bot..."
         ]
-        
+
         cleaned = response
         for pattern in patterns:
             cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
-        
+
         # Nettoyer les espaces/ponctuation résiduels
         cleaned = cleaned.strip(" ,.!").capitalize() if cleaned else response
-        
+
         return cleaned if len(cleaned) >= 10 else response  # Fallback si trop court
 
     def _convert_to_user_only(self, messages: list[dict[str, str]]) -> list[dict[str, str]]:

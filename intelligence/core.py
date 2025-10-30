@@ -44,10 +44,10 @@ def find_game_in_cache(user_query: str, game_cache, threshold: float = 80.0) -> 
 
 
 async def process_llm_request(
-    llm_handler, 
-    prompt: str, 
-    context: str, 
-    user_name: str, 
+    llm_handler,
+    prompt: str,
+    context: str,
+    user_name: str,
     game_cache=None,
     pre_optimized: bool = False,  # Nouveau param: prompt déjà optimisé ?
     stimulus_class: str = "gen_short"  # Classe de stimulus pour prompts pré-optimisés
@@ -69,27 +69,27 @@ async def process_llm_request(
     """
     import logging
     logger = logging.getLogger(__name__)
-    
+
     # ✅ VALIDATION DÉFENSIVE (fork-safe, language-agnostic)
     if not llm_handler:
         logger.error("❌ llm_handler est None")
         return None
-    
+
     # Normalisation pre_optimized: garantir bool
     if not isinstance(pre_optimized, bool):
         logger.warning(f"⚠️ pre_optimized type invalide ({type(pre_optimized)}), conversion bool")
         pre_optimized = bool(pre_optimized)
-    
+
     # Validation stimulus_class: whitelist stricte
     valid_classes = ["ping", "gen_short", "gen_long"]
     if stimulus_class not in valid_classes:
         logger.warning(f"⚠️ stimulus_class invalide '{stimulus_class}', fallback 'gen_short'")
         stimulus_class = "gen_short"
-    
+
     try:
         # ✅ PROMPT PRÉ-OPTIMISÉ : Appel direct synapse (bypass wrapping)
         if pre_optimized:
-            logger.info(f"🎯 Prompt pré-optimisé détecté → Appel direct synapse")
+            logger.info("🎯 Prompt pré-optimisé détecté → Appel direct synapse")
             if hasattr(llm_handler, 'local_synapse'):
                 response = await llm_handler.local_synapse.fire(
                     stimulus=prompt,
@@ -113,7 +113,7 @@ async def process_llm_request(
             response = await llm_handler.process_stimulus(
                 stimulus=enriched_prompt, context=context
             )
-        
+
         if not response:
             return None
 

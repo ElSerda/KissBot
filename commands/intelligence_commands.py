@@ -22,22 +22,22 @@ class IntelligenceCommands(commands.Component):
     def _ensure_llm_handler(self, bot) -> bool:
         """
         Initialise LLMHandler si nécessaire (lazy loading)
-        
+
         Returns:
             bool: True si handler disponible, False sinon
         """
         if self.llm_handler is not None:
             return True
-            
+
         try:
             if not hasattr(bot, 'config') or bot.config is None:
                 return False
-                
+
             self.config = bot.config
             self.llm_handler = NeuralPathwayManager(bot.config)
             return True
-            
-        except Exception as e:
+
+        except Exception:
             return False
 
     @commands.command(name="ask")
@@ -87,7 +87,7 @@ class IntelligenceCommands(commands.Component):
     async def joke_command(self, ctx: commands.Context):
         """
         🎭 Commande !joke - Le bot raconte une blague courte.
-        
+
         Solution Mistral AI :
         - Cache intelligent avec variabilité (user sessions + temps)
         - Prompts dynamiques pour forcer la diversité
@@ -110,11 +110,11 @@ class IntelligenceCommands(commands.Component):
             # 🎲 Prompt dynamique (force variété)
             base_prompt = "Réponds EN 1 PHRASE MAX EN FRANÇAIS, SANS TE PRÉSENTER, style humoristique : raconte une blague courte"
             dynamic_prompt = get_dynamic_prompt(base_prompt)
-            
+
             # 🔑 Clé cache intelligente (user_id + session + temps)
             user_id = ctx.author.name or "unknown"
             cache_key = self.joke_cache.get_key(user_id, dynamic_prompt)
-            
+
             # 💾 CHECK CACHE AVANT LLM
             cached_joke = self.joke_cache.get(cache_key)
             if cached_joke:

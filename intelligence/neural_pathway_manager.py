@@ -185,12 +185,12 @@ class NeuralPathwayManager:
 
     def select_best_synapse(self, stimulus_class: str) -> tuple[str | None, SynapseProtocol | None]:
         """🏆 SÉLECTION OPTIMALE SYNAPSE VIA UCB"""
-        
+
         # 🎯 OPTIMISATION: ping force TOUJOURS reflex (templates > LLM pour réflexes)
         if stimulus_class == "ping":
-            self.logger.debug(f"🎯 Classe ping → Force reflex (templates)")
+            self.logger.debug("🎯 Classe ping → Force reflex (templates)")
             return "reflex", self.synapses["reflex"]
-        
+
         ucb_scores = self.calculate_ucb_scores(stimulus_class)
 
         # Tri par score UCB décroissant

@@ -203,10 +203,10 @@ class EnhancedPatternsLoader:
             pattern_count = len(patterns) if isinstance(patterns, list) else 0
             total_patt = stats['total_patterns']
             stats['total_patterns'] = int(total_patt) + pattern_count if isinstance(total_patt, int) else pattern_count
-            
+
             context_mods = rules.get('context_modifiers', {})
             context_mods_len = len(context_mods) if isinstance(context_mods, dict) else 0
-            
+
             stats['classes'][class_name] = {
                 'pattern_count': pattern_count,
                 'weight': rules.get('weight', 1.0),
