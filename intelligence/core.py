@@ -44,7 +44,13 @@ def find_game_in_cache(user_query: str, game_cache, threshold: float = 80.0) -> 
 
 
 async def process_llm_request(
-    llm_handler, prompt: str, context: str, user_name: str, game_cache=None
+    llm_handler, 
+    prompt: str, 
+    context: str, 
+    user_name: str, 
+    game_cache=None,
+    pre_optimized: bool = False,  # Nouveau param: prompt déjà optimisé ?
+    stimulus_class: str = "gen_short"  # Classe de stimulus pour prompts pré-optimisés
 ) -> str | None:
     """
     Traite une requête LLM - Logique métier pure.
@@ -55,20 +61,59 @@ async def process_llm_request(
         context: Context ("ask" ou "mention")
         user_name: Nom de l'utilisateur
         game_cache: Cache des jeux (optionnel pour enrichissement contexte)
+        pre_optimized: Si True, le prompt est déjà au format optimal (skip wrapping)
+        stimulus_class: Classe de stimulus si pre_optimized=True ("ping"/"gen_short"/"gen_long")
 
     Returns:
         str: Réponse formatée (tronquée si nécessaire) ou None si erreur
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # ✅ VALIDATION DÉFENSIVE (fork-safe, language-agnostic)
+    if not llm_handler:
+        logger.error("❌ llm_handler est None")
+        return None
+    
+    # Normalisation pre_optimized: garantir bool
+    if not isinstance(pre_optimized, bool):
+        logger.warning(f"⚠️ pre_optimized type invalide ({type(pre_optimized)}), conversion bool")
+        pre_optimized = bool(pre_optimized)
+    
+    # Validation stimulus_class: whitelist stricte
+    valid_classes = ["ping", "gen_short", "gen_long"]
+    if stimulus_class not in valid_classes:
+        logger.warning(f"⚠️ stimulus_class invalide '{stimulus_class}', fallback 'gen_short'")
+        stimulus_class = "gen_short"
+    
     try:
-        # 🎮 KISS Enhancement: Détecter questions sur jeux et enrichir contexte
-        enriched_prompt = (
-            await enrich_prompt_with_game_context(prompt, game_cache) if game_cache else prompt
-        )
+        # ✅ PROMPT PRÉ-OPTIMISÉ : Appel direct synapse (bypass wrapping)
+        if pre_optimized:
+            logger.info(f"🎯 Prompt pré-optimisé détecté → Appel direct synapse")
+            if hasattr(llm_handler, 'local_synapse'):
+                response = await llm_handler.local_synapse.fire(
+                    stimulus=prompt,
+                    context="direct",  # Skip _optimize_signal_for_local()
+                    stimulus_class=stimulus_class,
+                    correlation_id=f"preopt_{context}"
+                )
+            else:
+                # Fallback: utiliser process_stimulus
+                logger.warning("⚠️ local_synapse non disponible, fallback process_stimulus")
+                response = await llm_handler.process_stimulus(
+                    stimulus=prompt,
+                    context=context
+                )
+        else:
+            # 🎮 PROMPT BRUT : Pipeline normal avec enrichissement + wrapping
+            enriched_prompt = (
+                await enrich_prompt_with_game_context(prompt, game_cache) if game_cache else prompt
+            )
 
-        response = await llm_handler.generate_response(
-            prompt=enriched_prompt, context=context, user_name=user_name
-        )
-
+            response = await llm_handler.process_stimulus(
+                stimulus=enriched_prompt, context=context
+            )
+        
         if not response:
             return None
 

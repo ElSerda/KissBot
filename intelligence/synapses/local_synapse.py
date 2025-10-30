@@ -37,6 +37,7 @@ class LocalSynapse:
         )
         self.model_name = llm_config.get("model_name", "mistralai/mistral-7b-instruct-v0.3")
         self.is_enabled = llm_config.get("local_llm", True)
+        self.language = llm_config.get("language", "fr")  # Langue des réponses
 
         # ⚡ CIRCUIT BREAKER STATE
         self.failure_threshold = neural_config.get("local_failure_threshold", 3)
@@ -148,6 +149,11 @@ class LocalSynapse:
 
     def _optimize_signal_for_local(self, stimulus: str, context: str) -> list[dict[str, str]]:
         """🎯 OPTIMISATION SIGNAL LOCAL V2.0"""
+        
+        # BYPASS: Si context="direct", pas de wrapping (pour !joke POC)
+        if context == "direct":
+            return [{"role": "user", "content": stimulus}]
+        
         bot_config = self.config.get("bot", {})
         bot_name = bot_config.get("name", "KissBot")
         personality = bot_config.get("personality", "sympa, direct, et passionné de tech")
@@ -156,28 +162,37 @@ class LocalSynapse:
         use_personality_mention = llm_config.get("use_personality_on_mention", True)
         use_personality_ask = llm_config.get("use_personality_on_ask", False)
 
+        # Carte de langue pour format naturel
+        language_map = {
+            "fr": "EN FRANÇAIS",
+            "en": "IN ENGLISH",
+            "es": "EN ESPAÑOL",
+            "de": "AUF DEUTSCH"
+        }
+        lang_directive = language_map.get(self.language, "EN FRANÇAIS")
+
         # PROMPT OPTIMISÉ VERSION 2 (recommandation Mistral AI)
         # Format minimaliste pour éviter auto-présentation
         if context == "ask":
             if use_personality_ask:
                 system_prompt = (
-                    f"Réponds EN 1 PHRASE MAX, SANS TE PRÉSENTER, comme {bot_name} "
+                    f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme {bot_name} "
                     f"({personality}). Max 120 caractères : {stimulus}"
                 )
             else:
                 system_prompt = (
-                    f"Réponds EN 1 PHRASE MAX, SANS TE PRÉSENTER, comme un bot Twitch factuel. "
+                    f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme un bot Twitch factuel. "
                     f"Max 120 caractères : {stimulus}"
                 )
         else:
             if use_personality_mention:
                 system_prompt = (
-                    f"Réponds EN 1 PHRASE MAX, SANS TE PRÉSENTER, comme {bot_name} "
+                    f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme {bot_name} "
                     f"({personality}). Max 80 caractères : {stimulus}"
                 )
             else:
                 system_prompt = (
-                    f"Réponds EN 1 PHRASE MAX, SANS TE PRÉSENTER, comme un bot Twitch sympa. "
+                    f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme un bot Twitch sympa. "
                     f"Max 80 caractères : {stimulus}"
                 )
 

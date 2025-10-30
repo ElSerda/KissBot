@@ -69,7 +69,7 @@ class UtilsCommands(commands.Component):
         """❓ Liste des commandes disponibles"""
         help_text = (
             "🤖 KissBot TwitchIO 3.x - Commandes: "
-            "!ping !stats !help !game [nom] !gc [nom] !ask [question]"
+            "!ping !stats !help !game [nom] !gc [nom] !ask [question] !joke"
         )
         await ctx.send(help_text)
 
