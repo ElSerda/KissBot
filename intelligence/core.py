@@ -23,7 +23,7 @@ def find_game_in_cache(user_query: str, game_cache, threshold: float = 80.0) -> 
 
     user_query_lower = user_query.lower()
     best_match = None
-    best_score = 0
+    best_score = 0.0
 
     for cache_key, cache_entry in game_cache.cache.items():
         game_data = cache_entry.get("data", {})
@@ -34,7 +34,7 @@ def find_game_in_cache(user_query: str, game_cache, threshold: float = 80.0) -> 
 
         # Utiliser token_set_ratio pour gérer ordres de mots et fautes
         # Ex: "brottato game" match "Brotato" avec score élevé
-        score = fuzz.token_set_ratio(game_name.lower(), user_query_lower)
+        score = float(fuzz.token_set_ratio(game_name.lower(), user_query_lower))
 
         if score >= threshold and score > best_score:
             best_score = score

@@ -106,20 +106,20 @@ class GameCache(BaseCacheInterface):
         self.logger.info(f"❌ Cache MISS: {game_query}")
         return None
 
-    def set(self, game_query: str, game_data: dict[Any, Any], **kwargs) -> bool:
+    def set(self, key: str, value: dict[str, Any], **kwargs) -> bool:
         """Mettre en cache un jeu - Interface BaseCacheInterface."""
         try:
-            cache_key = game_query.lower().strip()
+            cache_key = key.lower().strip()
 
             entry = {
-                "data": game_data,
+                "data": value,
                 "cached_at": datetime.now().isoformat(),
-                "query": game_query,
+                "query": key,
             }
 
             self.cache[cache_key] = entry
             self._save_cache()
-            self.logger.info(f"💾 Cache SAVE: {game_query}")
+            self.logger.info(f"💾 Cache SAVE: {key}")
             return True
 
         except Exception as e:

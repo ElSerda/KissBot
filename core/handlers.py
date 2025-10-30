@@ -1,5 +1,7 @@
 """See docs/api/handlers.md"""
 
+from typing import Optional
+
 
 class PingHandler:
     """Handler pour la commande ping"""
@@ -266,13 +268,13 @@ class HandlersFactory:
     """See docs/api/handlers.md"""
 
     @staticmethod
-    def create_ping_handler(start_time: float = None) -> PingHandler:
+    def create_ping_handler(start_time: Optional[float] = None) -> PingHandler:
         import time
 
         return PingHandler(start_time or time.time())
 
     @staticmethod
-    def create_stats_handler(start_time: float = None) -> StatsHandler:
+    def create_stats_handler(start_time: Optional[float] = None) -> StatsHandler:
         import time
 
         return StatsHandler(start_time or time.time())

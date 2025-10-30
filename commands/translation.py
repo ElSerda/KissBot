@@ -23,6 +23,9 @@ class TranslationCommands(commands.Component):
         """Traduit n'importe quelle langue → français (config)."""
 
         # Extract text
+        if not ctx.message or not ctx.message.content:
+            return
+        
         parts = ctx.message.content.strip().split(maxsplit=1)
         if len(parts) < 2:
             await ctx.send("Usage: !trad <texte>")
@@ -73,6 +76,9 @@ class TranslationCommands(commands.Component):
             return
 
         # Extract username
+        if not ctx.message or not ctx.message.content:
+            return
+            
         parts = ctx.message.content.strip().split(maxsplit=1)
         if len(parts) < 2:
             await ctx.send("Usage: !adddev <username>")
@@ -106,6 +112,9 @@ class TranslationCommands(commands.Component):
             return
 
         # Extract username
+        if not ctx.message or not ctx.message.content:
+            return
+            
         parts = ctx.message.content.strip().split(maxsplit=1)
         if len(parts) < 2:
             await ctx.send("Usage: !deldev <username>")

@@ -43,7 +43,7 @@ class CloudSynapse:
         self.recovery_time = neural_config.get("cloud_recovery_time", 600)
         self.circuit_state = "CLOSED"
         self.consecutive_failures = 0
-        self.last_failure_time = 0
+        self.last_failure_time = 0.0
 
         # 📈 EMA METRICS
         self.ema_alpha = neural_config.get("ema_alpha", 0.2)
@@ -56,7 +56,7 @@ class CloudSynapse:
         self.total_reward = 0.0
 
         # ⏱️ RATE LIMITING + QUOTAS
-        self.rate_limited_until = 0
+        self.rate_limited_until = 0.0
         self.quota_exhausted = False
         self.quota_errors = 0
         self.rate_limit_errors = 0

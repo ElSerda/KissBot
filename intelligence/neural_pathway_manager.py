@@ -430,13 +430,13 @@ class NeuralPathwayManager:
             "pattern_hit_distribution": self.quantum_metrics.get_pattern_hit_stats(),
             "recent_metrics": [
                 {
-                    "timestamp": m.timestamp,
-                    "classification": m.classification,
-                    "confidence": m.confidence,
-                    "entropy": m.entropy,
-                    "is_certain": m.is_certain,
-                    "should_fallback": m.should_fallback,
-                    "response_time_ms": m.response_time_ms
+                    "timestamp": m["timestamp"],
+                    "classification": m["classification"],
+                    "confidence": m["confidence"],
+                    "entropy": m["entropy"],
+                    "is_certain": m["is_certain"],
+                    "should_fallback": m["should_fallback"],
+                    "response_time_ms": m["response_time_ms"]
                 }
                 for m in self.quantum_metrics.get_recent_metrics(20)
             ],

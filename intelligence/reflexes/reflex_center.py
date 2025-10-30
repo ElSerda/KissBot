@@ -7,7 +7,7 @@ Fallback neural avec patterns contextuels et réponses adaptatives
 import logging
 import random
 import time
-from typing import Any
+from typing import Any, List, Dict
 
 
 class ReflexCenter:
@@ -65,7 +65,7 @@ class ReflexCenter:
 
         # 📊 MÉTRIQUES RÉFLEXES
         self.usage_stats = {stimulus: 0 for stimulus in self.reflex_patterns.keys()}
-        self.last_responses = []
+        self.last_responses: List[Dict[str, Any]] = []
         self.max_history = 20
 
         self.logger.info("🛡️ Reflex Center V2.0 initialisé - Fallback toujours disponible")

@@ -62,7 +62,7 @@ class LocalSynapse:
         self.recovery_time = neural_config.get("local_recovery_time", 300)
         self.circuit_state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
         self.consecutive_failures = 0
-        self.last_failure_time = 0
+        self.last_failure_time = 0.0
 
         # 📈 EMA METRICS
         self.ema_alpha = neural_config.get("ema_alpha", 0.1)

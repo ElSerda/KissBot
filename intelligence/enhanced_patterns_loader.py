@@ -165,7 +165,7 @@ class EnhancedPatternsLoader:
         """🎯 Retourne le poids d'une classe spécifique"""
         return self.classification_rules.get(class_name, {}).get('weight', 1.0)
 
-    def get_gaming_context_boost(self, stimulus: str, game_type: str = None) -> float:
+    def get_gaming_context_boost(self, stimulus: str, game_type: Optional[str] = None) -> float:
         """🎮 Calcule le boost contextuel gaming"""
         if not game_type:
             return 1.0
@@ -192,19 +192,25 @@ class EnhancedPatternsLoader:
 
     def get_pattern_stats(self) -> Dict[str, Any]:
         """📊 Retourne les statistiques des patterns chargés"""
-        stats = {
+        stats: Dict[str, Any] = {
             'total_classes': len(self.classification_rules),
             'total_patterns': 0,
             'classes': {}
         }
 
         for class_name, rules in self.classification_rules.items():
-            pattern_count = len(rules.get('patterns', []))
-            stats['total_patterns'] += pattern_count
+            patterns = rules.get('patterns', [])
+            pattern_count = len(patterns) if isinstance(patterns, list) else 0
+            total_patt = stats['total_patterns']
+            stats['total_patterns'] = int(total_patt) + pattern_count if isinstance(total_patt, int) else pattern_count
+            
+            context_mods = rules.get('context_modifiers', {})
+            context_mods_len = len(context_mods) if isinstance(context_mods, dict) else 0
+            
             stats['classes'][class_name] = {
                 'pattern_count': pattern_count,
                 'weight': rules.get('weight', 1.0),
-                'context_modifiers': len(rules.get('context_modifiers', {}))
+                'context_modifiers': context_mods_len
             }
 
         return stats

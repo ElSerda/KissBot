@@ -6,7 +6,7 @@ Mesure l'incertitude d'une classification pour fallback intelligent
 
 import logging
 import math
-from typing import Dict
+from typing import Dict, Any
 
 
 class EntropyCalculator:
@@ -65,7 +65,7 @@ class EntropyCalculator:
         self.logger.debug(f"🧮 Entropie calculée: {entropy:.3f} (seuils: {self.entropy_thresholds})")
         return entropy
 
-    def evaluate_confidence(self, entropy: float) -> Dict[str, any]:
+    def evaluate_confidence(self, entropy: float) -> Dict[str, Any]:
         """
         📊 Évaluation de la confiance basée sur l'entropie
 
@@ -116,7 +116,7 @@ class EntropyCalculator:
         else:
             return "fallback_required"
 
-    def analyze_distribution(self, probabilities: Dict[str, float]) -> Dict[str, any]:
+    def analyze_distribution(self, probabilities: Dict[str, float]) -> Dict[str, Any]:
         """
         🔍 Analyse complète d'une distribution de probabilités
 

@@ -6,7 +6,7 @@ Buffer réduit (100 vs 10000), pas de Prometheus, stats simples
 """
 
 import time
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 
 class QuantumStats:
@@ -90,7 +90,7 @@ class QuantumMetrics:
         distribution_type: str = "unknown",
         method: str = "quantum",
         response_time_ms: float = 0.0,
-        quantum_result: Dict[str, Any] = None
+        quantum_result: Optional[Dict[str, Any]] = None
     ):
         """📊 Enregistrer classification (API compatible)"""
 

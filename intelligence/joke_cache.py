@@ -47,7 +47,7 @@ class JokeCache:
         self.cache: dict[str, tuple[float, str]] = {}
         
         # User sessions tracking: {user_id: joke_counter}
-        self.user_sessions = defaultdict(int)
+        self.user_sessions: defaultdict[str, int] = defaultdict(int)
 
         # Métriques
         self.hits = 0

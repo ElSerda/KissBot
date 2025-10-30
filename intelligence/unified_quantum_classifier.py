@@ -32,7 +32,7 @@ class UnifiedQuantumClassifier:
     - Distribution probabiliste avec entropie Shannon
     """
 
-    def __init__(self, config: Dict = None, patterns_config_path: Optional[str] = None):
+    def __init__(self, config: Optional[Dict] = None, patterns_config_path: Optional[str] = None):
         """
         🏗️ Initialisation UnifiedQuantumClassifier avec Enhanced Patterns
 
@@ -112,7 +112,7 @@ class UnifiedQuantumClassifier:
 
         self.logger.info("🌌 UnifiedQuantumClassifier V3.1 initialized (Fusion Safe)")
 
-    def classify(self, stimulus: str, context: str = "") -> Dict[str, any]:
+    def classify(self, stimulus: str, context: str = "") -> Dict[str, Any]:
         """
         🎯 CLASSIFICATION QUANTIQUE COMPLÈTE (Main API)
 
@@ -254,19 +254,21 @@ class UnifiedQuantumClassifier:
                 base_score = pattern_matches * 0.5
 
                 # Bonus selon priorité de la classe
+                priority = str(rule.get("priority", ""))
                 priority_bonus = {
                     "social": 0.1,           # ping
                     "question_simple": 0.2, # gen_short
                     "factual": 0.3,         # lookup
                     "complex_analysis": 0.4  # gen_long
-                }.get(rule["priority"], 0.0)
+                }.get(priority, 0.0)
 
                 class_scores[class_name] += base_score + priority_bonus
 
         # 4. 🧠 ANALYSE DE COMPLEXITÉ LINGUISTIQUE
-        word_count = metadata["word_count"]
-        complex_words_count = len(metadata["complex_words"])
-        has_question = metadata["has_question"]
+        word_count: int = metadata["word_count"]  # type: ignore[assignment]
+        complex_words = metadata["complex_words"]
+        complex_words_count = len(complex_words) if isinstance(complex_words, list) else 0
+        has_question: bool = metadata["has_question"]  # type: ignore[assignment]
 
         # Ajustements basés sur la complexité
         if word_count <= 3 and not has_question and complex_words_count == 0:
