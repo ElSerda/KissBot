@@ -12,6 +12,8 @@ from typing import Any
 
 import httpx
 
+from intelligence.synapses.timeout_config import TimeoutConfig
+
 
 class LocalSynapse:
     """
@@ -46,8 +48,35 @@ class LocalSynapse:
             "model_endpoint", "http://127.0.0.1:1234/v1/chat/completions"
         )
         self.model_name = llm_config.get("model_name", "mistralai/mistral-7b-instruct-v0.3")
-        self.is_enabled = llm_config.get("local_llm", True)
         self.language = llm_config.get("language", "fr")  # Langue des réponses
+        
+        # ⚡ ACTIVATION/DÉSACTIVATION selon provider strategy
+        llm_provider = llm_config.get("provider", "auto")
+        local_llm_enabled = llm_config.get("local_llm", True)
+        
+        # Logique d'activation selon provider
+        if llm_provider == "local":
+            # Force local : activé si local_llm=true
+            self.is_enabled = local_llm_enabled
+            reason = "forcé via provider=local"
+        elif llm_provider == "cloud":
+            # Force cloud : local désactivé
+            self.is_enabled = False
+            reason = "désactivé via provider=cloud"
+        elif llm_provider == "auto":
+            # Auto : activé si local_llm=true (UCB décide)
+            self.is_enabled = local_llm_enabled
+            reason = "UCB auto" if local_llm_enabled else "local_llm=false"
+        else:
+            # Provider inconnu : fallback auto
+            self.logger.warning(f"⚠️ Provider inconnu '{llm_provider}', fallback 'auto'")
+            self.is_enabled = local_llm_enabled
+            reason = "fallback auto"
+        
+        if self.is_enabled:
+            self.logger.info(f"💡 LocalSynapse V2.0 ACTIVÉE - {reason}")
+        else:
+            self.logger.info(f"💡 LocalSynapse DÉSACTIVÉE - {reason}")
 
         # 🎬 DEBUG MODE: Afficher chunks streaming en temps réel
         # Support: debug_streaming: true OU stream_response_debug: "on"
@@ -73,20 +102,14 @@ class LocalSynapse:
         self.success_trials = 0
         self.total_reward = 0.0
 
-        # ⏱️ TIMEOUTS ADAPTATIFS (3 classes) - Mistral 7B needs time!
-        self.timeouts = {
-            "ping": neural_config.get("timeout_ping", 2.0),      # 2s (reflex forcé anyway)
-            "gen_short": neural_config.get("timeout_gen_short", 4.0),  # 4s (was 2s)
-            "gen_long": neural_config.get("timeout_gen_long", 8.0),    # 8s (was 5s)
-        }
+        # ⏱️ TIMEOUTS HTTPX (4 valeurs obligatoires)
+        # Chargés depuis config avec fallbacks via TimeoutConfig dataclass
+        self.timeouts = TimeoutConfig.from_config(neural_config)
+        
+        self.logger.info(f"⏱️ Timeouts httpx: {self.timeouts}")
 
         # 📊 MÉTRIQUES LOCALES
         self.response_times: list[float] = []
-
-        if self.is_enabled:
-            self.logger.info("💡 LocalSynapse V2.0 initialisée - LM Studio prêt")
-        else:
-            self.logger.info("💡 LocalSynapse désactivée - Local LLM off")
 
     def can_execute(self) -> bool:
         """⚡ CIRCUIT BREAKER CHECK"""
@@ -307,55 +330,48 @@ class LocalSynapse:
         if "mistral" in self.model_name.lower():
             messages = self._convert_to_user_only(messages)
 
-        # 🎯 PARAMÈTRES OPTIMISÉS (Recommandation Mistral AI)
-        # max_tokens réduits pour sujets complexes + repeat_penalty + stop tokens
+        # 🧠 PARAMÈTRES D'INFÉRENCE depuis config (avec fallbacks = valeurs optimisées)
+        # Ces valeurs ont été optimisées suite à tests A/B Mistral 7B v0.3
+        llm_config = self.config.get("llm", {})
+        inference_config = llm_config.get("inference", {})
+        
         if context == "ask":
             # 🎯 CONFIG OPTIMALE !ask (Mistral 7B Instruct v0.3)
             # Tests : 30/30 réussis (tech + sciences), 0% dépassements, longueur moy: 140 chars
-            #
-            # SYSTÈME À DOUBLE SÉCURITÉ :
-            # - Limite souple (guidage) : max_tokens=200 → guide le modèle
-            # - Limite brute (hard-cut) : 250 chars (+25% marge) → post-traitement ligne ~491
-            #
-            # Résultats prouvés par A+B :
-            # - Tech (8 tests) : 0% dépassements, 138.8 chars moy
-            # - Sciences (22 tests) : 0% dépassements, 142.0 chars moy
-            # - Distribution : 18% <100, 46% 100-150, 23% 150-200, 14% 200-250
-            max_tokens = 200  # ask - limite souple (guidage modèle)
-            temperature = 0.3
-            httpx_timeout = 15.0
-            repeat_penalty = 1.1  # Optimal pour max_tokens=200
-            stop_tokens = ["\n", "🔚"]
+            ask_config = inference_config.get("ask", {})
+            max_tokens = ask_config.get("max_tokens", 200)
+            temperature = ask_config.get("temperature", 0.3)
+            repeat_penalty = ask_config.get("repeat_penalty", 1.1)
+            stop_tokens = ask_config.get("stop_tokens", ["\n", "🔚"])
         elif context == "mention" and stimulus_class == "gen_long":
             # 🔥 GEN_LONG OPTIMAL (Mistral 7B Instruct v0.3)
             # Tests : 5/5 réussis, 0% dépassements >400 chars, ~130 chars moy
-            # Optimisations Mistral AI : max_tokens=100 + post-processing anti-dérive
-            max_tokens = 100
-            temperature = 0.4  # Moins de créativité = moins de divagations
-            httpx_timeout = 20.0
-            repeat_penalty = 1.2  # Évite les répétitions
-            stop_tokens = ["🔚", "\n", "400.", "Exemple :", "En résumé,"]
+            gen_long_config = inference_config.get("gen_long", {})
+            max_tokens = gen_long_config.get("max_tokens", 100)
+            temperature = gen_long_config.get("temperature", 0.4)
+            repeat_penalty = gen_long_config.get("repeat_penalty", 1.2)
+            stop_tokens = gen_long_config.get("stop_tokens", ["🔚", "\n", "400.", "Exemple :", "En résumé,"])
         elif context == "mention":
             # 🎯 GEN_SHORT OPTIMAL (Mistral 7B Instruct v0.3)
             # Tests : 45/45 réussis, 0% dépassements >200 chars, 55 chars moy, 95.6% emojis
-            # Config actuelle DÉJÀ OPTIMALE - aucun changement nécessaire
-            max_tokens = 200  # mentions gen_short - réponses développées
-            temperature = 0.7
-            httpx_timeout = 15.0
-            repeat_penalty = 1.1
-            stop_tokens = ["\n"]
+            mention_config = inference_config.get("mention", {})
+            max_tokens = mention_config.get("max_tokens", 200)
+            temperature = mention_config.get("temperature", 0.7)
+            repeat_penalty = mention_config.get("repeat_penalty", 1.1)
+            stop_tokens = mention_config.get("stop_tokens", ["\n"])
         elif stimulus_class == "gen_long":
-            max_tokens = 100  # gen_long - contraintes strictes
-            temperature = 0.4
-            httpx_timeout = 15.0
-            repeat_penalty = 1.2
-            stop_tokens = ["🔚", "\n"]
+            gen_long_config = inference_config.get("gen_long", {})
+            max_tokens = gen_long_config.get("max_tokens", 100)
+            temperature = gen_long_config.get("temperature", 0.4)
+            repeat_penalty = gen_long_config.get("repeat_penalty", 1.2)
+            stop_tokens = gen_long_config.get("stop_tokens", ["🔚", "\n"])
         else:
-            max_tokens = 150  # gen_short - augmenté pour blagues complètes
-            temperature = 0.7
-            httpx_timeout = 12.0
-            repeat_penalty = 1.1
-            stop_tokens = ["\n"]
+            # Fallback: joke ou gen_short
+            joke_config = inference_config.get("joke", {})
+            max_tokens = joke_config.get("max_tokens", 150)
+            temperature = joke_config.get("temperature", 0.7)
+            repeat_penalty = joke_config.get("repeat_penalty", 1.1)
+            stop_tokens = joke_config.get("stop_tokens", ["\n"])
 
         payload = {
             "model": self.model_name,
@@ -367,9 +383,9 @@ class LocalSynapse:
             "stream": True,  # ← STREAMING ACTIVÉ (accumulation)
         }
 
-        # Httpx gère son propre timeout - pas de asyncio.wait_for() qui coupe la connexion
+        # ⏱️ TIMEOUTS HTTPX (4 paramètres obligatoires - chargés depuis TimeoutConfig)
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(httpx_timeout, connect=5.0, read=httpx_timeout)
+            timeout=httpx.Timeout(**self.timeouts.to_httpx_timeout())
         ) as client:
             try:
                 # 🌊 STREAMING AVEC ACCUMULATION (pas de spam chat)
@@ -441,6 +457,44 @@ class LocalSynapse:
                 # 🎯 ENVOYER MESSAGE COMPLET APRÈS STOP_REASON
                 if not full_response:
                     return None
+
+            except (httpx.RemoteProtocolError, httpx.ReadError):
+                # LM Studio Channel Error = bug système/user incompatible
+                # Réessayer directement avec user only
+                self.logger.warning(
+                    "💡 LM Studio Channel Error (system+user incompatible) - retry user only"
+                )
+
+                fallback_messages = self._convert_to_user_only(messages)
+                fallback_payload = {**payload, "messages": fallback_messages}
+
+                # Retry avec streaming
+                full_response = ""
+                finish_reason = "unknown"
+                async with client.stream("POST", self.endpoint, json=fallback_payload) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            chunk_data = line[6:]
+                            if chunk_data == "[DONE]":
+                                break
+                            try:
+                                chunk_json = json.loads(chunk_data)
+                                if "choices" in chunk_json and chunk_json["choices"]:
+                                    delta = chunk_json["choices"][0].get("delta", {})
+                                    if "content" in delta:
+                                        chunk_text = delta["content"]
+                                        full_response += chunk_text
+                                        # 🎬 DEBUG: Afficher chunk en temps réel
+                                        if self.debug_streaming:
+                                            print(chunk_text, end="", flush=True)
+                                    finish_reason = chunk_json["choices"][0].get("finish_reason", finish_reason)
+                            except json.JSONDecodeError:
+                                continue
+
+                                # 🎬 DEBUG: Footer streaming
+                if self.debug_streaming:
+                    print(f" [STREAMING END] finish_reason={finish_reason}\n", flush=True)
 
             except (httpx.RemoteProtocolError, httpx.ReadError):
                 # LM Studio Channel Error = bug système/user incompatible

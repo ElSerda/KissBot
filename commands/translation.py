@@ -14,9 +14,15 @@ from twitchio.ext import commands
 class TranslationCommands(commands.Component):
     """Commandes de traduction."""
 
-    def __init__(self):
+    def __init__(self, config: dict = None):
         # TwitchIO 3.x: bot auto-injecté via ctx.bot
-        pass
+        # 📋 Config centralisée (cooldowns depuis config.yaml)
+        self.config = config or {}
+        commands_config = self.config.get("commands", {})
+        cooldowns_config = commands_config.get("cooldowns", {})
+        
+        # Cooldown traduction (avec fallback si config manquante)
+        self.cooldown_translate = cooldowns_config.get("translate", 5.0)
 
     @commands.command(name="trad")
     async def translate_text(self, ctx: commands.Context):
@@ -33,9 +39,9 @@ class TranslationCommands(commands.Component):
 
         text = parts[1]
 
-        # Rate limiting
-        if not ctx.bot.rate_limiter.is_allowed(ctx.author.name, cooldown=5.0):
-            remaining = ctx.bot.rate_limiter.get_remaining_cooldown(ctx.author.name, cooldown=5.0)
+        # ⏱️ Rate limit check (cooldown depuis config)
+        if not ctx.bot.rate_limiter.is_allowed(ctx.author.name, cooldown=self.cooldown_translate):
+            remaining = ctx.bot.rate_limiter.get_remaining_cooldown(ctx.author.name, cooldown=self.cooldown_translate)
             await ctx.send(f"@{ctx.author.name} Cooldown! Attends {remaining:.1f}s")
             return
 

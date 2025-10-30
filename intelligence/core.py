@@ -170,22 +170,20 @@ async def enrich_prompt_with_game_context(prompt: str, game_cache) -> str:
             f"🎮 Smart Context ACTIVÉ: Jeu '{game_info.get('name')}' détecté pour prompt '{prompt[:50]}...'"
         )
 
-        context_info = []
-
-        context_info.append(f"Jeu: {game_info.get('name')}")
-        if game_info.get("year"):
-            context_info.append(f"Année: {game_info.get('year')}")
-
-        # 🎯 KISS Enhancement: Ajouter plateformes (suggestion Mistral)
-        if game_info.get("platforms"):
-            platforms = game_info.get("platforms", [])[:3]  # Max 3 plateformes
-            if platforms:
-                context_info.append(f"Plateformes: {', '.join(platforms)}")
-
-        # 🎯 KISS: Priorité aux genres (universels) plutôt que description anglaise
+        # 🎯 Extraire les données du jeu pour enrichissement
+        name = game_info.get("name", "")
+        year = game_info.get("year", "")
+        
+        # Plateformes (max 3)
+        platforms = (
+            ", ".join(game_info.get("platforms", [])[:3]) if game_info.get("platforms") else ""
+        )
+        
+        # Genres avec traduction française (max 3)
+        genres_text = ""
+        genres_fr = []  # 🐛 FIX: Initialisation avant le if pour éviter UnboundLocalError
         if game_info.get("genres"):
-            genres = game_info.get("genres", [])[:3]  # Max 3 genres
-            # Traduction basique des genres principaux
+            genres = game_info.get("genres", [])[:3]
             genre_translations = {
                 "Action": "Action",
                 "RPG": "RPG",
@@ -197,34 +195,23 @@ async def enrich_prompt_with_game_context(prompt: str, game_cache) -> str:
                 "Shooter": "Tir",
                 "Racing": "Course",
             }
-            # Filtrer les None et traduire
-            genres_fr = []
-            for g in genres:
-                if g and isinstance(g, str):
-                    genres_fr.append(genre_translations.get(g, g))
-
-            if genres_fr:
-                context_info.append(f"Genres: {', '.join(genres_fr)}")
-
-        # Description EN DERNIER et seulement si elle existe (souvent en anglais)
-        description = ""
-        if game_info.get("summary") and game_info.get("summary"):
-            description = game_info.get("summary", "")[:150]  # Plus long pour infos complètes
-        elif game_info.get("description_raw") and game_info.get("description_raw"):
-            description = game_info.get("description_raw", "")[:150]
-        elif game_info.get("description") and game_info.get("description"):
-            description = game_info.get("description", "")[:150]  # Support pour format test
-
-        if context_info:
-            # 🎯 MISTRAL SUGGESTION: Prompt DIRECTIF et OBLIGATOIRE !
-            name = game_info.get("name", "")
-            year = game_info.get("year", "")
-            platforms = (
-                ", ".join(game_info.get("platforms", [])[:3]) if game_info.get("platforms") else ""
-            )
+            genres_fr = [genre_translations.get(g, g) for g in genres if g and isinstance(g, str)]
             genres_text = ", ".join(genres_fr) if genres_fr else ""
+        
+        # Description (priorité: summary > description_raw > description)
+        description = ""
+        if game_info.get("summary"):
+            description = game_info.get("summary", "")[:150]
+        elif game_info.get("description_raw"):
+            description = game_info.get("description_raw", "")[:150]
+        elif game_info.get("description"):
+            description = game_info.get("description", "")[:150]
 
-            # Format DIRECTIF pour forcer LLM à mentionner TOUS les points
+        # 🎯 STRATÉGIE ADAPTATIVE : Prompt différent selon richesse des données
+        has_rich_data = bool(genres_text and description)  # Genres ET description = données riches
+        
+        if has_rich_data:
+            # 💎 Données complètes → Prompt DIRECTIF (utilise tout)
             directif_prompt = f"""[CONTEXTE STRICT :
 - Nom : {name}
 - Année : {year}
@@ -234,8 +221,27 @@ async def enrich_prompt_with_game_context(prompt: str, game_cache) -> str:
 OBLIGATOIRE : Utilise TOUTES ces infos dans ta réponse.]
 
 Question : {prompt}"""
+        else:
+            # 📦 Données partielles → Prompt SUGGESTIF (indique !gameinfo)
+            context_parts = [f"Nom : {name}"]
+            if year:
+                context_parts.append(f"Année : {year}")
+            if platforms:
+                context_parts.append(f"Plateformes : {platforms}")
+            if genres_text:
+                context_parts.append(f"Genres : {genres_text}")
+            if description:
+                context_parts.append(f"Description : {description}")
+            
+            context_str = "\n- ".join(context_parts)
+            directif_prompt = f"""[CONTEXTE PARTIEL :
+- {context_str}
 
-            return directif_prompt
+Note : Données limitées disponibles. Si la question nécessite plus d'infos (gameplay, graphismes, mécaniques), suggère d'utiliser !gameinfo {name} pour enrichir le cache.]
+
+Question : {prompt}"""
+
+        return directif_prompt
 
     return prompt
 

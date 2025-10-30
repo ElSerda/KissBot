@@ -66,7 +66,12 @@ class GameLookup:
     def __init__(self, config: dict):
         self.config = config
         self.logger = logging.getLogger(__name__)
-        self.http_client = httpx.AsyncClient(timeout=10.0)
+        
+        # ⏱️ Timeout depuis config (APIs externes peuvent être lentes)
+        apis_config = config.get("apis", {})
+        api_timeout = apis_config.get("timeout", 10.0)
+        self.http_client = httpx.AsyncClient(timeout=api_timeout)
+        
         # Initialiser le cache si disponible
         if CacheManager is not None:
             self.cache = CacheManager(config)
@@ -75,7 +80,6 @@ class GameLookup:
             self.logger.warning("CacheManager non disponible - cache désactivé")
 
         # Configuration APIs
-        apis_config = config.get("apis", {})
         self.rawg_key = apis_config.get("rawg_key")
         self.steam_key = apis_config.get("steam_key")  # Optionnel
 

@@ -66,23 +66,53 @@ class CloudSynapse:
         self.max_backoff = 60.0
         self.current_backoff = self.base_backoff
 
-        # ⏱️ TIMEOUTS ADAPTATIFS (3 classes)
-        self.timeouts = {
-            "ping": neural_config.get("timeout_ping", 2.0),
-            "gen_short": neural_config.get("timeout_gen_short", 4.0),
-            "gen_long": neural_config.get("timeout_gen_long", 8.0),
-        }
+        # ⏱️ TIMEOUTS EXPLICITES (2 valeurs claires)
+        # timeout_connect: Connexion HTTP (court: 5s)
+        # timeout_inference: Génération LLM (long: 30s)
+        neural_config = config.get("neural_llm", {})
+        self.timeout_connect = neural_config.get("timeout_connect", 5.0)
+        self.timeout_inference = neural_config.get("timeout_inference", 30.0)
 
         # 📊 MÉTRIQUES CLOUD
         self.response_times: list[float] = []
 
-        if self.api_key:
-            self.logger.info("☁️ CloudSynapse V2.0 initialisée - OpenAI disponible")
+        # ⚡ ACTIVATION/DÉSACTIVATION
+        # Supporte 3 modes provider: local, cloud, auto
+        llm_provider = llm_config.get("provider", "auto")
+        has_valid_key = bool(self.api_key and len(self.api_key) > 10)
+        
+        # Logique d'activation selon provider
+        if llm_provider == "cloud":
+            # Force cloud : activé si clé valide
+            self.is_enabled = has_valid_key
+            reason = "forcé via provider=cloud"
+        elif llm_provider == "local":
+            # Force local : cloud désactivé
+            self.is_enabled = False
+            reason = "désactivé via provider=local"
+        elif llm_provider == "auto":
+            # Auto : activé si clé valide (UCB décide)
+            self.is_enabled = has_valid_key
+            reason = "UCB auto" if has_valid_key else "pas de clé valide"
         else:
-            self.logger.info("☁️ CloudSynapse désactivée - Pas de clé OpenAI")
+            # Provider inconnu : fallback auto
+            self.logger.warning(f"⚠️ Provider inconnu '{llm_provider}', fallback 'auto'")
+            self.is_enabled = has_valid_key
+            reason = "fallback auto"
+        
+        if self.is_enabled:
+            self.logger.info(f"☁️ CloudSynapse V2.0 ACTIVÉE - {reason}")
+        else:
+            self.logger.info(f"☁️ CloudSynapse DÉSACTIVÉE - {reason}")
+            # Force circuit breaker OPEN si désactivée
+            self.circuit_state = "OPEN"
 
     def can_execute(self) -> bool:
         """⚡ CIRCUIT BREAKER + RATE LIMIT CHECK"""
+        # 🛡️ PROTECTION: Si synapse désactivée, retourne False immédiatement
+        if not self.is_enabled:
+            return False
+        
         current_time = time.time()
 
         if current_time < self.rate_limited_until or self.quota_exhausted:
@@ -111,7 +141,8 @@ class CloudSynapse:
         if not self.api_key or not self.can_execute():
             return None
 
-        timeout = self.timeouts.get(stimulus_class, 4.0)
+        # Utilise timeout_inference pour l'opération complète (génération LLM)
+        timeout = self.timeout_inference
         optimized_messages = self._optimize_signal_for_gpt(stimulus, context)
 
         start_time = time.time()
@@ -192,12 +223,17 @@ class CloudSynapse:
         self, messages: list[dict[str, str]], context: str, correlation_id: str
     ) -> str | None:
         """📡 TRANSMISSION CLOUD OPTIMISÉE"""
+        # 🧠 Paramètres d'inférence depuis config (avec fallbacks)
+        llm_config = self.config.get("llm", {})
+        inference_config = llm_config.get("inference", {})
+        cloud_config = inference_config.get("cloud", {})
+        
         if context == "ask":
-            max_tokens = 90
-            temperature = 0.4
+            max_tokens = cloud_config.get("max_tokens_short", 90)
+            temperature = cloud_config.get("temperature_short", 0.4)
         else:
-            max_tokens = 60
-            temperature = 0.8
+            max_tokens = cloud_config.get("max_tokens_long", 60)
+            temperature = cloud_config.get("temperature_long", 0.8)
 
         payload = {
             "model": self.model,
@@ -213,7 +249,13 @@ class CloudSynapse:
             wait_time = self.current_backoff * jitter
             await asyncio.sleep(wait_time)
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
+        # ⏱️ TIMEOUTS EXPLICITES (connect court, inference long)
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=self.timeout_connect,  # Connexion HTTP (court: 5s)
+                read=self.timeout_inference     # Inférence LLM (long: 30s)
+            )
+        ) as client:
             response = await client.post(self.endpoint, json=payload, headers=headers)
             response.raise_for_status()
 
@@ -365,5 +407,6 @@ class CloudSynapse:
             "quota_exhausted": self.quota_exhausted,
             "current_backoff_seconds": round(self.current_backoff, 1),
             "can_execute": self.can_execute(),
-            "timeouts": self.timeouts,
+            "timeout_connect": self.timeout_connect,
+            "timeout_inference": self.timeout_inference,
         }

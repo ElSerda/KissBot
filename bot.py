@@ -103,11 +103,11 @@ class KissBotV3Working(commands.Bot):
         from commands.translation import TranslationCommands
         from commands.quantum_commands import QuantumCommands
 
-        # Ajouter nos components TwitchIO 3.x
+        # Ajouter nos components TwitchIO 3.x (passer config pour cooldowns)
         await self.add_component(UtilsCommands())
         await self.add_component(GameCommands())
-        await self.add_component(IntelligenceCommands())
-        await self.add_component(TranslationCommands())
+        await self.add_component(IntelligenceCommands(config=self.config))
+        await self.add_component(TranslationCommands(config=self.config))
         await self.add_component(QuantumCommands())
         LOGGER.info("✅ Commandes KissBot TwitchIO 3.x ajoutées")
 
@@ -239,7 +239,7 @@ class KissBotV3Working(commands.Bot):
                 # Message de coucou personnalisé
                 message = (
                     f"🤖 Coucou {broadcaster.display_name} ! "
-                    f"connecté et opérationnel ! 🚀"
+                    f"C'est ici le stream de el_serda ?! 🚀"
                 )
 
                 # TwitchIO 3.x: Envoyer le message

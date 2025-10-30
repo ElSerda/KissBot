@@ -13,11 +13,25 @@ from intelligence.joke_cache import JokeCache, get_dynamic_prompt
 class IntelligenceCommands(commands.Component):
     """🧠 Commandes Intelligence LLM - Version TwitchIO 3.x Component"""
 
-    def __init__(self):
+    def __init__(self, config: dict = None):
         # TwitchIO 3.x : Pas besoin de bot dans __init__
         self.llm_handler = None
-        # Cache intelligent Mistral AI (5min TTL, user sessions)
-        self.joke_cache = JokeCache(ttl_seconds=300, max_size=100)  # 5 minutes
+        
+        # 📋 Config centralisée (cooldowns depuis config.yaml)
+        self.config = config or {}
+        commands_config = self.config.get("commands", {})
+        cooldowns_config = commands_config.get("cooldowns", {})
+        cache_config = commands_config.get("cache", {})
+        
+        # Cooldowns (avec fallback si config manquante)
+        self.cooldown_ask = cooldowns_config.get("ask", 10.0)
+        self.cooldown_joke = cooldowns_config.get("joke", 10.0)
+        self.cooldown_mention = cooldowns_config.get("mention", 15.0)
+        
+        # Cache intelligent Mistral AI (TTL depuis config)
+        joke_ttl = cache_config.get("joke_ttl", 300)
+        joke_max_size = cache_config.get("joke_max_size", 100)
+        self.joke_cache = JokeCache(ttl_seconds=joke_ttl, max_size=joke_max_size)
 
     def _ensure_llm_handler(self, bot) -> bool:
         """
@@ -56,9 +70,9 @@ class IntelligenceCommands(commands.Component):
             return
 
         try:
-            # ⏱️ Rate limit check
-            if hasattr(bot, 'rate_limiter') and not bot.rate_limiter.is_allowed(ctx.author.name, cooldown=10.0):
-                remaining = bot.rate_limiter.get_remaining_cooldown(ctx.author.name, cooldown=10.0)
+            # ⏱️ Rate limit check (cooldown depuis config)
+            if hasattr(bot, 'rate_limiter') and not bot.rate_limiter.is_allowed(ctx.author.name, cooldown=self.cooldown_ask):
+                remaining = bot.rate_limiter.get_remaining_cooldown(ctx.author.name, cooldown=self.cooldown_ask)
                 await ctx.send(f"@{ctx.author.name} ⏱️ Cooldown! Attends {remaining:.1f}s")
                 return
 
@@ -101,9 +115,9 @@ class IntelligenceCommands(commands.Component):
                 await ctx.send(f"@{ctx.author.name} ❌ Le système d'IA n'est pas disponible")
                 return
 
-            # Rate limiting (10s cooldown comme !ask)
-            if hasattr(bot, 'rate_limiter') and not bot.rate_limiter.is_allowed(ctx.author.name, cooldown=10.0):
-                remaining = bot.rate_limiter.get_remaining_cooldown(ctx.author.name, cooldown=10.0)
+            # ⏱️ Rate limit check (cooldown depuis config)
+            if hasattr(bot, 'rate_limiter') and not bot.rate_limiter.is_allowed(ctx.author.name, cooldown=self.cooldown_joke):
+                remaining = bot.rate_limiter.get_remaining_cooldown(ctx.author.name, cooldown=self.cooldown_joke)
                 await ctx.send(f"@{ctx.author.name} ⏱️ Cooldown! Attends {remaining:.1f}s")
                 return
 
@@ -172,8 +186,10 @@ async def handle_mention_v3(bot, message):
     if not user_message:
         return None
 
-    # ⏱️ Rate limit check
-    if hasattr(bot, 'rate_limiter') and not bot.rate_limiter.is_allowed(message.chatter.name, cooldown=15.0):
+    # ⏱️ Rate limit check (cooldown depuis config)
+    commands_config = bot.config.get("commands", {})
+    cooldown_mention = commands_config.get("cooldowns", {}).get("mention", 15.0)
+    if hasattr(bot, 'rate_limiter') and not bot.rate_limiter.is_allowed(message.chatter.name, cooldown=cooldown_mention):
         return None  # Ignorer silencieusement
 
     # 🎮 Game cache
