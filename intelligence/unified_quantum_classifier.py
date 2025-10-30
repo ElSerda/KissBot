@@ -42,27 +42,27 @@ class UnifiedQuantumClassifier:
         """
         self.logger = logging.getLogger(__name__)
 
-        # 🎯 RÈGLES DE CLASSIFICATION PAR INTENTION
+        # 🎯 RÈGLES DE CLASSIFICATION PAR INTENTION (3 CLASSES)
         self.classification_rules = {
             "ping": {
-                "patterns": ["ping", "test", "alive", "salut", "coucou", "bonsoir", "bonjour", "merci", "ok", "thx", "ty"],
+                "patterns": ["ping", "test", "alive", "salut", "coucou", "bonjour", "merci", "ok", "thx", "ty"],
                 "description": "Salutations, confirmations, réactions simples",
                 "target_response": "Court, amical, réactif (1-2 phrases)",
                 "priority": "social"
             },
 
             "gen_short": {
-                "patterns": ["comment", "pourquoi", "quand", "où", "aide", "help", "peux-tu", "peux tu", "comment faire", "comment ça"],
-                "description": "Questions courtes, demandes d'aide simples",
+                "patterns": [
+                    # Salutations avec mention (ex: "bonsoir serda_bot")
+                    "bonsoir",
+                    # Questions courtes
+                    "comment", "pourquoi", "quand", "où", "aide", "help", "peux-tu", "peux tu", "comment faire", "comment ça",
+                    # Patterns factuels (ex-lookup fusionné)
+                    "qui est", "c'est quoi", "qu'est-ce que", "définition", "game info", "steam info", "qu'est ce que", "info sur"
+                ],
+                "description": "Questions courtes, demandes d'aide, recherches factuelles simples",
                 "target_response": "Réponse concise mais informative (2-4 phrases)",
                 "priority": "question_simple"
-            },
-
-            "lookup": {
-                "patterns": ["qui est", "c'est quoi", "qu'est-ce que", "définition", "game info", "steam info", "qu'est ce que", "info sur"],
-                "description": "Recherche d'informations factuelles",
-                "target_response": "Informations précises et structurées",
-                "priority": "factual"
             },
 
             "gen_long": {
@@ -210,11 +210,10 @@ class UnifiedQuantumClassifier:
         """
         stimulus_lower = stimulus.lower().strip()
 
-        # 📊 Initialisation des scores par classe
+        # 📊 Initialisation des scores par classe (3 classes)
         class_scores = {
             "ping": 0.0,
             "gen_short": 0.0,
-            "lookup": 0.0,
             "gen_long": 0.0
         }
 
@@ -288,8 +287,8 @@ class UnifiedQuantumClassifier:
         if total_score > 0:
             probabilities = {k: v / total_score for k, v in class_scores.items()}
         else:
-            # Fallback uniforme si aucun pattern
-            probabilities = {k: 0.25 for k in class_scores.keys()}
+            # Fallback uniforme si aucun pattern (3 classes: 33.3% chacune)
+            probabilities = {k: 1.0/3.0 for k in class_scores.keys()}
 
         # 6. 🎯 SURCHARGE INTELLIGENTE
         max_class = max(probabilities.items(), key=lambda x: x[1])[0]
@@ -335,8 +334,8 @@ class UnifiedQuantumClassifier:
         prob_factor = max_probability
 
         # Facteur 2: Confiance Shannon normalisée EXACTE
-        # Formule: 1 - H(S)/H_max où H_max = log₂(4) = 2.0 pour 4 classes
-        H_max = 2.0  # Maximum théorique pour 4 classes (ping, gen_short, lookup, gen_long)
+        # Formule: 1 - H(S)/H_max où H_max = log₂(3) ≈ 1.585 pour 3 classes
+        H_max = 1.585  # Maximum théorique pour 3 classes (ping, gen_short, gen_long)
         shannon_confidence = max(0.0, 1.0 - (entropy / H_max))
 
         # Facteur 3: Dominance normalisée (0-1)
@@ -429,8 +428,8 @@ def test_unified_quantum_classifier():
         ("salut !", "", "ping"),  # Salutation simple
         ("@serda_bot comment ça va ?", "", "gen_short"),  # Mention + question simple
         ("!ask explique moi quantum physics", "", "gen_long"),  # Context override
-        ("qui est Einstein ?", "", "lookup"),  # Lookup simple
-        ("c'est quoi un bot ?", "", "lookup"),  # Lookup définition
+        ("qui est Einstein ?", "", "gen_short"),  # Ex-lookup → gen_short
+        ("c'est quoi un bot ?", "", "gen_short"),  # Ex-lookup → gen_short
         ("raconte moi une histoire", "", "gen_long"),  # Génération longue
         ("ping", "", "ping"),  # Test simple
         ("merci bien", "", "ping"),  # Réaction courte

@@ -26,7 +26,7 @@ class ReflexCenter:
         self.config = config
         self.logger = logging.getLogger(__name__)
 
-        # 🎭 PATTERNS RÉFLEXES CONTEXTUELS
+        # 🎭 PATTERNS RÉFLEXES CONTEXTUELS (3 classes)
         self.reflex_patterns = {
             "ping": [
                 "🤖 Je suis là !",
@@ -34,13 +34,6 @@ class ReflexCenter:
                 "👋 Salut ! Tout va bien ici",
                 "🎯 En ligne et prêt !",
                 "🔥 Toujours actif !",
-            ],
-            "lookup": [
-                "🔍 Info temporairement indisponible...",
-                "📚 Base de données en cours de sync...",
-                "🎮 Recherche en cours, patience !",
-                "⏳ Données gaming en chargement...",
-                "🔄 Mise à jour des infos jeux...",
             ],
             "gen_short": [
                 "😊 Petit souci technique, mais je reviens vite !",
@@ -105,7 +98,7 @@ class ReflexCenter:
         return response
 
     def _classify_for_pattern(self, stimulus: str, context: str, stimulus_class: str) -> str:
-        """🎯 CLASSIFICATION POUR PATTERN RÉFLEXE"""
+        """🎯 CLASSIFICATION POUR PATTERN RÉFLEXE (3 classes)"""
         stimulus_lower = stimulus.lower()
 
         # Classification prioritaire par context/stimulus_class
@@ -113,10 +106,6 @@ class ReflexCenter:
             word in stimulus_lower for word in ["ping", "test", "alive", "ça va"]
         ):
             return "ping"
-        elif stimulus_class == "lookup" or any(
-            word in stimulus_lower for word in ["qui est", "c'est quoi", "info"]
-        ):
-            return "lookup"
         elif stimulus_class == "gen_long" or context == "ask":
             return "gen_long"
         elif stimulus_class == "gen_short":

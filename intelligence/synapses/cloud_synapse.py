@@ -66,10 +66,9 @@ class CloudSynapse:
         self.max_backoff = 60.0
         self.current_backoff = self.base_backoff
 
-        # ⏱️ TIMEOUTS ADAPTATIFS
+        # ⏱️ TIMEOUTS ADAPTATIFS (3 classes)
         self.timeouts = {
             "ping": neural_config.get("timeout_ping", 2.0),
-            "lookup": neural_config.get("timeout_lookup", 5.0),
             "gen_short": neural_config.get("timeout_gen_short", 4.0),
             "gen_long": neural_config.get("timeout_gen_long", 8.0),
         }

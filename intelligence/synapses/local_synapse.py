@@ -55,12 +55,11 @@ class LocalSynapse:
         self.success_trials = 0
         self.total_reward = 0.0
 
-        # ⏱️ TIMEOUTS ADAPTATIFS
+        # ⏱️ TIMEOUTS ADAPTATIFS (3 classes) - Mistral 7B needs time!
         self.timeouts = {
-            "ping": neural_config.get("timeout_ping", 1.0),
-            "lookup": neural_config.get("timeout_lookup", 3.0),
-            "gen_short": neural_config.get("timeout_gen_short", 2.0),
-            "gen_long": neural_config.get("timeout_gen_long", 5.0),
+            "ping": neural_config.get("timeout_ping", 2.0),      # 2s (reflex forcé anyway)
+            "gen_short": neural_config.get("timeout_gen_short", 4.0),  # 4s (was 2s)
+            "gen_long": neural_config.get("timeout_gen_long", 8.0),    # 8s (was 5s)
         }
 
         # 📊 MÉTRIQUES LOCALES
@@ -101,14 +100,14 @@ class LocalSynapse:
         if not self.can_execute():
             return None
 
-        timeout = self.timeouts.get(stimulus_class, 2.0)
+        # Pas de asyncio.wait_for() - laisser httpx gérer son timeout
         optimized_prompt = self._optimize_signal_for_local(stimulus, context)
 
         start_time = time.time()
         try:
-            response = await asyncio.wait_for(
-                self._transmit_local_signal(optimized_prompt, context, correlation_id),
-                timeout=timeout,
+            # Httpx timeout interne géré dans _transmit_local_signal
+            response = await self._transmit_local_signal(
+                optimized_prompt, context, correlation_id, stimulus_class
             )
 
             latency = time.time() - start_time
@@ -124,23 +123,25 @@ class LocalSynapse:
             else:
                 self._record_failure("Réponse invalide")
                 return None
-
-        except asyncio.TimeoutError:
-            self._record_failure(f"Timeout {timeout}s")
-            return None
         except httpx.ConnectError:
             self._record_failure("Connexion LM Studio impossible")
             return None
         except httpx.ReadTimeout:
             self._record_failure("LM Studio read timeout")
             return None
+        except httpx.RemoteProtocolError as e:
+            # LM Studio peut fermer la connexion prématurément
+            self._record_failure(f"LM Studio protocol error: {str(e)[:50]}")
+            return None
         except httpx.HTTPStatusError as e:
             self._record_failure(f"HTTP {e.response.status_code}: {e.response.text[:100]}")
             return None
         except Exception as e:
             error_msg = str(e)
+            # Channel Error = bug LM Studio connu (client disconnect pendant génération)
             if "Channel Error" in error_msg or "channel" in error_msg.lower():
-                self._record_failure("LM Studio Channel Error - redémarrage recommandé")
+                self._record_failure("LM Studio Channel Error - client déconnecté trop tôt")
+                self.logger.warning("💡 LM Studio Channel Error: Augmenter timeout ou réduire max_tokens")
             else:
                 self._record_failure(f"Erreur LM Studio: {error_msg}")
             return None
@@ -155,43 +156,56 @@ class LocalSynapse:
         use_personality_mention = llm_config.get("use_personality_on_mention", True)
         use_personality_ask = llm_config.get("use_personality_on_ask", False)
 
+        # PROMPT OPTIMISÉ VERSION 2 (recommandation Mistral AI)
+        # Format minimaliste pour éviter auto-présentation
         if context == "ask":
             if use_personality_ask:
                 system_prompt = (
-                    f"Tu es {bot_name}, bot gaming Twitch. "
-                    f"Personnalité: {personality}. "
-                    f"Réponds avec expertise. Max 120 caractères."
+                    f"Réponds EN 1 PHRASE MAX, SANS TE PRÉSENTER, comme {bot_name} "
+                    f"({personality}). Max 120 caractères : {stimulus}"
                 )
             else:
                 system_prompt = (
-                    f"Tu es {bot_name}, assistant gaming Twitch factuel. "
-                    f"Réponds précisément. Max 120 caractères."
+                    f"Réponds EN 1 PHRASE MAX, SANS TE PRÉSENTER, comme un bot Twitch factuel. "
+                    f"Max 120 caractères : {stimulus}"
                 )
         else:
             if use_personality_mention:
                 system_prompt = (
-                    f"Tu es {bot_name}, bot gaming Twitch. "
-                    f"Personnalité: {personality}. "
-                    f"Sois authentique et fun. Max 80 caractères."
+                    f"Réponds EN 1 PHRASE MAX, SANS TE PRÉSENTER, comme {bot_name} "
+                    f"({personality}). Max 80 caractères : {stimulus}"
                 )
             else:
                 system_prompt = (
-                    f"Tu es {bot_name}, bot gaming Twitch sympa. "
-                    f"Réponds amicalement. Max 80 caractères."
+                    f"Réponds EN 1 PHRASE MAX, SANS TE PRÉSENTER, comme un bot Twitch sympa. "
+                    f"Max 80 caractères : {stimulus}"
                 )
 
-        return [{"role": "system", "content": system_prompt}, {"role": "user", "content": stimulus}]
+        # Format user-only avec prompt intégré (pas de séparation system/user)
+        return [{"role": "user", "content": system_prompt}]
 
     async def _transmit_local_signal(
-        self, messages: list[dict[str, str]], context: str, correlation_id: str
+        self, messages: list[dict[str, str]], context: str, correlation_id: str, stimulus_class: str = "gen_short"
     ) -> str | None:
         """📡 TRANSMISSION LOCAL OPTIMISÉE - Compatible Mistral/Qwen"""
+        
+        # Mistral 7B n'accepte PAS le role "system" - toujours user only
+        # Conversion préventive pour éviter Channel Error
+        if "mistral" in self.model_name.lower():
+            messages = self._convert_to_user_only(messages)
+        
         if context == "ask":
-            max_tokens = 80
+            max_tokens = 150  # ask - limite raisonnable
             temperature = 0.3
-        else:
-            max_tokens = 50
+            httpx_timeout = 15.0
+        elif stimulus_class == "gen_long":
+            max_tokens = 150  # gen_long - sans présentation devrait suffire
             temperature = 0.7
+            httpx_timeout = 15.0
+        else:
+            max_tokens = 100  # gen_short - limite normale
+            temperature = 0.7
+            httpx_timeout = 12.0
 
         payload = {
             "model": self.model_name,
@@ -201,39 +215,96 @@ class LocalSynapse:
             "stream": False,
         }
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
-            # Première tentative avec le format original (system + user)
-            response = await client.post(self.endpoint, json=payload)
+        # Httpx gère son propre timeout - pas de asyncio.wait_for() qui coupe la connexion
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(httpx_timeout, connect=5.0, read=httpx_timeout)
+        ) as client:
+            try:
+                # Première tentative avec le format original (system + user)
+                response = await client.post(self.endpoint, json=payload)
 
-            # Si erreur 400 et message concernant "system role", fallback sans système
-            if response.status_code == 400:
-                error_text = response.text.lower()
-                if "system" in error_text or "role" in error_text:
-                    self.logger.info(
-                        f"🔄 Model {self.model_name} ne supporte pas 'system' - fallback user only"
-                    )
+                # Si erreur 400 et message concernant "system role", fallback sans système
+                if response.status_code == 400:
+                    error_text = response.text.lower()
+                    if "system" in error_text or "role" in error_text:
+                        self.logger.info(
+                            f"🔄 Model {self.model_name} ne supporte pas 'system' - fallback user only"
+                        )
 
-                    # Conversion: system + user → user seul avec contexte intégré
-                    fallback_messages = self._convert_to_user_only(messages)
-                    fallback_payload = {**payload, "messages": fallback_messages}
+                        # Conversion: system + user → user seul avec contexte intégré
+                        fallback_messages = self._convert_to_user_only(messages)
+                        fallback_payload = {**payload, "messages": fallback_messages}
 
-                    response = await client.post(self.endpoint, json=fallback_payload)
+                        response = await client.post(self.endpoint, json=fallback_payload)
 
-            response.raise_for_status()
+                response.raise_for_status()
+                
+            except (httpx.RemoteProtocolError, httpx.ReadError) as e:
+                # LM Studio Channel Error = bug système/user incompatible
+                # Réessayer directement avec user only
+                self.logger.warning(
+                    f"💡 LM Studio Channel Error (system+user incompatible) - retry user only"
+                )
+                
+                fallback_messages = self._convert_to_user_only(messages)
+                fallback_payload = {**payload, "messages": fallback_messages}
+                
+                response = await client.post(self.endpoint, json=fallback_payload)
+                response.raise_for_status()
 
             data = response.json()
             if "choices" in data and data["choices"]:
                 choice = data["choices"][0]
+                
+                # 🚨 DÉTECTION TRUNCATION (finish_reason: length)
+                finish_reason = choice.get("finish_reason", "unknown")
+                if finish_reason == "length":
+                    self.logger.warning(
+                        f"⚠️ [LocalSynapse] Response TRUNCATED (finish_reason: length) "
+                        f"- max_tokens={max_tokens} atteint ! Consider increasing."
+                    )
+                
                 if choice and "message" in choice and choice["message"]:
                     message = choice["message"]
                     if "content" in message and message["content"]:
                         raw_response = message["content"]
                         cleaned = raw_response.strip() if raw_response else ""
+                        
+                        # POST-TRAITEMENT : Supprimer auto-présentation (recommandation Mistral AI)
+                        cleaned = self._remove_self_introduction(cleaned)
+                        
+                        # Ajouter ellipse si tronqué
+                        if finish_reason == "length" and cleaned and not cleaned.endswith("..."):
+                            cleaned = cleaned.rstrip(".!?,;:") + "..."
 
                         if cleaned and len(cleaned) >= 3:
                             return cleaned
 
         return None
+
+    def _remove_self_introduction(self, response: str) -> str:
+        """🧹 POST-TRAITEMENT : Supprimer auto-présentation (recommandation Mistral AI)"""
+        import re
+        
+        bot_name = self.config.get("bot", {}).get("name", "KissBot")
+        
+        # Patterns d'auto-présentation à supprimer
+        patterns = [
+            rf"Bonjour.*?{bot_name}[^.]*\.?\s*",  # "Bonjour ! Je suis KissBot..."
+            rf"^Je suis {bot_name}[^.]*\.?\s*",    # "Je suis KissBot..."
+            rf"^Moi,?\s*{bot_name}[^,!.]*[,!.]\s*",  # "Moi KissBot, ..." ou "Moi, KissBot..."
+            rf"^Salut.*?{bot_name}[^.]*\.?\s*",   # "Salut ! Je suis KissBot..."
+            rf"^{bot_name},\s*[^.]*\.?\s*",        # "KissBot, le bot..."
+        ]
+        
+        cleaned = response
+        for pattern in patterns:
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+        
+        # Nettoyer les espaces/ponctuation résiduels
+        cleaned = cleaned.strip(" ,.!").capitalize() if cleaned else response
+        
+        return cleaned if len(cleaned) >= 10 else response  # Fallback si trop court
 
     def _convert_to_user_only(self, messages: list[dict[str, str]]) -> list[dict[str, str]]:
         """🔄 CONVERSION POUR MODÈLES LEGACY (Mistral)"""
@@ -255,10 +326,16 @@ class LocalSynapse:
         return [{"role": "user", "content": combined_content}]
 
     def _is_valid_response(self, response: str, stimulus: str) -> bool:
-        """🎖️ VALIDATION RÉPONSE LOCALE"""
+        """🎖️ VALIDATION RÉPONSE LOCALE - Assouplie pour Mistral 7B"""
         if not response or len(response.strip()) < 3:
             return False
 
+        # Mistral 7B peut retourner des réponses courtes mais valides
+        # Accepter même sans ponctuation finale si suffisamment long
+        if len(response.strip()) >= 10:
+            return True
+
+        # Réponses ultra-courtes = invalides
         if response.lower() in ["ok", "oui", "non", "yes", "no"]:
             return False
 

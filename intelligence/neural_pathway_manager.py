@@ -185,6 +185,12 @@ class NeuralPathwayManager:
 
     def select_best_synapse(self, stimulus_class: str) -> tuple[str | None, SynapseProtocol | None]:
         """🏆 SÉLECTION OPTIMALE SYNAPSE VIA UCB"""
+        
+        # 🎯 OPTIMISATION: ping force TOUJOURS reflex (templates > LLM pour réflexes)
+        if stimulus_class == "ping":
+            self.logger.debug(f"🎯 Classe ping → Force reflex (templates)")
+            return "reflex", self.synapses["reflex"]
+        
         ucb_scores = self.calculate_ucb_scores(stimulus_class)
 
         # Tri par score UCB décroissant
@@ -294,10 +300,9 @@ class NeuralPathwayManager:
             self._archive_correlation(correlation_id)
 
     def _fallback_response(self, stimulus: str, context: str) -> str:
-        """🛡️ RÉPONSE FALLBACK INTELLIGENTE"""
+        """🛡️ RÉPONSE FALLBACK INTELLIGENTE (3 classes)"""
         fallback_responses = {
             "ping": "🤖 Je suis là !",
-            "lookup": "🔍 Info indisponible pour le moment...",
             "gen_short": "😊 Désolé, petit souci technique !",
             "gen_long": "🤔 Je réfléchis encore... Pose ta question plus tard !",
         }
