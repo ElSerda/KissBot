@@ -196,13 +196,20 @@ class LocalSynapse:
         else:
             if use_personality_mention:
                 system_prompt = (
-                    f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme {bot_name} "
-                    f"({personality}). Max 80 caractères : {stimulus}"
+                    f"Tu es {bot_name}. {personality}\n"
+                    f"Règles:\n"
+                    f"1. Réponds en 1-2 phrases MAX {lang_directive}, SANS TE PRÉSENTER\n"
+                    f"2. Pour les questions personnelles (ça va?), utilise des réponses courtes et humoristiques\n"
+                    f"3. Évite les répétitions. Varie tes réponses\n"
+                    f"4. Utilise des emojis si ça ajoute du fun\n"
+                    f"5. Sois punchy et direct\n"
+                    f"Question: {stimulus}\n"
+                    f"Réponse:"
                 )
             else:
                 system_prompt = (
                     f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme un bot Twitch sympa. "
-                    f"Max 80 caractères : {stimulus}"
+                    f"Max 150 caractères : {stimulus}"
                 )
 
         # Format user-only avec prompt intégré (pas de séparation system/user)
@@ -221,6 +228,10 @@ class LocalSynapse:
         if context == "ask":
             max_tokens = 150  # ask - limite raisonnable
             temperature = 0.3
+            httpx_timeout = 15.0
+        elif context == "mention":
+            max_tokens = 200  # mentions - besoin de réponses plus développées
+            temperature = 0.7
             httpx_timeout = 15.0
         elif stimulus_class == "gen_long":
             max_tokens = 150  # gen_long - sans présentation devrait suffire
