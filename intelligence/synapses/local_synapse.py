@@ -24,7 +24,16 @@ class LocalSynapse:
     - EMA smoothing des métriques
     - Timeouts adaptatifs par stimulus
     - Validation reward-based
+    - Post-traitement anti-dérive pour Mistral 7B
     """
+
+    # 🚫 LISTE NOIRE: Mots qui déclenchent des divagations
+    DERIVE_TRIGGERS = [
+        "en résumé", "on peut également", "il est intéressant de noter",
+        "pour comprendre cela", "de plus", "en outre", "par ailleurs",
+        "ce phénomène peut aussi", "d'autres exemples incluent",
+        "il faut noter que", "ainsi", "donc", "en effet"
+    ]
 
     def __init__(self, config: dict):
         self.config = config
@@ -99,6 +108,48 @@ class LocalSynapse:
             return True
         return False
 
+    def _hard_truncate(self, response: str, max_chars: int = 400) -> str:
+        """
+        🔪 TRONCATURE BRUTALE - Coupe à la dernière phrase complète avant limite
+        
+        Recommandation Mistral AI: Post-traitement obligatoire car Mistral 7B
+        ignore parfois les limites sur sujets complexes.
+        """
+        if len(response) <= max_chars:
+            return response
+        
+        # Coupe à la dernière phrase complète avant la limite
+        truncated = response[:max_chars]
+        last_period = truncated.rfind('.')
+        last_exclamation = truncated.rfind('!')
+        last_question = truncated.rfind('?')
+        
+        # Trouver la dernière ponctuation forte
+        last_punct = max(last_period, last_exclamation, last_question)
+        
+        if last_punct != -1:
+            return truncated[:last_punct + 1] + " 🔚"
+        else:
+            # Pas de ponctuation trouvée : coupe brutale
+            return truncated.rstrip() + "... 🔚"
+    
+    def _remove_derives(self, response: str) -> str:
+        """
+        🚫 SUPPRESSION DES MOTS DÉRIVANTS
+        
+        Certains mots déclenchent des divagations chez Mistral 7B.
+        Coupe la réponse dès qu'un trigger est détecté.
+        """
+        response_lower = response.lower()
+        
+        for trigger in self.DERIVE_TRIGGERS:
+            if trigger in response_lower:
+                # Coupe avant le trigger
+                idx = response_lower.index(trigger)
+                return response[:idx].rstrip() + " 🔚"
+        
+        return response
+
     async def fire(
         self,
         stimulus: str,
@@ -111,7 +162,7 @@ class LocalSynapse:
             return None
 
         # Pas de asyncio.wait_for() - laisser httpx gérer son timeout
-        optimized_prompt = self._optimize_signal_for_local(stimulus, context)
+        optimized_prompt = self._optimize_signal_for_local(stimulus, context, stimulus_class)
 
         start_time = time.time()
         try:
@@ -156,7 +207,7 @@ class LocalSynapse:
                 self._record_failure(f"Erreur LM Studio: {error_msg}")
             return None
 
-    def _optimize_signal_for_local(self, stimulus: str, context: str) -> list[dict[str, str]]:
+    def _optimize_signal_for_local(self, stimulus: str, context: str, stimulus_class: str = "gen_short") -> list[dict[str, str]]:
         """🎯 OPTIMISATION SIGNAL LOCAL V2.0"""
         
         # BYPASS: Si context="direct", pas de wrapping (pour !joke POC)
@@ -194,23 +245,55 @@ class LocalSynapse:
                     f"Max 120 caractères : {stimulus}"
                 )
         else:
-            if use_personality_mention:
-                system_prompt = (
-                    f"Tu es {bot_name}. {personality}\n"
-                    f"Règles:\n"
-                    f"1. Réponds en 1-2 phrases MAX {lang_directive}, SANS TE PRÉSENTER\n"
-                    f"2. Pour les questions personnelles (ça va?), utilise des réponses courtes et humoristiques\n"
-                    f"3. Évite les répétitions. Varie tes réponses\n"
-                    f"4. Utilise des emojis si ça ajoute du fun\n"
-                    f"5. Sois punchy et direct\n"
-                    f"Question: {stimulus}\n"
-                    f"Réponse:"
-                )
+            # Mentions : différencier gen_short vs gen_long
+            if stimulus_class == "gen_long":
+                # 🎯 PROMPT ANTI-DÉRIVE (Recommandation Mistral AI)
+                # Contraintes strictes + format obligatoire + exemple de référence
+                if use_personality_mention:
+                    system_prompt = (
+                        f"Tu es {bot_name}. {personality}\n\n"
+                        f"RÈGLES STRICTES (NON NÉGOCIABLES):\n"
+                        f"1. **MAX 2 PHRASES** (pas de listes 1. 2. 3.)\n"
+                        f"2. **MAX 400 CARACTÈRES** (coupe-toi si tu dépasses)\n"
+                        f"3. **Réponds {lang_directive}, SANS TE PRÉSENTER**\n"
+                        f"4. **Termine par 🔚**\n\n"
+                        f"FORMAT OBLIGATOIRE:\n"
+                        f"\"Définition courte avec exemple concret 💡. Cas d'usage pratique 🎯. 🔚\"\n\n"
+                        f"EXEMPLE DE RÉFÉRENCE:\n"
+                        f"Q: C'est quoi la gravité?\n"
+                        f"R: La gravité attire les objets vers le centre de la Terre 💡. Exemple: une pomme tombe 🎯. 🔚\n\n"
+                        f"NOW YOUR TURN:\n"
+                        f"Q: {stimulus}\n"
+                        f"R:"
+                    )
+                else:
+                    system_prompt = (
+                        f"RÈGLES STRICTES:\n"
+                        f"1. **MAX 2 PHRASES** (≤400 caractères)\n"
+                        f"2. **Réponds {lang_directive}, SANS TE PRÉSENTER**\n"
+                        f"3. **Format: \"Définition 💡. Exemple 🎯. 🔚\"**\n\n"
+                        f"Q: {stimulus}\n"
+                        f"R:"
+                    )
             else:
-                system_prompt = (
-                    f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme un bot Twitch sympa. "
-                    f"Max 150 caractères : {stimulus}"
-                )
+                # Questions simples/salutations : réponses courtes
+                if use_personality_mention:
+                    system_prompt = (
+                        f"Tu es {bot_name}. {personality}\n"
+                        f"Règles:\n"
+                        f"1. Réponds en 1-2 phrases MAX {lang_directive}, SANS TE PRÉSENTER\n"
+                        f"2. Pour les questions personnelles (ça va?), utilise des réponses courtes et humoristiques\n"
+                        f"3. Évite les répétitions. Varie tes réponses\n"
+                        f"4. Utilise des emojis si ça ajoute du fun\n"
+                        f"5. Sois punchy et direct\n"
+                        f"Question: {stimulus}\n"
+                        f"Réponse:"
+                    )
+                else:
+                    system_prompt = (
+                        f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme un bot Twitch sympa. "
+                        f"Max 150 caractères : {stimulus}"
+                    )
 
         # Format user-only avec prompt intégré (pas de séparation system/user)
         return [{"role": "user", "content": system_prompt}]
@@ -225,28 +308,48 @@ class LocalSynapse:
         if "mistral" in self.model_name.lower():
             messages = self._convert_to_user_only(messages)
         
+        # 🎯 PARAMÈTRES OPTIMISÉS (Recommandation Mistral AI)
+        # max_tokens réduits pour sujets complexes + repeat_penalty + stop tokens
         if context == "ask":
             max_tokens = 150  # ask - limite raisonnable
             temperature = 0.3
             httpx_timeout = 15.0
+            repeat_penalty = 1.1
+            stop_tokens = ["\n", "🔚"]
+        elif context == "mention" and stimulus_class == "gen_long":
+            # 🔥 GEN_LONG OPTIMAL: 100 tokens pour sujets complexes
+            # (~300-400 caractères selon complexité)
+            max_tokens = 100  
+            temperature = 0.4  # Moins de créativité = moins de divagations
+            httpx_timeout = 20.0
+            repeat_penalty = 1.2  # Évite les répétitions
+            stop_tokens = ["🔚", "\n", "400.", "Exemple :", "En résumé,"]
         elif context == "mention":
-            max_tokens = 200  # mentions - besoin de réponses plus développées
+            max_tokens = 200  # mentions gen_short - réponses développées
             temperature = 0.7
             httpx_timeout = 15.0
+            repeat_penalty = 1.1
+            stop_tokens = ["\n"]
         elif stimulus_class == "gen_long":
-            max_tokens = 150  # gen_long - sans présentation devrait suffire
-            temperature = 0.7
+            max_tokens = 100  # gen_long - contraintes strictes
+            temperature = 0.4
             httpx_timeout = 15.0
+            repeat_penalty = 1.2
+            stop_tokens = ["🔚", "\n"]
         else:
-            max_tokens = 150  # gen_short - augmenté pour blagues complètes (était 100)
+            max_tokens = 150  # gen_short - augmenté pour blagues complètes
             temperature = 0.7
             httpx_timeout = 12.0
+            repeat_penalty = 1.1
+            stop_tokens = ["\n"]
 
         payload = {
             "model": self.model_name,
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "repeat_penalty": repeat_penalty,
+            "stop": stop_tokens,
             "stream": True,  # ← STREAMING ACTIVÉ (accumulation)
         }
 
@@ -370,9 +473,15 @@ class LocalSynapse:
                     f"- max_tokens={max_tokens} atteint ! Consider increasing."
                 )
             
-            # POST-TRAITEMENT
+            # 🧹 POST-TRAITEMENT COMPLET
             cleaned = full_response.strip() if full_response else ""
             cleaned = self._remove_self_introduction(cleaned)
+            
+            # 🎯 POST-TRAITEMENT ANTI-DÉRIVE (Recommandation Mistral AI)
+            # OBLIGATOIRE pour gen_long car Mistral 7B dépasse parfois les limites
+            if stimulus_class == "gen_long":
+                cleaned = self._remove_derives(cleaned)  # Coupe les divagations
+                cleaned = self._hard_truncate(cleaned, max_chars=400)  # Force ≤400 chars
             
             # Ajouter ellipse si tronqué
             if finish_reason == "length" and cleaned and not cleaned.endswith("..."):
