@@ -265,25 +265,27 @@ class UnifiedQuantumClassifier:
                 class_scores[class_name] += base_score + priority_bonus
 
         # 4. 🧠 ANALYSE DE COMPLEXITÉ LINGUISTIQUE
-        word_count: int = metadata["word_count"]  # type: ignore[assignment]
-        complex_words = metadata["complex_words"]
+        word_count = metadata.get("word_count", 0)
+        word_count_int = int(word_count) if isinstance(word_count, (int, float)) else 0
+        complex_words = metadata.get("complex_words", [])
         complex_words_count = len(complex_words) if isinstance(complex_words, list) else 0
-        has_question: bool = metadata["has_question"]  # type: ignore[assignment]
+        has_question = metadata.get("has_question", False)
+        has_question_bool = bool(has_question) if isinstance(has_question, bool) else False
 
         # Ajustements basés sur la complexité
-        if word_count <= 3 and not has_question and complex_words_count == 0:
+        if word_count_int <= 3 and not has_question_bool and complex_words_count == 0:
             class_scores["ping"] += 0.6  # Message très court
         elif complex_words_count >= 2:
             class_scores["gen_long"] += 0.7  # Plusieurs mots complexes
-        elif complex_words_count == 1 and word_count > 6:
+        elif complex_words_count == 1 and word_count_int > 6:
             class_scores["gen_long"] += 0.5  # Un mot complexe + message long
         elif complex_words_count == 1:
             class_scores["gen_long"] += 0.8  # Mot complexe isolé → analyse approfondie
-        elif word_count > 12:
+        elif word_count_int > 12:
             class_scores["gen_long"] += 0.4  # Message très long
 
         # Bonus questions courtes
-        if has_question and word_count <= 8 and complex_words_count <= 1:
+        if has_question_bool and word_count_int <= 8 and complex_words_count <= 1:
             class_scores["gen_short"] += 0.3
 
         # 5. 📊 NORMALISATION EN PROBABILITÉS

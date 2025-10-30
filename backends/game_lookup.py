@@ -3,15 +3,18 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
+# Import optionnel de CacheManager
+CacheManager: Optional[Any] = None
 try:
-    from core.cache import CacheManager
+    from core.cache import CacheManager as _CacheManager
+    CacheManager = _CacheManager
 except ImportError:
     # Silencieux - CacheManager optionnel
-    CacheManager = None  # type: ignore
+    pass
 
 # Plateformes principales (PC + Consoles, pas mobile/web)
 PC_CONSOLE_PLATFORMS = "4,18,1,7,19,14,15,16,17"  # PC, PS, Xbox, Nintendo
