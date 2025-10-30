@@ -5,7 +5,9 @@ Connexions neuronales locales avec UCB, circuit-breaker et EMA
 """
 
 import asyncio
+import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -38,6 +40,13 @@ class LocalSynapse:
         self.model_name = llm_config.get("model_name", "mistralai/mistral-7b-instruct-v0.3")
         self.is_enabled = llm_config.get("local_llm", True)
         self.language = llm_config.get("language", "fr")  # Langue des réponses
+        
+        # 🎬 DEBUG MODE: Afficher chunks streaming en temps réel
+        # Support: debug_streaming: true OU stream_response_debug: "on"
+        self.debug_streaming = (
+            llm_config.get("debug_streaming", False) or 
+            llm_config.get("stream_response_debug", "").lower() == "on"
+        )
 
         # ⚡ CIRCUIT BREAKER STATE
         self.failure_threshold = neural_config.get("local_failure_threshold", 3)
@@ -218,7 +227,7 @@ class LocalSynapse:
             temperature = 0.7
             httpx_timeout = 15.0
         else:
-            max_tokens = 100  # gen_short - limite normale
+            max_tokens = 150  # gen_short - augmenté pour blagues complètes (était 100)
             temperature = 0.7
             httpx_timeout = 12.0
 
@@ -227,7 +236,7 @@ class LocalSynapse:
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "stream": False,
+            "stream": True,  # ← STREAMING ACTIVÉ (accumulation)
         }
 
         # Httpx gère son propre timeout - pas de asyncio.wait_for() qui coupe la connexion
@@ -235,24 +244,75 @@ class LocalSynapse:
             timeout=httpx.Timeout(httpx_timeout, connect=5.0, read=httpx_timeout)
         ) as client:
             try:
-                # Première tentative avec le format original (system + user)
-                response = await client.post(self.endpoint, json=payload)
-
-                # Si erreur 400 et message concernant "system role", fallback sans système
-                if response.status_code == 400:
-                    error_text = response.text.lower()
-                    if "system" in error_text or "role" in error_text:
-                        self.logger.info(
-                            f"🔄 Model {self.model_name} ne supporte pas 'system' - fallback user only"
-                        )
-
-                        # Conversion: system + user → user seul avec contexte intégré
-                        fallback_messages = self._convert_to_user_only(messages)
-                        fallback_payload = {**payload, "messages": fallback_messages}
-
-                        response = await client.post(self.endpoint, json=fallback_payload)
-
-                response.raise_for_status()
+                # 🌊 STREAMING AVEC ACCUMULATION (pas de spam chat)
+                full_response = ""
+                finish_reason = "unknown"
+                
+                # 🎬 DEBUG: Header streaming
+                if self.debug_streaming:
+                    print("\n🌊 [STREAMING START] ", end="", flush=True)
+                
+                async with client.stream("POST", self.endpoint, json=payload) as response:
+                    if response.status_code == 400:
+                        error_text = await response.aread()
+                        error_str = error_text.decode().lower()
+                        if "system" in error_str or "role" in error_str:
+                            self.logger.info(
+                                f"🔄 Model {self.model_name} ne supporte pas 'system' - fallback user only"
+                            )
+                            # Retry avec user only
+                            fallback_messages = self._convert_to_user_only(messages)
+                            fallback_payload = {**payload, "messages": fallback_messages}
+                            
+                            async with client.stream("POST", self.endpoint, json=fallback_payload) as retry_response:
+                                retry_response.raise_for_status()
+                                async for line in retry_response.aiter_lines():
+                                    if line.startswith("data: "):
+                                        chunk_data = line[6:]  # Remove "data: " prefix
+                                        if chunk_data == "[DONE]":
+                                            break
+                                        try:
+                                            chunk_json = json.loads(chunk_data)
+                                            if "choices" in chunk_json and chunk_json["choices"]:
+                                                delta = chunk_json["choices"][0].get("delta", {})
+                                                if "content" in delta:
+                                                    chunk_text = delta["content"]
+                                                    full_response += chunk_text
+                                                    # 🎬 DEBUG: Afficher chunk en temps réel
+                                                    if self.debug_streaming:
+                                                        print(chunk_text, end="", flush=True)
+                                                # Capture finish_reason
+                                                finish_reason = chunk_json["choices"][0].get("finish_reason", finish_reason)
+                                        except json.JSONDecodeError:
+                                            continue
+                        else:
+                            raise httpx.HTTPStatusError(f"HTTP {response.status_code}", request=response.request, response=response)
+                    else:
+                        response.raise_for_status()
+                        # Stream normal
+                        async for line in response.aiter_lines():
+                            if line.startswith("data: "):
+                                chunk_data = line[6:]
+                                if chunk_data == "[DONE]":
+                                    break
+                                try:
+                                    chunk_json = json.loads(chunk_data)
+                                    if "choices" in chunk_json and chunk_json["choices"]:
+                                        delta = chunk_json["choices"][0].get("delta", {})
+                                        if "content" in delta:
+                                            chunk_text = delta["content"]
+                                            full_response += chunk_text
+                                            # 🎬 DEBUG: Afficher chunk en temps réel
+                                            if self.debug_streaming:
+                                                print(chunk_text, end="", flush=True)
+                                        # Capture finish_reason
+                                        finish_reason = chunk_json["choices"][0].get("finish_reason", finish_reason)
+                                except json.JSONDecodeError:
+                                    continue
+                
+                # 🎯 ENVOYER MESSAGE COMPLET APRÈS STOP_REASON
+                if not full_response:
+                    return None
                 
             except (httpx.RemoteProtocolError, httpx.ReadError) as e:
                 # LM Studio Channel Error = bug système/user incompatible
@@ -264,36 +324,51 @@ class LocalSynapse:
                 fallback_messages = self._convert_to_user_only(messages)
                 fallback_payload = {**payload, "messages": fallback_messages}
                 
-                response = await client.post(self.endpoint, json=fallback_payload)
-                response.raise_for_status()
-
-            data = response.json()
-            if "choices" in data and data["choices"]:
-                choice = data["choices"][0]
+                # Retry avec streaming
+                full_response = ""
+                finish_reason = "unknown"
+                async with client.stream("POST", self.endpoint, json=fallback_payload) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            chunk_data = line[6:]
+                            if chunk_data == "[DONE]":
+                                break
+                            try:
+                                chunk_json = json.loads(chunk_data)
+                                if "choices" in chunk_json and chunk_json["choices"]:
+                                    delta = chunk_json["choices"][0].get("delta", {})
+                                    if "content" in delta:
+                                        chunk_text = delta["content"]
+                                        full_response += chunk_text
+                                        # 🎬 DEBUG: Afficher chunk en temps réel
+                                        if self.debug_streaming:
+                                            print(chunk_text, end="", flush=True)
+                                    finish_reason = chunk_json["choices"][0].get("finish_reason", finish_reason)
+                            except json.JSONDecodeError:
+                                continue
                 
-                # 🚨 DÉTECTION TRUNCATION (finish_reason: length)
-                finish_reason = choice.get("finish_reason", "unknown")
-                if finish_reason == "length":
-                    self.logger.warning(
-                        f"⚠️ [LocalSynapse] Response TRUNCATED (finish_reason: length) "
-                        f"- max_tokens={max_tokens} atteint ! Consider increasing."
-                    )
-                
-                if choice and "message" in choice and choice["message"]:
-                    message = choice["message"]
-                    if "content" in message and message["content"]:
-                        raw_response = message["content"]
-                        cleaned = raw_response.strip() if raw_response else ""
-                        
-                        # POST-TRAITEMENT : Supprimer auto-présentation (recommandation Mistral AI)
-                        cleaned = self._remove_self_introduction(cleaned)
-                        
-                        # Ajouter ellipse si tronqué
-                        if finish_reason == "length" and cleaned and not cleaned.endswith("..."):
-                            cleaned = cleaned.rstrip(".!?,;:") + "..."
+                # 🎬 DEBUG: Footer streaming
+                if self.debug_streaming:
+                    print(f" [STREAMING END] finish_reason={finish_reason}\n", flush=True)
 
-                        if cleaned and len(cleaned) >= 3:
-                            return cleaned
+            # 🚨 DÉTECTION TRUNCATION (finish_reason: length)
+            if finish_reason == "length":
+                self.logger.warning(
+                    f"⚠️ [LocalSynapse] Response TRUNCATED (finish_reason: length) "
+                    f"- max_tokens={max_tokens} atteint ! Consider increasing."
+                )
+            
+            # POST-TRAITEMENT
+            cleaned = full_response.strip() if full_response else ""
+            cleaned = self._remove_self_introduction(cleaned)
+            
+            # Ajouter ellipse si tronqué
+            if finish_reason == "length" and cleaned and not cleaned.endswith("..."):
+                cleaned = cleaned.rstrip(".!?,;:") + "..."
+
+            if cleaned and len(cleaned) >= 3:
+                return cleaned
 
         return None
 

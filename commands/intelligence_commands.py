@@ -7,6 +7,7 @@ from twitchio.ext import commands
 
 from intelligence.neural_pathway_manager import NeuralPathwayManager
 from intelligence.core import process_llm_request
+from intelligence.joke_cache import JokeCache, get_dynamic_prompt
 
 
 class IntelligenceCommands(commands.Component):
@@ -15,6 +16,8 @@ class IntelligenceCommands(commands.Component):
     def __init__(self):
         # TwitchIO 3.x : Pas besoin de bot dans __init__
         self.llm_handler = None
+        # Cache intelligent Mistral AI (5min TTL, user sessions)
+        self.joke_cache = JokeCache(ttl_seconds=300, max_size=100)  # 5 minutes
 
     def _ensure_llm_handler(self, bot) -> bool:
         """
@@ -84,7 +87,12 @@ class IntelligenceCommands(commands.Component):
     async def joke_command(self, ctx: commands.Context):
         """
         🎭 Commande !joke - Le bot raconte une blague courte.
-        Pattern optimisé Mistral AI validé .
+        
+        Solution Mistral AI :
+        - Cache intelligent avec variabilité (user sessions + temps)
+        - Prompts dynamiques pour forcer la diversité
+        - TTL 5 minutes (équilibre performance + fraîcheur)
+        - Rotation automatique toutes les 3 blagues OU 5 minutes
         """
         try:
             # Initialiser LLM handler
@@ -99,25 +107,37 @@ class IntelligenceCommands(commands.Component):
                 await ctx.send(f"@{ctx.author.name} ⏱️ Cooldown! Attends {remaining:.1f}s")
                 return
 
-            # Prompt POC validé : pattern Mistral AI (0.54s, ~19 tokens, 100% succès)
-            # pre_optimized=True → bypass wrapping automatique
-            prompt_optimized = "Réponds EN 1 PHRASE MAX EN FRANÇAIS, SANS TE PRÉSENTER, style humoristique : raconte une blague courte"
+            # 🎲 Prompt dynamique (force variété)
+            base_prompt = "Réponds EN 1 PHRASE MAX EN FRANÇAIS, SANS TE PRÉSENTER, style humoristique : raconte une blague courte"
+            dynamic_prompt = get_dynamic_prompt(base_prompt)
             
+            # 🔑 Clé cache intelligente (user_id + session + temps)
+            user_id = ctx.author.name or "unknown"
+            cache_key = self.joke_cache.get_key(user_id, dynamic_prompt)
+            
+            # 💾 CHECK CACHE AVANT LLM
+            cached_joke = self.joke_cache.get(cache_key)
+            if cached_joke:
+                await ctx.send(f"@{ctx.author.name} {cached_joke}")
+                return
+
+            # 🧠 APPEL LLM SI CACHE MISS
             response = await process_llm_request(
                 llm_handler=self.llm_handler,
-                prompt=prompt_optimized,
+                prompt=dynamic_prompt,
                 context="ask",
-                user_name=ctx.author.name or "unknown",
+                user_name=user_id,
                 game_cache=None,
                 pre_optimized=True,  # ← Prompt déjà au format optimal
                 stimulus_class="gen_short"  # ← Force classification courte
             )
 
-            # Réponse Twitch
-            if not response:
-                await ctx.send(f"@{ctx.author.name} ❌ Erreur IA, réessaye plus tard")
-            else:
+            # 💾 STORE DANS CACHE SI SUCCESS
+            if response:
+                self.joke_cache.set(cache_key, response)
                 await ctx.send(f"@{ctx.author.name} {response}")
+            else:
+                await ctx.send(f"@{ctx.author.name} ❌ Erreur IA, réessaye plus tard")
 
         except Exception as e:
             await ctx.send(f"@{ctx.author.name} ❌ Erreur: {e}")

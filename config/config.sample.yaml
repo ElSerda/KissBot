@@ -27,6 +27,7 @@ llm:
   enabled: true
   fallback_mode: fun
   fallback_provider: none
+  language: fr  # Langue des réponses LLM (fr/en/es/de)
   local_llm: true
   max_tokens_ask: 200
   max_tokens_chill: 150
@@ -35,6 +36,7 @@ llm:
   openai_model: gpt-3.5-turbo
   personality_only_on_cloud: true
   provider: local
+  stream_response_debug: "off"  # "on" pour voir chunks streaming en live, "off" pour production propre
   temperature_ask: 0.5
   temperature_chill: 0.8
   use_personality_on_ask: false
