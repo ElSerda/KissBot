@@ -54,7 +54,7 @@ class GameCommands(commands.Component):
                 return
 
             # Utiliser l'API Helix pour récupérer le stream
-            users = await bot.fetch_users(names=[broadcaster_name])
+            users = await bot.fetch_users(logins=[broadcaster_name])
             if not users:
                 await ctx.send(f"❌ Utilisateur '{broadcaster_name}' non trouvé")
                 return

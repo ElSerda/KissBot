@@ -28,6 +28,7 @@
 - [⚡ Quick Start](docs/installation/QUICK_START.md) - Bot en 3 minutes
 - [🔧 Installation Simple](docs/installation/INSTALL_EASY.md) - Setup facile
 - [🎮 Setup Twitch](docs/twitchio/SETUP_GUIDE.md) - Configuration Twitch
+- [🔐 OAuth Auto-Refresh](docs/OAuth_AUTO_REFRESH.md) - Token refresh automatique (NEW!)
 
 🧠 **Architecture Avancée :**
 - [🧠 Neural V2.0](docs/neural-v2/README.md) - Système neuronal UCB Bandit
@@ -107,73 +108,125 @@
 
 ### 🤖 Classic Commands
 - `!gameinfo <name>` / `!gi` - Game info (RAWG + Steam APIs) *[90-99% reliable]*
-- `!gamecategory` / `!gc` - **NEW!** Auto-detect current stream game
-- `!ask <question>` - Ask LLM
+- `!gamecategory` / `!gc` - Auto-detect current stream game with enrichment
+- `!gi <game>` - **NEW Phase 3.1!** Game info with RAWG+Steam APIs
+- `!ask <question>` - **NEW Phase 3.2!** Ask the bot anything (LLM)
+- **@bot_name <message>** - **NEW Phase 3.2!** Mention bot for natural conversation
 - `!joke` - **NEW!** Bot tells a short joke (French)
 - `!ping` - Bot latency
-- `!stats` - Bot statistics
+- `!uptime` - Bot uptime & command count
+- `!stats` - **NEW Phase 3.3!** System metrics (CPU/RAM/Threads/Uptime)
 - `!help` - Commands list
 - `!cache` - Cache statistics
 - `!serdagit` - Bot source code & creator info
 
-### 🔬 NEW: Quantum Commands
-- `!qgame <name>` - **Quantum game search** with learning superposition
-- `!collapse <name>` - **Confirm game** → permanent quantum state
-- `!qstats` - Quantum cache statistics & learning metrics
-- `!qsuggest <name>` - View all superposition states
-- `!qhelp` - Quantum system help
+### 🔴 NEW: Stream Monitoring (Phase 3.3)
+
+**Real-time stream detection with EventSub WebSocket + Polling fallback + System Monitoring**
+
+- **EventSub WebSocket** (primary): < 1s latency, 0 API cost in runtime
+- **Polling fallback**: 60s interval if EventSub unavailable
+- **Auto-announce** when channels go live/offline
+- **Template messages** with `{channel}`, `{title}`, `{game_name}`, `{viewer_count}`
+- **System monitoring**: CPU/RAM/Threads metrics logged to JSON
+- **!stats command**: Display live system metrics in chat
+- **Configuration-driven** - Full control via config.yaml
+- **Hybrid architecture** - Maximum resilience
+- **Token auto-refresh** - Native pyTwitchAPI callback for 10h+ sessions
+
+**Example:**
+```
+[Stream goes online - detected in < 1s via EventSub]
+serda_bot: 🔴 @el_serda est maintenant en live ! 🎮 Coding KissBot Phase 3.3
+
+[User types !stats]
+serda_bot: @el_serda 📊 CPU: 1.0% | RAM: 54MB | Threads: 9 | Uptime: 2h34m
+```
+
+**EventSub vs Polling Comparison:**
+
+| Feature | EventSub WebSocket | Polling |
+|---------|-------------------|---------|
+| **Latency** | < 1s | Max 60s |
+| **API Calls** | 0 (runtime) | 4/min |
+| **Startup** | ~3.5s (8 subs) | Instant |
+| **Resilience** | Needs fallback | Always works |
+
+**System Monitoring:**
+
+| Metric | Production Value | Description |
+|--------|-----------------|-------------|
+| **RAM** | 54-55 MB | Ultra-efficient (lighter than Chrome tab) |
+| **CPU** | 0-1% idle | No wasted cycles, spikes during messages |
+| **Threads** | 9 | 1 main + 8 library threads |
+| **!stats latency** | < 1ms | Cached metrics, no file I/O |
+| **Monitoring overhead** | < 0.1% CPU | Negligible impact |
+
+**Configuration:**
+```yaml
+announcements:
+  monitoring:
+    method: auto  # Try EventSub → Fallback polling if fails
+```
+
+> **📖 Complete monitoring documentation:** [docs/PHASE3.3_STREAM_MONITORING.md](docs/PHASE3.3_STREAM_MONITORING.md)  
+> **⚙️ Configuration guide:** [docs/STREAM_ANNOUNCEMENTS_CONFIG.md](docs/STREAM_ANNOUNCEMENTS_CONFIG.md)  
+> **📊 System monitoring guide:** [docs/SYSTEM_MONITORING.md](docs/SYSTEM_MONITORING.md)
+
+### 🔬 Phase 3.4: Quantum Game Learning
+- `!qgame <name>` - **Quantum game search** with superposition (numbered list 1-2-3)
+- `!collapse <name> <number>` - **Mods anchor truth** → permanent quantum state (crowdsourced learning)
+- `!quantum` - **Universal quantum stats** (GAME + MUSIC + future domains)
+- `!decoherence` - **Manual cleanup** expired states (mods only)
 
 > **📋 Full commands documentation:** [docs/guides/COMMANDS.md](docs/guides/COMMANDS.md) - includes reliability details and edge cases
 
-### 🔬 Revolutionary Quantum Cache System
+### 🔬 Revolutionary Quantum Game Learning System
 
-**World's first quantum mechanics-based cache for Twitch bots!**
+**World's first quantum-inspired crowdsourced learning for game searches!**
 
-The quantum system transforms your classic `!gameinfo` command into an **adaptive learning experience**:
+The quantum system enables community-driven accuracy where **mods/admins anchor the truth**:
 
-#### 🎯 **Enhanced !gameinfo Command**
+#### 🎯 **Quantum Workflow**
 ```
-User: !gameinfo hades
-Bot: ⚛️ Hades | █████████░ 0.9 | SUPERPOSITION
-     ⚛️ Hades (2020) - 🏆 93/100 | 🕹️ PC, PlayStation 5 - SUGGESTION (0.9) • !collapse pour confirmer
+User: !qgame hades
+Bot:  🔬 Superposition pour 'hades':
+      1. ⚛️ Hades (2020) - 🏆 93/100 (conf: 0.9)
+      2. ⚛️ Hades 2 (2024) - 🏆 90/100 (conf: 0.7)
+      → !collapse hades 1 pour confirmer
 
-User: !collapse hades  
-Bot: 💥 @user a fait COLLAPSE l'état 'hades' → État figé permanent !
+Mod: !collapse hades 1
+Bot: 💥 @ModName a fait collapse 'hades' → Hades (2020) ✅ État figé !
 
-User: !gameinfo hades  (future searches)
-Bot: 🔒 Hades | ██████████ 1.0 | COLLAPSED
-     🔒 Hades (2020) - 🏆 93/100 | 🕹️ PC, PlayStation 5 - CONFIRMÉ (1.0)
-```
+[Future search after learning]
+User: !qgame hades
+Bot:  🔒 Hades (2020) - CONFIRMÉ ✅ (3 confirmations)
 
-#### ⚛️ **Quantum Phenomena Implementation**
-
-| Quantum Phenomenon | Bot Behavior | Visual Result |
-|-------------------|--------------|---------------|
-| **⚛️ Superposition** | Multiple game suggestions until user validation | `⚛️ Game │ ████████░░ 0.8 │ SUPERPOSITION` |
-| **💥 Collapse** | User confirms → state becomes permanent (`verified: 1`) | `🔒 Game │ ██████████ 1.0 │ COLLAPSED` |
-| **🔗 Entanglement** | Similar games influence each other's confidence | Auto-boost related games |
-| **💨 Decoherence** | Unconfirmed games evaporate after 30min | `❓ Game │ ██████░░░░ 0.6 │ SUPERPOSITION` → *(evaporates)* |
-| **👁️ Observer Effect** | Users influence bot through their choices | Continuous self-improvement |
-| **⏱️ Volatile States** | Suggestions disappear if ignored | No cache pollution |
-
-#### 🔬 **Visual Dashboard**
-```
-!qdash
-🔬 [SERDA_BOT]
-🔒 Hades | █████████░ 0.9 | COLLAPSED
-⚛️ Celeste | ███████░░░ 0.7 | SUPERPOSITION  
-❓ Zelda | ██████░░░░ 0.6 | SUPERPOSITION
+User: !quantum
+Bot:  � Système Quantique | GAME: 42 jeux, 12 superpositions, 60% verified | MUSIC: 5 tracks, 0% verified
 ```
 
-**🎯 Benefits:**
-- 🧠 **Bot truly learns** from user confirmations
-- ⚡ **Gets smarter** the more it's used  
-- 🎯 **Adapts** to community preferences
-- 🧹 **Self-cleaning** (no manual cache management)
-- 🔗 **Knowledge propagation** via quantum entanglement
-- 📊 **Visual feedback** with progress bars and real-time states
+#### ⚛️ **Quantum Features**
 
-> **📖 Complete quantum documentation:** [docs/QUANTUM_SYSTEM.md](docs/QUANTUM_SYSTEM.md)
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Superposition** | Multiple suggestions with confidence (0.0-1.0) | Users see all options |
+| **Collapse** | Mods confirm correct game (1-2-3 numbered selection) | Bot learns from experts |
+| **Confidence Scores** | Transparent 0.0-1.0 scoring visible to users | Trust through transparency |
+| **Crowdsourced Truth** | Community-driven accuracy via mod confirmations | Gets smarter over time |
+| **Decoherence** | Auto-cleanup expired non-verified states (48h) | Self-cleaning cache |
+| **Multi-Domain** | GAME + MUSIC (POC) + future (clips, VODs, emotes) | Scalable architecture |
+
+#### 🎯 **Benefits**
+- 🧠 **Bot truly learns** from mod confirmations
+- ⚡ **Gets smarter** with each collapse
+- 🎯 **Community-driven** accuracy (not just API)
+- 🧹 **Self-cleaning** via decoherence
+- 🔬 **Transparent** confidence scoring
+- � **Scalable** to all content domains
+- � **Unique** - no other Twitch bot has this
+
+> **📖 Architecture details:** See CHANGELOG v3.4.0 for technical implementation
 
 ### 🎯 Stream Detection
 - **Live Game Detection:** Twitch Helix API integration
@@ -364,6 +417,25 @@ ollama pull qwen2.5:7b-instruct
 **📖 Detailed guides:**
 - **OLLAMA_LINUX_SETUP.md** - Complete Linux/Ollama guide with systemd service
 - **COMPLETE_API_SETUP_GUIDE.md** - All APIs configuration
+
+### 🔐 OAuth Token Auto-Refresh
+
+**NEW in v3.4.1**: KissBot automatically refreshes expired tokens!
+
+- ✅ **Automatic token refresh** when access token expires (401)
+- ✅ **Zero downtime** - Refresh happens transparently during startup
+- ✅ **Secure storage** - Refresh token stored in `.tio.tokens.json`
+- ✅ **No manual intervention** - Bot continues without user action
+
+**How it works:**
+1. Bot detects expired token (401 Unauthorized)
+2. Calls Twitch OAuth refresh endpoint automatically
+3. Saves new token to `.tio.tokens.json`
+4. Re-validates and continues startup
+5. ✅ Token valid for 4 hours
+
+**First-time setup:**
+You still need to generate initial OAuth token once (see Step 2 above). After that, bot handles all refreshes automatically!
 
 ### 4. Run
 

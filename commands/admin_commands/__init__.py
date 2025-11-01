@@ -1,0 +1,1 @@
+"""Commandes admin (broadcaster uniquement)."""

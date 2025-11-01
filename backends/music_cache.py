@@ -1,7 +1,8 @@
 """
-🎮 Quantum Game Cache - KissBot Phase 3.4
+🎵 Quantum Music Cache - KissBot Phase 3.4 (POC)
 
-Cache quantique pour jeux avec apprentissage crowdsourced.
+Cache quantique pour musiques avec apprentissage crowdsourced.
+Proof of Concept pour multi-domain quantum system.
 
 FONCTIONNALITÉS QUANTUM :
 ├── Superposition de résultats (multiple suggestions)
@@ -11,34 +12,34 @@ FONCTIONNALITÉS QUANTUM :
 └── Cleanup décohérence (nettoyage intelligent)
 
 WORKFLOW :
-1. !qgame hades → Superposition (liste 1-2-3)
-2. !collapse hades 1 → Mod ancre le vrai jeu
+1. !qmusic artist song → Superposition (liste 1-2-3)
+2. !collapse music 1 → Mod ancre la vraie track
 3. Bot apprend → Futures recherches améliorées
+
+NOTE: Phase 3.4 POC - Pas d'API externe pour l'instant (mock data OK)
 """
 
 import json
 import logging
 import os
-import time
 from datetime import datetime, timedelta
 from typing import Any
 
-from backends.game_lookup import GameLookup, GameResult
 from core.cache_interface import BaseCacheInterface, CacheStats
 
 
-class GameCache(BaseCacheInterface):
+class MusicCache(BaseCacheInterface):
     """
-    🔬 Quantum Game Cache - Phase 3.4
+    🔬 Quantum Music Cache - Phase 3.4 POC
 
     QUANTUM FEATURES :
-    - Superposition : Multiple game suggestions (1-2-3)
+    - Superposition : Multiple track suggestions (1-2-3)
     - Collapse : Mods anchor truth (crowdsourced curation)
     - Learning : Bot improves from confirmations
     - Stats : Real-time observability
     """
 
-    def __init__(self, config: dict[str, Any], cache_file: str = "cache/quantum_games.json"):
+    def __init__(self, config: dict[str, Any], cache_file: str = "cache/quantum_music.json"):
         super().__init__(config)
         self.cache_file = cache_file
 
@@ -47,17 +48,16 @@ class GameCache(BaseCacheInterface):
         self.cache_duration = timedelta(hours=cache_config.get("duration_hours", 24))
 
         # Configuration quantum
-        quantum_config = config.get("quantum_games", {})
+        quantum_config = config.get("quantum_music", {})
         self.max_superpositions = quantum_config.get("max_suggestions", 3)
         self.confirmation_boost = quantum_config.get("confirmation_confidence_boost", 0.2)
-        self.auto_entangle = quantum_config.get("auto_entangle", True)
 
         # Quantum storage
         # Structure: {
-        #   "game:hades": {
+        #   "music:artist-song": {
         #       "superpositions": [
-        #           {"game": {...}, "confidence": 0.9, "verified": 0, "confirmations": 0},
-        #           {"game": {...}, "confidence": 0.7, "verified": 0, "confirmations": 0}
+        #           {"track": {...}, "confidence": 0.9, "verified": 0, "confirmations": 0},
+        #           {"track": {...}, "confidence": 0.7, "verified": 0, "confirmations": 0}
         #       ],
         #       "collapsed": False,
         #       "created_at": "ISO timestamp",
@@ -65,9 +65,6 @@ class GameCache(BaseCacheInterface):
         #   }
         # }
         self.quantum_states: dict[str, dict[str, Any]] = {}
-
-        # Game API
-        self.game_lookup = GameLookup(config)
 
         self.logger = logging.getLogger(__name__)
 
@@ -97,12 +94,12 @@ class GameCache(BaseCacheInterface):
                         valid_cache[key] = quantum_state
 
                 self.quantum_states = valid_cache
-                self.logger.info(f"� Quantum cache chargé: {len(self.quantum_states)} états quantiques")
+                self.logger.info(f"🎵 Quantum music cache chargé: {len(self.quantum_states)} états quantiques")
             else:
-                self.logger.info("� Nouveau quantum cache créé")
+                self.logger.info("🎵 Nouveau quantum music cache créé")
 
         except Exception as e:
-            self.logger.error(f"Erreur chargement quantum cache: {e}")
+            self.logger.error(f"Erreur chargement quantum music cache: {e}")
             self.quantum_states = {}
 
     def _save_cache(self):
@@ -111,9 +108,9 @@ class GameCache(BaseCacheInterface):
             with open(self.cache_file, "w", encoding="utf-8") as f:
                 json.dump(self.quantum_states, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            self.logger.error(f"Erreur sauvegarde quantum cache: {e}")
+            self.logger.error(f"Erreur sauvegarde quantum music cache: {e}")
 
-    async def search_quantum_game(
+    async def search_quantum_music(
         self, query: str, observer: str = "user"
     ) -> list[dict[str, Any]]:
         """
@@ -123,7 +120,7 @@ class GameCache(BaseCacheInterface):
         [
             {
                 "index": 1,
-                "game": {...GameResult...},
+                "track": {...TrackData...},
                 "confidence": 0.9,
                 "verified": 0,
                 "confirmations": 0,
@@ -132,7 +129,7 @@ class GameCache(BaseCacheInterface):
             ...
         ]
         """
-        cache_key = f"game:{query.lower().strip()}"
+        cache_key = f"music:{query.lower().strip()}"
 
         # Check existing quantum state
         if cache_key in self.quantum_states:
@@ -148,50 +145,44 @@ class GameCache(BaseCacheInterface):
             for idx, sup in enumerate(superpositions[:self.max_superpositions], start=1):
                 result.append({
                     "index": idx,
-                    "game": sup.get("game"),
+                    "track": sup.get("track"),
                     "confidence": sup.get("confidence", 0.5),
                     "verified": sup.get("verified", 0),
                     "confirmations": sup.get("confirmations", 0),
                     "collapsed": quantum_state.get("collapsed", False)
                 })
 
-            self.logger.info(f"🎯 Quantum state trouvé: {query} ({len(result)} superpositions)")
+            self.logger.info(f"🎯 Quantum music state trouvé: {query} ({len(result)} superpositions)")
             return result
 
-        # Create new quantum superposition
+        # Create new quantum superposition (POC - mock data)
         return await self._create_quantum_superposition(query, observer)
 
     async def _create_quantum_superposition(
         self, query: str, observer: str
     ) -> list[dict[str, Any]]:
-        """Crée une nouvelle superposition quantique."""
-        cache_key = f"game:{query.lower().strip()}"
+        """Crée une nouvelle superposition quantique (POC - mock data)."""
+        cache_key = f"music:{query.lower().strip()}"
 
         try:
-            # Search via API
-            primary_result = await self.game_lookup.search_game(query)
+            # POC: Mock music data (TODO: Add real API in future)
+            mock_track = {
+                "artist": "Artist Name",
+                "title": query.title(),
+                "album": "Unknown Album",
+                "year": 2024,
+                "duration": "3:45",
+                "genres": ["Rock", "Alternative"],
+                "source": "mock"
+            }
 
-            if not primary_result:
-                self.logger.warning(f"❌ Aucun résultat pour: {query}")
-                return []
+            confidence = 0.5  # Lower confidence for mock data
 
-            # Calculate quantum confidence
-            confidence = self._calculate_confidence(primary_result, query)
-
-            # Create quantum state with single superposition (for now)
+            # Create quantum state
             quantum_state = {
                 "superpositions": [
                     {
-                        "game": {
-                            "name": primary_result.name,
-                            "year": primary_result.year,
-                            "rating_rawg": primary_result.rating_rawg,
-                            "metacritic": primary_result.metacritic,
-                            "platforms": (primary_result.platforms or [])[:3],
-                            "genres": (primary_result.genres or [])[:2],
-                            "source_count": primary_result.source_count,
-                            "api_sources": primary_result.api_sources or [],
-                        },
+                        "track": mock_track,
                         "confidence": confidence,
                         "verified": 0,
                         "confirmations": 0,
@@ -207,12 +198,12 @@ class GameCache(BaseCacheInterface):
             self.quantum_states[cache_key] = quantum_state
             self._save_cache()
 
-            self.logger.info(f"⚛️ Superposition créée: {query} → {primary_result.name} (conf: {confidence:.2f})")
+            self.logger.info(f"⚛️ Music superposition créée: {query} (POC mock data)")
 
             # Return formatted result
             return [{
                 "index": 1,
-                "game": quantum_state["superpositions"][0]["game"],
+                "track": mock_track,
                 "confidence": confidence,
                 "verified": 0,
                 "confirmations": 0,
@@ -220,49 +211,25 @@ class GameCache(BaseCacheInterface):
             }]
 
         except Exception as e:
-            self.logger.error(f"Erreur création superposition {query}: {e}")
+            self.logger.error(f"Erreur création music superposition {query}: {e}")
             return []
 
-    def _calculate_confidence(self, game_result: GameResult, query: str) -> float:
-        """Calcule la confiance quantique."""
-        confidence = 0.3
-
-        # Multiple API sources boost
-        if hasattr(game_result, "source_count") and game_result.source_count >= 2:
-            confidence += 0.3
-
-        # Name match boost
-        query_lower = query.lower().strip()
-        name_lower = game_result.name.lower().strip()
-        if query_lower == name_lower:
-            confidence += 0.3
-        elif query_lower in name_lower or name_lower in query_lower:
-            confidence += 0.2
-
-        # Quality indicators
-        if hasattr(game_result, "metacritic") and game_result.metacritic:
-            confidence += 0.1
-        if hasattr(game_result, "rating_rawg") and game_result.rating_rawg > 0:
-            confidence += 0.1
-
-        return min(confidence, 0.95)
-
-    def collapse_game(self, query: str, observer: str, state_index: int = 1) -> dict[str, Any] | None:
+    def collapse_music(self, query: str, observer: str, state_index: int = 1) -> dict[str, Any] | None:
         """
-        💥 Collapse quantum state (Mod anchors truth)
+        💥 Collapse quantum music state (Mod anchors truth)
 
         Args:
-            query: Game name
+            query: Track query
             observer: Username (mod/admin)
             state_index: Superposition index (1-2-3)
 
         Returns:
-            Collapsed game data or None if failed
+            Collapsed track data or None if failed
         """
-        cache_key = f"game:{query.lower().strip()}"
+        cache_key = f"music:{query.lower().strip()}"
 
         if cache_key not in self.quantum_states:
-            self.logger.warning(f"❌ État quantique inexistant: {query}")
+            self.logger.warning(f"❌ État quantique music inexistant: {query}")
             return None
 
         quantum_state = self.quantum_states[cache_key]
@@ -293,26 +260,26 @@ class GameCache(BaseCacheInterface):
         self._save_cache()
 
         self.logger.info(
-            f"💥 Collapse quantique: {query} par {observer} → {selected['game']['name']} "
+            f"💥 Music collapse quantique: {query} par {observer} → {selected['track']['title']} "
             f"(confirmations: {selected['confirmations']})"
         )
 
-        return selected["game"]
+        return selected["track"]
 
     def get_quantum_stats(self) -> dict[str, Any]:
         """
-        📊 Stats système quantique (pour !quantum command)
+        📊 Stats système quantique music (pour !quantum command)
 
         Returns:
             {
-                "total_games": int,
+                "total_tracks": int,
                 "superpositions_active": int,
                 "collapsed_states": int,
                 "verified_percentage": float,
                 "total_confirmations": int
             }
         """
-        total_games = len(self.quantum_states)
+        total_tracks = len(self.quantum_states)
         superpositions_active = 0
         collapsed_states = 0
         total_confirmations = 0
@@ -330,10 +297,10 @@ class GameCache(BaseCacheInterface):
             for sup in quantum_state.get("superpositions", []):
                 total_confirmations += sup.get("confirmations", 0)
 
-        verified_pct = (collapsed_states / total_games * 100) if total_games > 0 else 0.0
+        verified_pct = (collapsed_states / total_tracks * 100) if total_tracks > 0 else 0.0
 
         return {
-            "total_games": total_games,
+            "total_tracks": total_tracks,
             "superpositions_active": superpositions_active,
             "collapsed_states": collapsed_states,
             "verified_percentage": verified_pct,
@@ -342,7 +309,7 @@ class GameCache(BaseCacheInterface):
 
     def cleanup_expired(self) -> int:
         """
-        💨 Décohérence quantique (cleanup expired states)
+        💨 Décohérence quantique music (cleanup expired states)
 
         Returns:
             Number of states evaporated
@@ -369,7 +336,7 @@ class GameCache(BaseCacheInterface):
 
         if expired_keys:
             self._save_cache()
-            self.logger.info(f"💨 Décohérence: {len(expired_keys)} états évaporés")
+            self.logger.info(f"💨 Music décohérence: {len(expired_keys)} états évaporés")
 
         return len(expired_keys)
 
@@ -377,9 +344,9 @@ class GameCache(BaseCacheInterface):
     # BaseCacheInterface Implementation
     # ============================================================
 
-    def get(self, game_query: str) -> dict[Any, Any] | None:
-        """Get collapsed/verified game (interface compatibility)."""
-        cache_key = f"game:{game_query.lower().strip()}"
+    def get(self, query: str) -> dict[Any, Any] | None:
+        """Get collapsed/verified track (interface compatibility)."""
+        cache_key = f"music:{query.lower().strip()}"
 
         if cache_key in self.quantum_states:
             quantum_state = self.quantum_states[cache_key]
@@ -387,14 +354,14 @@ class GameCache(BaseCacheInterface):
             # Return first (collapsed) superposition if exists
             superpositions = quantum_state.get("superpositions", [])
             if superpositions:
-                return superpositions[0].get("game")
+                return superpositions[0].get("track")
 
         return None
 
     def set(self, key: str, value: dict[str, Any], **kwargs) -> bool:
-        """Set game in cache (interface compatibility)."""
+        """Set track in cache (interface compatibility)."""
         try:
-            cache_key = f"game:{key.lower().strip()}"
+            cache_key = f"music:{key.lower().strip()}"
             confidence = kwargs.get("confidence", 0.8)
             observer = kwargs.get("observer", "system")
             verified = 1 if kwargs.get("verified", False) else 0
@@ -402,7 +369,7 @@ class GameCache(BaseCacheInterface):
             quantum_state = {
                 "superpositions": [
                     {
-                        "game": value,
+                        "track": value,
                         "confidence": confidence,
                         "verified": verified,
                         "confirmations": 0,
@@ -418,18 +385,18 @@ class GameCache(BaseCacheInterface):
             self.quantum_states[cache_key] = quantum_state
             self._save_cache()
 
-            self.logger.info(f"💾 Quantum set: {key} (verified: {verified})")
+            self.logger.info(f"💾 Quantum music set: {key} (verified: {verified})")
             return True
 
         except Exception as e:
-            self.logger.error(f"❌ Erreur quantum set: {e}")
+            self.logger.error(f"❌ Erreur quantum music set: {e}")
             return False
 
     async def search(self, query: str, **kwargs) -> dict[str, Any] | None:
-        """Search game (interface compatibility - returns first result)."""
-        results = await self.search_quantum_game(query, kwargs.get("observer", "user"))
+        """Search track (interface compatibility - returns first result)."""
+        results = await self.search_quantum_music(query, kwargs.get("observer", "user"))
         if results:
-            return results[0].get("game")
+            return results[0].get("track")
         return None
 
     def get_stats(self) -> CacheStats:
@@ -437,7 +404,7 @@ class GameCache(BaseCacheInterface):
         quantum_stats = self.get_quantum_stats()
 
         return CacheStats(
-            total_keys=quantum_stats["total_games"],
+            total_keys=quantum_stats["total_tracks"],
             confirmed_keys=quantum_stats["collapsed_states"],
             cache_hits=0,
             cache_misses=0,
@@ -448,42 +415,17 @@ class GameCache(BaseCacheInterface):
         )
 
     def clear(self) -> bool:
-        """Clear all quantum states (interface compatibility)."""
+        """Clear all quantum music states (interface compatibility)."""
         try:
             count = len(self.quantum_states)
             self.quantum_states = {}
             self._save_cache()
-            self.logger.info(f"🗑️ Quantum cache vidé: {count} états")
+            self.logger.info(f"🗑️ Quantum music cache vidé: {count} états")
             return True
         except Exception as e:
-            self.logger.error(f"❌ Erreur clear quantum: {e}")
+            self.logger.error(f"❌ Erreur clear quantum music: {e}")
             return False
 
     async def close(self):
         """Cleanup on shutdown."""
-        if hasattr(self, "game_lookup"):
-            await self.game_lookup.close()
-
-
-# Legacy methods for backwards compatibility (not needed but kept for safety)
-
-    def clear_expired(self):
-        """Legacy: nettoyer les entrées expirées."""
-        return self.cleanup_expired()
-
-    def clear_game(self, game_query: str) -> bool:
-        """Supprimer un jeu spécifique du cache."""
-        cache_key = f"game:{game_query.lower().strip()}"
-
-        if cache_key in self.quantum_states:
-            del self.quantum_states[cache_key]
-            self._save_cache()
-            self.logger.info(f"🗑️ Quantum state supprimé: {game_query}")
-            return True
-
-        self.logger.warning(f"🤷 État quantique non trouvé: {game_query}")
-        return False
-
-    def clear_all(self):
-        """Vider complètement le cache."""
-        self.clear()
+        pass  # No external API to close for POC

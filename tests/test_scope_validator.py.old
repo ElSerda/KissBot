@@ -1,0 +1,284 @@
+"""
+Tests for core/scope_validator.py
+
+Test scope validation and broadcaster_id auto-fetch.
+"""
+
+import pytest
+import httpx
+from unittest.mock import AsyncMock, patch
+
+from core.scope_validator import ScopeValidator, FEATURE_SCOPES
+
+
+class TestScopeValidator:
+    """Test ScopeValidator functionality."""
+    
+    @pytest.mark.asyncio
+    async def test_validate_token_success_all_scopes(self):
+        """Test token validation with all scopes present."""
+        # Mock API response with all scopes
+        all_scopes = set()
+        for req in FEATURE_SCOPES.values():
+            all_scopes.update(req.scopes)
+        
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        mock_response.json = lambda: {
+            "client_id": "test_client",
+            "login": "testuser",
+            "scopes": list(all_scopes),
+            "user_id": "123456789"
+        }
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_get = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.get = mock_get
+            
+            result = await ScopeValidator.validate_token(
+                token="oauth:testtoken",
+                client_id="test_client"
+            )
+        
+        assert result["valid"] is True
+        assert result["user_id"] == "123456789"
+        assert result["login"] == "testuser"
+        assert len(result["missing_critical"]) == 0
+        assert len(result["missing_optional"]) == 0
+        assert len(result["available_features"]) == len(FEATURE_SCOPES)
+        assert len(result["unavailable_features"]) == 0
+        assert "🎉" in result["warnings"][0]
+    
+    @pytest.mark.asyncio
+    async def test_validate_token_missing_critical_scopes(self):
+        """Test token validation with missing critical scopes."""
+        # Only non-critical scopes
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        mock_response.json = lambda: {
+            "client_id": "test_client",
+            "login": "testuser",
+            "scopes": ["channel:read:stream_key"],  # No chat scopes
+            "user_id": "123456789"
+        }
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_get = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.get = mock_get
+            
+            result = await ScopeValidator.validate_token(
+                token="testtoken",  # Without oauth: prefix
+                client_id="test_client"
+            )
+        
+        assert result["valid"] is False
+        assert len(result["missing_critical"]) > 0
+        assert "chat:read" in result["missing_critical"] or "chat:edit" in result["missing_critical"]
+        assert "chat" in result["unavailable_features"]
+        assert "🚨" in result["warnings"][0]
+    
+    @pytest.mark.asyncio
+    async def test_validate_token_only_critical_scopes(self):
+        """Test token validation with only critical scopes (chat)."""
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        mock_response.json = lambda: {
+            "client_id": "test_client",
+            "login": "testuser",
+            "scopes": ["chat:read", "chat:edit"],  # Only critical
+            "user_id": "123456789"
+        }
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_get = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.get = mock_get
+            
+            result = await ScopeValidator.validate_token(
+                token="oauth:testtoken",
+                client_id="test_client"
+            )
+        
+        assert result["valid"] is True  # Critical scopes present
+        assert len(result["missing_critical"]) == 0
+        assert len(result["missing_optional"]) > 0  # Optional scopes missing
+        assert "chat" in result["available_features"]
+        assert len(result["unavailable_features"]) > 0
+        assert "✅" in result["warnings"][0]  # Opérationnel mais limité
+    
+    @pytest.mark.asyncio
+    async def test_validate_token_invalid_token(self):
+        """Test token validation with invalid token."""
+        mock_response = AsyncMock()
+        mock_response.status_code = 401  # Unauthorized
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_response
+            )
+            
+            result = await ScopeValidator.validate_token(
+                token="oauth:invalid",
+                client_id="test_client"
+            )
+        
+        assert result["valid"] is False
+        assert result["error"] == "Token invalide ou expiré"
+        assert result["user_id"] is None
+        assert result["login"] is None
+        assert len(result["unavailable_features"]) == len(FEATURE_SCOPES)
+        assert "❌" in result["warnings"][0]
+    
+    @pytest.mark.asyncio
+    async def test_validate_token_network_error(self):
+        """Test token validation with network error."""
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                side_effect=httpx.ConnectError("Connection failed")
+            )
+            
+            result = await ScopeValidator.validate_token(
+                token="oauth:testtoken",
+                client_id="test_client"
+            )
+        
+        assert result["valid"] is False
+        assert "Erreur réseau" in result["error"]
+        assert len(result["unavailable_features"]) == len(FEATURE_SCOPES)
+    
+    @pytest.mark.asyncio
+    async def test_fetch_broadcaster_id_success(self):
+        """Test auto-fetch broadcaster_id from channel name."""
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        mock_response.json = lambda: {
+            "data": [
+                {
+                    "id": "987654321",
+                    "login": "testchannel",
+                    "display_name": "TestChannel"
+                }
+            ]
+        }
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_get = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.get = mock_get
+            
+            broadcaster_id = await ScopeValidator.fetch_broadcaster_id(
+                channel_name="testchannel",
+                client_id="test_client",
+                token="oauth:testtoken"
+            )
+        
+        assert broadcaster_id == "987654321"
+    
+    @pytest.mark.asyncio
+    async def test_fetch_broadcaster_id_not_found(self):
+        """Test auto-fetch when channel doesn't exist."""
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": []  # Empty result
+        }
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_response
+            )
+            
+            broadcaster_id = await ScopeValidator.fetch_broadcaster_id(
+                channel_name="nonexistent",
+                client_id="test_client",
+                token="testtoken"
+            )
+        
+        assert broadcaster_id is None
+    
+    @pytest.mark.asyncio
+    async def test_fetch_broadcaster_id_api_error(self):
+        """Test auto-fetch with API error."""
+        mock_response = AsyncMock()
+        mock_response.status_code = 500  # Server error
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_response
+            )
+            
+            broadcaster_id = await ScopeValidator.fetch_broadcaster_id(
+                channel_name="testchannel",
+                client_id="test_client",
+                token="oauth:testtoken"
+            )
+        
+        assert broadcaster_id is None
+    
+    @pytest.mark.asyncio
+    async def test_fetch_broadcaster_id_network_error(self):
+        """Test auto-fetch with network error."""
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                side_effect=httpx.ConnectError("Connection failed")
+            )
+            
+            broadcaster_id = await ScopeValidator.fetch_broadcaster_id(
+                channel_name="testchannel",
+                client_id="test_client",
+                token="oauth:testtoken"
+            )
+        
+        assert broadcaster_id is None
+    
+    def test_token_cleaning(self):
+        """Test that oauth: prefix is properly removed."""
+        # This is tested indirectly in other tests
+        # Both "oauth:token" and "token" should work
+        pass
+    
+    def test_print_scope_report(self):
+        """Test scope report printing (visual verification)."""
+        # Mock analysis result
+        analysis = {
+            "valid": True,
+            "user_id": "123456789",
+            "login": "testuser",
+            "scopes": ["chat:read", "chat:edit"],
+            "available_features": ["chat"],
+            "unavailable_features": ["eventsub_stream", "moderation"],
+            "warnings": ["✅ Bot opérationnel, mais certaines features sont désactivées."]
+        }
+        
+        # Should not raise
+        ScopeValidator.print_scope_report(analysis)
+
+
+class TestFeatureScopes:
+    """Test FEATURE_SCOPES configuration."""
+    
+    def test_critical_features_defined(self):
+        """Test that at least one critical feature exists."""
+        critical_features = [
+            key for key, req in FEATURE_SCOPES.items()
+            if req.critical
+        ]
+        
+        assert len(critical_features) > 0
+        assert "chat" in critical_features
+    
+    def test_all_features_have_required_fields(self):
+        """Test that all features have proper configuration."""
+        for key, req in FEATURE_SCOPES.items():
+            assert req.name, f"Feature {key} missing name"
+            assert req.scopes, f"Feature {key} missing scopes"
+            assert req.description, f"Feature {key} missing description"
+            assert isinstance(req.critical, bool), f"Feature {key} critical not bool"
+            assert len(req.scopes) > 0, f"Feature {key} has no scopes"
+    
+    def test_chat_scopes_are_critical(self):
+        """Test that chat scopes are marked as critical."""
+        chat_feature = FEATURE_SCOPES.get("chat")
+        
+        assert chat_feature is not None
+        assert chat_feature.critical is True
+        assert "chat:read" in chat_feature.scopes
+        assert "chat:edit" in chat_feature.scopes

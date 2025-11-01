@@ -286,10 +286,13 @@ def extract_mention_message(message_content: str, bot_name: str) -> str | None:
     else:
         return None
 
-    # Extraire le texte en retirant la mention
-    # Supporte: "bot_name message", "message bot_name", "@bot_name message"
-    message = message_content.replace(f"@{bot_name}", "", 1)
-    message = message.replace(bot_name, "", 1)
+    # Extraire le texte en retirant la mention (case-insensitive)
+    # On doit trouver la position exacte dans le message original
+    import re
+    
+    # Pattern case-insensitive pour @bot_name ou bot_name
+    pattern = rf"@?{re.escape(bot_name)}"
+    message = re.sub(pattern, "", message_content, count=1, flags=re.IGNORECASE)
     message = message.strip()
 
     return message if message else None

@@ -307,10 +307,11 @@ class GameLookup:
                 if available:
                     platforms.append(platform.capitalize())
 
-            # 🎯 KISS Enhancement: Récupérer description française via Steam appdetails
+            # 🎯 KISS Enhancement: Récupérer description Steam (FR puis EN en fallback)
             steam_description = None
             app_id = game.get("id")
             if app_id:
+                # Essayer français d'abord
                 try:
                     details_params = {"appids": app_id, "l": "french", "cc": "fr"}
                     details_response = await self.http_client.get(
@@ -319,6 +320,23 @@ class GameLookup:
                     details_data = details_response.json()
                     game_details = details_data.get(str(app_id), {}).get("data", {})
                     steam_description = game_details.get("short_description", "")
+                    
+                    # Fallback anglais si description FR vide
+                    if not steam_description or len(steam_description.strip()) < 10:
+                        self.logger.debug(f"Steam FR description empty/short, trying EN for app {app_id}")
+                        details_params_en = {"appids": app_id, "l": "english", "cc": "us"}
+                        details_response_en = await self.http_client.get(
+                            "https://store.steampowered.com/api/appdetails", params=details_params_en
+                        )
+                        details_data_en = details_response_en.json()
+                        game_details_en = details_data_en.get(str(app_id), {}).get("data", {})
+                        steam_description_en = game_details_en.get("short_description", "")
+                        if steam_description_en:
+                            steam_description = steam_description_en
+                            self.logger.debug(f"✅ Using Steam EN description for {game.get('name')}")
+                    else:
+                        self.logger.debug(f"✅ Using Steam FR description for {game.get('name')}")
+                        
                 except Exception as e:
                     self.logger.debug(f"Steam details fetch failed: {e}")
 
@@ -371,12 +389,12 @@ class GameLookup:
             return None
 
         # 🎯 FIX FUSION: Fusionner descriptions intelligemment
-        # Priorité : Steam (français) > RAWG (anglais)
+        # Priorité : Steam (FR → EN si vide) > RAWG (EN)
         summary = None
         description_raw = None
 
         if steam_data and steam_data.get("description"):
-            # Steam a une description française - priorité !
+            # Steam a une description (FR ou EN en fallback) - priorité !
             summary = steam_data.get("description", "").strip()[:300]
             description_raw = steam_data.get("description_raw", "").strip()[:500]
         elif rawg_data and rawg_data.get("description"):
@@ -482,8 +500,13 @@ class GameLookup:
         else:
             return "LOW"
 
-    def format_result(self, result: GameResult) -> str:
-        """Formate le résultat pour affichage Twitch - Version LEAN."""
+    def format_result(self, result: GameResult, compact: bool = False) -> str:
+        """Formate le résultat pour affichage Twitch.
+        
+        Args:
+            result: Résultat du jeu à formater
+            compact: Si True, format ultra-compact pour !gc (sans confidence/sources)
+        """
         output = f"🎮 {result.name}"
         if result.year != "?":
             output += f" ({result.year})"
@@ -493,6 +516,12 @@ class GameLookup:
             output += f" - ⭐ {result.rating_rawg:.1f}/5"
         if result.platforms:
             output += f" - 🕹️ {', '.join(result.platforms[:3])}"
+        
+        # Version compacte : pas de confidence/sources
+        if compact:
+            return output
+        
+        # Version complète : ajouter confidence + sources
         icon = (
             "🔥" if result.confidence == "HIGH" else "✅" if result.confidence == "MEDIUM" else "⚠️"
         )

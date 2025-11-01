@@ -1,12 +1,13 @@
-# KissBot V1 - Requirements officiels TwitchIO 2.x
-# Version stable et testée qui FONCTIONNE ✅
+# KissBot V2 - Requirements pytwitchAPI
+# Migration complète vers pytwitchAPI pour IRC natif ✅
 
-# Bot Twitch - Version 2.x STABLE (3.x est buggé pour IRC)
-twitchio==2.7.0
+# Bot Twitch - pytwitchAPI v4 (IRC + EventSub + Helix intégrés)
+twitchAPI>=4.5.0
 
 # HTTP et APIs
 aiohttp==3.13.1
 httpx==0.28.1
+requests>=2.31.0
 
 # Configuration
 PyYAML==6.0.3
@@ -17,21 +18,15 @@ rapidfuzz>=3.0.0
 # Monitoring système
 psutil>=5.9.0
 
-# LLM et APIs (optionnel)
-# requests>=2.31.0  # Pour APIs externes si nécessaire
-
-# Tests unitaires (!trad et autres)
+# Tests unitaires
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
-
-# Développement (optionnel)
-# black>=23.0.0
 
 # INSTALLATION:
 # pip install -r requirements.txt
 
-# INSTALLATION AVEC TESTS:
-# pip install -r requirements.txt
-# pytest test_translation.py -v
-
-# Note: TwitchIO 3.x a des bugs IRC, utiliser 2.x uniquement!
+# MIGRATION NOTES:
+# - TwitchIO 2.x/3.x → pytwitchAPI 4.x
+# - IRC natif sans bridges custom
+# - Fonctionne partout (pas besoin de channel:bot scope)
+# - Auto-reconnect et rate limiting intégrés

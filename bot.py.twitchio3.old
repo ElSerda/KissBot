@@ -30,6 +30,18 @@ class KissBotV3Working(commands.Bot):
     def __init__(self, **kwargs: Any) -> None:
         config = load_config()
         twitch_config = config.get("twitch", {})
+        
+        # Récupérer les channels pour IRC
+        channels = twitch_config.get("channels", [])
+        
+        # Récupérer le token du bot pour IRC
+        bot_token = None
+        tokens = twitch_config.get("tokens", {})
+        for account_name, token_info in tokens.items():
+            if str(token_info.get("user_id")) == str(twitch_config.get("bot_id")):
+                bot_token = token_info.get("access_token")
+                LOGGER.info(f"🔑 Token IRC trouvé pour {account_name}")
+                break
 
         # TwitchIO 3.x: EventSub WebSocket + IRC Fallback
         # 🎯 STRATÉGIE:
@@ -38,15 +50,34 @@ class KissBotV3Working(commands.Bot):
         # 📡 Les deux tournent en parallèle - meilleur des 2 mondes !
 
         super().__init__(
+            token=bot_token,  # 🔑 TOKEN IRC pour envoyer des messages
             client_id=twitch_config.get("client_id", ""),
             client_secret=twitch_config.get("client_secret", ""),
             bot_id=twitch_config.get("bot_id", ""),
             owner_id=twitch_config.get("bot_id", ""),  # Même compte = autorisation totale
             prefix=twitch_config.get("prefix", "!"),
-            # TwitchIO 3.x: Plus de initial_channels - on utilise IRC direct via connect_channels
+            initial_channels=channels,  # 🔌 Activer IRC en parallèle d'EventSub
         )
 
         self.config = config
+        
+        # 🔐 Store client_id for scope validation
+        self.client_id = twitch_config.get("client_id", "")
+        
+        # 🔌 IRC Bridge (asyncio pur) pour fallback universel
+        from twitch.irc_bridge import TwitchIRCBridge
+        
+        # Normaliser le token OAuth pour IRC
+        irc_oauth = bot_token if bot_token and bot_token.startswith("oauth:") else f"oauth:{bot_token}" if bot_token else None
+        
+        self.irc_bridge = TwitchIRCBridge(
+            nick=twitch_config.get("bot_login", "serda_bot"),
+            oauth=irc_oauth,
+            channels=channels,
+            max_msgs_per_30s=18  # Safe pour non-verified
+        ) if irc_oauth else None
+        
+        self.irc_channels = channels
 
         # 🎯 INITIALISER LES DÉPENDANCES KISSBOT
         from backends.game_cache import GameCache
@@ -56,13 +87,15 @@ class KissBotV3Working(commands.Bot):
         self.bot_login_name = ""
         self.game_cache = GameCache(config)  # Passer la config
 
-        LOGGER.info("🎯 KissBotV3Working créé avec TwitchIO 3.x + KissBot components")
+        LOGGER.info("🎯 KissBotV3Working créé avec TwitchIO 3.x + IRC Bridge asyncio")
 
     async def setup_hook(self) -> None:
         """Setup hook - BASÉ SUR LES EXEMPLES OFFICIELS"""
         LOGGER.info("🔧 Setup hook - Ajout des components...")
 
-        # 🔑 CRUCIAL: Charger les User Access Tokens depuis .tio.tokens.json
+        # � CRUCIAL: Charger les User Access Tokens depuis .tio.tokens.json
+
+        # �🔑 CRUCIAL: Charger les User Access Tokens depuis .tio.tokens.json
         # TwitchIO 3.x nécessite les tokens POUR LES DEUX COMPTES:
         #   1. Bot token (pour recevoir les messages)
         #   2. Broadcaster token (pour les subscriptions EventSub)
@@ -73,16 +106,10 @@ class KissBotV3Working(commands.Bot):
             if not tokens_config:
                 LOGGER.warning("⚠️ Aucun token trouvé dans config.yaml!")
             else:
-                print(f"🔍 DEBUG: Tokens dans config: {list(tokens_config.keys())}")
-
                 for account_name, token_info in tokens_config.items():
                     user_id = token_info.get("user_id")
                     token = token_info.get("access_token", "").replace("oauth:", "")
                     refresh = token_info.get("refresh_token", "")
-
-                    print(f"🔍 DEBUG: Processing {account_name} (user_id={user_id})")
-                    print(f"🔍 DEBUG: token={token[:20]}... (len: {len(token)})")
-                    print(f"🔍 DEBUG: refresh={refresh[:20]}... (len: {len(refresh)})")
 
                     if token:
                         LOGGER.info(f"🔑 Ajout du token pour {account_name} ({user_id})...")
@@ -91,8 +118,97 @@ class KissBotV3Working(commands.Bot):
                     else:
                         LOGGER.warning(f"⚠️ Token vide pour {account_name}")
 
-                print(f"✅ Tokens chargés: {len(tokens_config)} comptes")
                 LOGGER.info(f"✅ {len(tokens_config)} tokens chargés depuis config.yaml")
+                
+                # 🔐 VALIDATION DES SCOPES (après refresh par TwitchIO)
+                from core.scope_validator import ScopeValidator
+                
+                LOGGER.info("🔍 Validation des scopes OAuth (post-refresh)...")
+                self.disabled_features = []
+                self.channels_without_badge = []  # Track channels sans badge vérifié
+                self.use_irc_mode = False  # Par défaut EventSub, sauf si pas de channel:bot
+                self.user_scopes = {}  # Store scopes par user_id
+                
+                for account_name, token_info in tokens_config.items():
+                    # Use refreshed token from TwitchIO
+                    user_id = str(token_info.get("user_id"))
+                    
+                    # Get token from TwitchIO's managed tokens (already refreshed!)
+                    if user_id in self._http._tokens:
+                        managed_token = self._http._tokens[user_id]
+                        
+                        # TwitchIO stores tokens as dict with key 'token'
+                        access_token = managed_token.get("token")
+                        
+                        if not access_token:
+                            LOGGER.warning(f"⚠️  Impossible d'extraire token pour {account_name}")
+                            continue
+                        
+                        # Validate scopes
+                        analysis = await ScopeValidator.validate_token(
+                            token=access_token,
+                            client_id=self.client_id
+                        )
+                        
+                        # Print detailed report
+                        print(f"\n🔍 Validation OAuth: {account_name}")
+                        ScopeValidator.print_scope_report(analysis)
+                        
+                        # Store scopes par user_id
+                        self.user_scopes[user_id] = analysis["scopes"]
+                        
+                        # Check for verified bot badge (channel:bot scope)
+                        has_badge = "channel:bot" in analysis["scopes"]
+                        if not has_badge:
+                            self.channels_without_badge.append(account_name)
+                            self.use_irc_mode = True  # Forcer IRC si au moins 1 channel sans badge
+                        
+                        # Store disabled features (but don't block startup)
+                        if analysis["unavailable_features"]:
+                            self.disabled_features.extend(analysis["unavailable_features"])
+                            # Don't log here - already shown in scope report
+                    else:
+                        LOGGER.warning(f"⚠️  Token non trouvé dans TwitchIO pour {account_name}")
+                
+                # Remove duplicates
+                self.disabled_features = list(set(self.disabled_features))
+                
+                # 🎖️ DÉCISION: MODE IRC OU EVENTSUB ?
+                if self.use_irc_mode:
+                    print("\n" + "=" * 60)
+                    print("🔌 MODE IRC ACTIVÉ (Pas de scope channel:bot)")
+                    print("=" * 60)
+                    for channel in self.channels_without_badge:
+                        print(f"⚠️  {channel}: Pas de badge vérifié")
+                    print("\n💡 Le bot fonctionnera en mode IRC classique:")
+                    print("   ✅ Toutes les commandes disponibles")
+                    print("   ✅ Marche PARTOUT sans mod ni scope")
+                    print("   ❌ Pas de badge 'Verified Bot' dans le chat")
+                    print("   ⚡ Messages via IRC (pas d'API Helix)")
+                    print("\n📋 Pour le badge vérifié:")
+                    print("   Régénérer OAuth avec scope 'channel:bot'")
+                    print("=" * 60 + "\n")
+                    LOGGER.info("🔌 Mode IRC pur activé (pas d'EventSub)")
+                else:
+                    print("\n✅ Mode EventSub activé (badge vérifié disponible)\n")
+                    LOGGER.info("✅ Mode EventSub activé avec badge vérifié")
+                
+                # 🎖️ ANCIEN AVERTISSEMENT (deprecated)
+                if False and self.channels_without_badge:
+                    print("\n" + "=" * 60)
+                    print("⚠️  ATTENTION: MODE DEMO (Sans badge vérifié)")
+                    print("=" * 60)
+                    for channel in self.channels_without_badge:
+                        print(f"❌ {channel}: Pas de scope 'channel:bot'")
+                    print("\n💡 Le bot fonctionnera avec fallback IRC:")
+                    print("   ✅ Toutes les commandes disponibles")
+                    print("   ❌ Pas de badge 'Verified Bot' dans le chat")
+                    print("   ⚡ Utilisera IRC au lieu de l'API Helix")
+                    print("\n📋 Pour obtenir le badge vérifié:")
+                    print("   1. Demander au broadcaster: /mod serda_bot")
+                    print("   2. OU régénérer OAuth avec scope 'channel:bot'")
+                    print("=" * 60 + "\n")
+                
         except Exception as e:
             LOGGER.error(f"❌ Erreur lors du chargement des tokens: {e}")
 
@@ -110,6 +226,9 @@ class KissBotV3Working(commands.Bot):
         await self.add_component(TranslationCommands(config=self.config))
         await self.add_component(QuantumCommands())
         LOGGER.info("✅ Commandes KissBot TwitchIO 3.x ajoutées")
+        
+        # 🔧 MONKEY-PATCH: Wrapper automatique pour fallback IRC sur 401
+        self._setup_irc_fallback()
 
         # 🔍 DEBUG : Lister les commandes enregistrées
         print(f"🔍 Commandes enregistrées: {list(self.commands.keys())}")
@@ -142,6 +261,12 @@ class KissBotV3Working(commands.Bot):
         # 🎯 CONFIGURATION CHANNELS + EventSub WebSocket SUBSCRIPTIONS
         # 🔑 CRUCIAL : TwitchIO 3.x nécessite des subscriptions EXPLICITES !
         # Sinon : Bot connecté mais "MUET" - les messages n'arrivent pas !
+        
+        # 🔌 SKIP EventSub si mode IRC pur
+        if getattr(self, 'use_irc_mode', False):
+            LOGGER.info("🔌 Mode IRC détecté - Skip EventSub subscriptions")
+            return  # Pas d'EventSub, juste IRC
+        
         try:
             # Récupérer les channels de la config
             channels = self.config.get("twitch", {}).get("channels", [])
@@ -204,7 +329,111 @@ class KissBotV3Working(commands.Bot):
         except Exception as e:
             LOGGER.error(f"❌ Erreur setup channels: {e}")
 
+        # 🔌 Démarrer IRC Bridge (asyncio pur, indépendant de TwitchIO)
+        if self.irc_bridge:
+            try:
+                await self.irc_bridge.start()
+                LOGGER.info("🔌 IRC Bridge démarré (asyncio pur)")
+            except Exception as e:
+                LOGGER.warning(f"⚠️  Impossible de démarrer IRC Bridge: {e}")
+
         LOGGER.info("✅ Setup hook terminé!")
+    
+    def _setup_irc_fallback(self) -> None:
+        """
+        🔧 Monkey-patch Context.send() pour ajouter fallback IRC automatique sur 401.
+        
+        Si Helix échoue (401 Unauthorized), réessaye avec IRC direct.
+        Permet au bot de fonctionner partout sans nécessiter mod/channel:bot.
+        """
+        from twitchio.ext import commands as tio_commands
+        from twitchio.exceptions import HTTPException
+        
+        # Sauvegarder la méthode originale
+        original_send = tio_commands.Context.send
+        
+        async def send_with_irc_fallback(ctx_self, content: str, **kwargs):
+            """Wrapper qui ajoute fallback IRC si 401."""
+            try:
+                # Tentative 1: Helix API (moderne, avec badge vérifié)
+                return await original_send(ctx_self, content, **kwargs)
+            except HTTPException as e:
+                # Si 401 (Unauthorized) → fallback IRC
+                if e.status == 401:
+                    LOGGER.warning(
+                        f"⚠️  Helix 401 sur {ctx_self.channel.name} - Fallback IRC"
+                    )
+                    # Tentative 2: IRC direct (legacy, fonctionne partout)
+                    try:
+                        if hasattr(ctx_self.bot, '_connection') and ctx_self.bot._connection:
+                            await ctx_self.bot._connection.send(
+                                f"PRIVMSG #{ctx_self.channel.name} :{content}"
+                            )
+                            LOGGER.info(f"✅ Message envoyé via IRC: {ctx_self.channel.name}")
+                            return None  # IRC ne retourne pas de SentMessage
+                        else:
+                            LOGGER.error("❌ Pas de connexion IRC disponible")
+                            raise
+                    except Exception as irc_error:
+                        LOGGER.error(f"❌ Erreur IRC fallback: {irc_error}")
+                        raise e  # Re-raise l'erreur Helix originale
+                else:
+                    # Autre erreur HTTP, on la raise normalement
+                    raise
+        
+        # Appliquer le monkey-patch
+        tio_commands.Context.send = send_with_irc_fallback
+        LOGGER.info("🔧 IRC fallback activé (monkey-patch Context.send)")
+    
+    def _broadcaster_has_channel_bot(self, broadcaster_id: str) -> bool:
+        """
+        Vérifie si on possède le scope channel:bot pour ce broadcaster.
+        
+        Args:
+            broadcaster_id: ID du broadcaster (pas du bot!)
+        
+        Returns:
+            True si on a channel:bot pour ce broadcaster
+        """
+        try:
+            # Checker si on a les scopes pour ce user_id
+            scopes = self.user_scopes.get(str(broadcaster_id), [])
+            return "channel:bot" in scopes
+        except Exception:
+            return False
+    
+    async def send_chat(self, channel_name: str, message: str, broadcaster_id: str) -> bool:
+        """
+        🎯 Envoyer un message intelligemment: Helix si possible, sinon IRC
+        
+        Args:
+            channel_name: Nom du channel (sans #)
+            message: Message à envoyer
+            broadcaster_id: ID du broadcaster
+            
+        Returns:
+            True si envoyé avec succès, False sinon
+        """
+        # Tentative 1: Helix API (moderne, badge vérifié)
+        can_helix = self._broadcaster_has_channel_bot(str(broadcaster_id))
+        if can_helix:
+            try:
+                users = await self.fetch_users(logins=[channel_name])
+                if users:
+                    await users[0].send_message(sender=self.bot_id, message=message)
+                    LOGGER.info(f"✅ Helix → {channel_name}: {message}")
+                    return True
+            except Exception as e:
+                LOGGER.warning(f"⚠️  Helix failed for {channel_name}: {e}, trying IRC...")
+        
+        # Tentative 2: IRC Bridge (universel, fonctionne partout)
+        if self.irc_bridge and self.irc_bridge.is_connected():
+            await self.irc_bridge.send_privmsg(channel_name, message)
+            LOGGER.info(f"✅ IRC → {channel_name}: {message}")
+            return True
+        else:
+            LOGGER.error(f"❌ Impossible d'envoyer à {channel_name}: Helix et IRC indisponibles")
+            return False
 
     async def event_ready(self) -> None:
         """Event ready - COMME DANS LES EXEMPLES"""
@@ -212,8 +441,8 @@ class KissBotV3Working(commands.Bot):
         print(f"🎉 TwitchIO 3.x Bot Ready: {self.user}")
 
         # 🎯 EventSub WebSocket est déjà actif (configuré dans setup_hook)
-        # Plus besoin d'IRC fallback avec TwitchIO 3.x EventSub !
-        LOGGER.info("✅ Bot Ready - EventSub WebSocket opérationnel")
+        # 📡 Helix API uniquement (comme exemple officiel Twitch)
+        LOGGER.info("✅ Bot Ready - Helix API mode")
 
         # 🎯 ENVOI MESSAGE DE COUCOU AUTOMATIQUE !
         await self.send_hello_message()
@@ -235,36 +464,25 @@ class KissBotV3Working(commands.Bot):
                     continue
 
                 broadcaster = users[0]
+                broadcaster_id = str(broadcaster.id)
 
                 # Message de coucou personnalisé
                 message = (
                     f"🤖 Coucou {broadcaster.display_name} ! "
-                    f"C'est ici le stream de el_serda ?! 🚀"
+                    f"Comment il va {channel_name} et le chat ?! 🚀"
                 )
 
-                # TwitchIO 3.x: Envoyer le message
-                result = await broadcaster.send_message(
-                    sender=self.bot_id,
-                    message=message
-                )
-
-                print("✅ MESSAGE ENVOYÉ !")
-                print(f"📋 Résultat: {result}")
-                print(f"📋 Type: {type(result)}")
-
-                # TwitchIO 3.x donne de vraies infos !
-                if hasattr(result, 'id'):
-                    print(f"📋 Message ID: {result.id}")
-
-                LOGGER.info(
-                    "✅ Coucou envoyé à %s: %s",
-                    broadcaster.display_name,
-                    message
-                )
+                # �� ROUTER INTELLIGEMMENT: Helix → IRC automatique
+                print(f"📤 Envoi vers {channel_name} (ID: {broadcaster_id})...")
+                success = await self.send_chat(channel_name, message, broadcaster_id)
+                
+                if success:
+                    print(f"✅ MESSAGE ENVOYÉ à {channel_name} !")
+                else:
+                    print(f"❌ Échec envoi à {channel_name}")
 
         except Exception as e:
-            print(f"❌ Erreur envoi coucou: {e}")
-            LOGGER.error("❌ Erreur coucou: %s", e)
+            LOGGER.error("❌ Erreur globale envoi coucou: %s", e)
 
     async def event_oauth_authorized(
         self, payload: twitchio.authentication.UserTokenPayload
