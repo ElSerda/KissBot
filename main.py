@@ -336,12 +336,12 @@ async def main():
     # System Monitoring (CPU/RAM metrics)
     system_monitor = SystemMonitor(
         interval=60,  # Log toutes les 60s
-        log_file="metrics.json",
+        log_file="metrics.jsonl",
         cpu_threshold=50.0,  # Alerte si CPU > 50%
         ram_threshold_mb=500  # Alerte si RAM > 500MB
     )
     asyncio.create_task(system_monitor.start())
-    LOGGER.info("📊 System monitoring started (metrics.json)")
+    LOGGER.info("📊 System monitoring started (metrics.jsonl)")
     
     # Inject SystemMonitor into MessageHandler (for !stats command)
     message_handler.set_system_monitor(system_monitor)
