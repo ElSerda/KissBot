@@ -192,6 +192,7 @@ class TestGameCacheStats:
 class TestGameCacheInterfaceCompatibility:
     """Test interface compatibility methods (async, clear, search)"""
     
+    @pytest.mark.asyncio
     async def test_search_delegates_to_get(self, mock_config):
         """search() should delegate to get() for interface compatibility."""
         with tempfile.TemporaryDirectory() as tmpdir:
