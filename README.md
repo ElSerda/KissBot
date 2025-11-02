@@ -58,7 +58,7 @@
 
 <div align="center">
 
-### � Bot Interface & Architecture
+### Bot Interface & Architecture
 
 <table>
 <tr>
@@ -73,7 +73,7 @@
 </tr>
 </table>
 
-### �💬 Discord Integration Demos
+### 💬 Discord Integration Demos
 
 <table>
 <tr>
@@ -224,7 +224,7 @@ User: !qgame hades
 Bot:  🔒 Hades (2020) - CONFIRMÉ ✅ (3 confirmations)
 
 User: !quantum
-Bot:  � Système Quantique | GAME: 42 jeux, 12 superpositions, 60% verified | MUSIC: 5 tracks, 0% verified
+Bot:  Système Quantique | GAME: 42 jeux, 12 superpositions, 60% verified | MUSIC: 5 tracks, 0% verified
 ```
 
 #### ⚛️ **Quantum Features**
@@ -244,8 +244,7 @@ Bot:  � Système Quantique | GAME: 42 jeux, 12 superpositions, 60% verified | 
 - 🎯 **Community-driven** accuracy (not just API)
 - 🧹 **Self-cleaning** via decoherence
 - 🔬 **Transparent** confidence scoring
-- � **Scalable** to all content domains
-- � **Unique** - no other Twitch bot has this
+-  **Scalable** to all content domains
 
 > **📖 Architecture details:** See CHANGELOG v3.4.0 for technical implementation
 
@@ -267,6 +266,7 @@ Bot:  � Système Quantique | GAME: 42 jeux, 12 superpositions, 60% verified | 
 KissBot includes a **pre-optimized prompt system** for commands that need specific LLM behavior without automatic wrapping:
 
 **Example: !joke command**
+
 ```python
 # ✅ Pre-optimized prompt (validated pattern)
 prompt = "Réponds EN 1 PHRASE MAX EN FRANÇAIS, SANS TE PRÉSENTER, style humoristique : raconte une blague courte"
@@ -294,6 +294,7 @@ response = await process_llm_request(
 - ✅ **Multilingual:** Language injected from config (`llm.language: fr`)
 
 **Adding new pre-optimized commands:**
+
 ```python
 @commands.command(name="fact")
 async def fact_command(self, ctx: commands.Context):
@@ -425,6 +426,7 @@ quantum_games:
 ```
 
 **Option B: Ollama (Linux - CLI)**
+
 ```bash
 # Install
 curl -fsSL https://ollama.ai/install.sh | sh
@@ -472,7 +474,6 @@ python main.py
 
 ### 3-Pillar Design
 
-```
 KissBot/
 ├── bot.py                    # Main TwitchIO dispatcher (128 lines)
 ├── main.py                   # Entry point
@@ -500,7 +501,7 @@ KissBot/
 │   └── rate_limiter.py      # Per-user cooldowns
 │
 └── tests/                    # Testing suite
-```
+
 
 ---
 
@@ -581,7 +582,7 @@ async def event_message(self, payload: twitchio.ChatMessage) -> None:
     ├── core/                # Unit tests (9/9 ✅)
     ├── backends/            # Integration tests
     └── intelligence/        # Anti-hallucination (6/6 ✅)
-```
+
 
 ### Components Pattern
 
@@ -742,7 +743,7 @@ Step 3: Response
 ### Codebase Comparison
 
 | Metric | SerdaBot | KissBot V1 | Reduction |
-|--------|----------|------------|-----------||
+|--------|----------|------------|-----------|
 | **Lines of code** | 7,400 | 650 | **11.4x** |
 | **Files** | ~60 | 32 | **1.9x** |
 | **Prompt chars** | 250 | 45 | **5.6x** |
