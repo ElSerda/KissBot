@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import time
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -16,6 +17,57 @@ try:
     import psutil
 except ImportError:
     psutil = None
+
+LOGGER = logging.getLogger(__name__)
+
+
+class PerfMeter:
+    """
+    Non-blocking CPU measurement via delta cpu_times().
+    Supprime le spike de 1% CPU causé par cpu_percent(interval=1).
+    
+    Principe: Mesure le temps CPU cumulé entre 2 appels au lieu de bloquer.
+    """
+    def __init__(self, proc: psutil.Process):
+        self.proc = proc
+        self.n_cpus = os.cpu_count() or 1
+
+        # Process CPU time (seconds) cumulé (user+system)
+        ct = self.proc.cpu_times()
+        self._p_cpu_prev = (ct.user + getattr(ct, "system", 0.0))
+        # Horodatage
+        self._t_prev = time.monotonic()
+
+    def sample(self) -> dict:
+        """
+        Retourne un dict avec process_cpu_pct [0..100], mem_mb, thread_count.
+        Non-bloquant, robuste à tout intervalle entre appels.
+        """
+        t_now = time.monotonic()
+        dt = max(t_now - self._t_prev, 1e-9)  # évite division par zéro
+
+        # ----- Process CPU % (normalisé 0..100) -----
+        ct = self.proc.cpu_times()
+        p_cpu_now = (ct.user + getattr(ct, "system", 0.0))
+        d_cpu = max(p_cpu_now - self._p_cpu_prev, 0.0)  # seconds de CPU consommées
+        # Sur N cœurs, 100% == N secondes CPU par seconde réelle
+        proc_cpu_pct = (d_cpu / (dt * self.n_cpus)) * 100.0
+        proc_cpu_pct = max(0.0, min(proc_cpu_pct, 100.0))  # clamp visuel
+
+        # ----- Mémoire & threads (process) -----
+        mem_mb = self.proc.memory_info().rss / (1024 * 1024)
+        threads = self.proc.num_threads()
+
+        # maj états
+        self._p_cpu_prev = p_cpu_now
+        self._t_prev = t_now
+
+        return {
+            "process_cpu_pct": proc_cpu_pct,
+            "mem_mb": mem_mb,
+            "threads": threads,
+        }
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +118,9 @@ class SystemMonitor:
         self._start_time = time.time()  # Pour uptime
         self._last_sample: Optional[dict] = None  # Cache last sample pour !stats
         
+        # Phase 3.5.1: PerfMeter pour mesure CPU non-bloquante
+        self._perf_meter: Optional[PerfMeter] = None
+        
         if not psutil:
             LOGGER.warning("⚠️ psutil not installed, SystemMonitor disabled")
         else:
@@ -83,6 +138,12 @@ class SystemMonitor:
         
         self._running = True
         LOGGER.info("📊 SystemMonitor started")
+        
+        # Phase 3.5.1: Init PerfMeter (baseline CPU measurement)
+        self._perf_meter = PerfMeter(self.process)
+        # Premier sample pour initialiser (on jette le résultat)
+        await asyncio.sleep(0.1)  # Petit délai pour stabiliser
+        self._perf_meter.sample()
         
         # Créer le fichier avec header info
         self._write_header()
@@ -132,11 +193,11 @@ class SystemMonitor:
     async def _sample_and_log(self):
         """Sample system metrics and log to JSON."""
         try:
-            # Gather metrics
-            cpu_percent = self.process.cpu_percent(interval=1)
-            mem_info = self.process.memory_info()
-            ram_mb = mem_info.rss / 1024 / 1024  # RSS in MB
-            threads = self.process.num_threads()
+            # Phase 3.5.1: Utiliser PerfMeter (non-bloquant)
+            metrics = self._perf_meter.sample()
+            cpu_percent = metrics["process_cpu_pct"]
+            ram_mb = metrics["mem_mb"]
+            threads = metrics["threads"]
             
             # Prepare JSON entry
             entry = {
