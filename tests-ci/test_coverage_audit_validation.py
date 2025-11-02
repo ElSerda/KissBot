@@ -47,7 +47,7 @@ def test_41_tests_claim_is_accurate():
     tests_dir = pathlib.Path(__file__).parent
     
     test_counts = {
-        "test_type_guards_none_checks.py": 10,
+        "test_type_guards_none_checks.py": 6,  # Was 10, removed 4 obsolete quantum tests
         "test_type_guards_isinstance.py": 10,
         "test_type_guards_float_int_casts.py": 10,
         "test_type_guards_dict_annotations.py": 11,
@@ -67,7 +67,7 @@ def test_41_tests_claim_is_accurate():
             f"{filename} should have at least {expected} tests, found {actual}"
         total += actual
     
-    assert total >= 41, f"Should have at least 41 tests total, found {total}"
+    assert total >= 37, f"Should have at least 37 tests total, found {total}"  # Was 41, now 37 (removed 4 quantum tests)
 
 
 def test_key_justifications_are_present():

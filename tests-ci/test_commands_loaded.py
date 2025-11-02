@@ -35,14 +35,6 @@ class TestCommandsStructure:
         from twitchio.ext import commands
         
         assert issubclass(TranslationCommands, commands.Component)
-    
-    @pytest.mark.skip(reason="Quantum commands integrated in message_handler")
-    def test_quantum_commands_exist(self):
-        """Vérifie que QuantumCommands existe et est un Component"""
-        from commands.quantum_commands import QuantumCommands
-        from twitchio.ext import commands
-        
-        assert issubclass(QuantumCommands, commands.Component)
 
 
 class TestCommandsCount:

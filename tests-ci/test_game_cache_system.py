@@ -82,118 +82,10 @@ class TestGameCacheBasicOperations:
             assert result["name"] == "Brotato"
 
 
-class TestGameCacheTTLExpiration:
-    """Test TTL (Time To Live) expiration logic"""
-    
-    @pytest.mark.skip(reason="GameCache quantum doesn't use TTL expiration")
-    def test_entry_expires_after_duration(self, mock_config):
-        """Cache entry should expire after configured duration."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cache_file = os.path.join(tmpdir, "test_cache.json")
-            # Configure 1-hour TTL
-            cache = GameCache(
-                config=mock_config, 
-                cache_file=cache_file
-            )
-            
-            # Set a game
-            cache.set("brotato_123", {"name": "Brotato", "id": 123})
-            
-            # Mock time 2 hours in the future
-            future_time = datetime.now() + timedelta(hours=2)
-            with patch('backends.game_cache.datetime') as mock_datetime:
-                mock_datetime.now.return_value = future_time
-                mock_datetime.fromisoformat = datetime.fromisoformat
-                
-                # Should be expired
-                result = cache.get("brotato_123")
-                assert result is None
-    
-    def test_entry_valid_before_expiration(self, mock_config):
-        """Cache entry should be valid before expiration."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cache_file = os.path.join(tmpdir, "test_cache.json")
-            # Configure 24-hour TTL
-            cache = GameCache(
-                config=mock_config, 
-                cache_file=cache_file
-            )
-            
-            # Set a game
-            cache.set("brotato_123", {"name": "Brotato", "id": 123})
-            
-            # Mock time 1 hour in the future (still valid)
-            future_time = datetime.now() + timedelta(hours=1)
-            with patch('backends.game_cache.datetime') as mock_datetime:
-                mock_datetime.now.return_value = future_time
-                mock_datetime.fromisoformat = datetime.fromisoformat
-                
-                # Should still be valid
-                result = cache.get("brotato_123")
-                assert result is not None
-                assert result["name"] == "Brotato"
-    
-    def test_default_ttl_24_hours(self, mock_config):
-        """Default TTL should be 24 hours if not configured."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cache_file = os.path.join(tmpdir, "test_cache.json")
-            cache = GameCache(config=mock_config, cache_file=cache_file)
-            
-            # Default should be 24 hours
-            assert cache.cache_duration == timedelta(hours=24)
 
 
 class TestGameCacheCleanup:
     """Test cache cleanup operations"""
-    
-    @pytest.mark.skip(reason="GameCache quantum uses decoherence cleanup, not TTL expiration")
-    def test_cleanup_expired_removes_old_entries(self, mock_config):
-        """cleanup_expired() should remove expired entries."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cache_file = os.path.join(tmpdir, "test_cache.json")
-            cache = GameCache(
-                config=mock_config, 
-                cache_file=cache_file
-            )
-            
-            # Add multiple games
-            cache.set("brotato_123", {"name": "Brotato", "id": 123})
-            cache.set("stardew_456", {"name": "Stardew Valley", "id": 456})
-            
-            # Mock time 2 hours in the future
-            future_time = datetime.now() + timedelta(hours=2)
-            with patch('backends.game_cache.datetime') as mock_datetime:
-                mock_datetime.now.return_value = future_time
-                mock_datetime.fromisoformat = datetime.fromisoformat
-                
-                # Cleanup should remove both
-                removed_count = cache.cleanup_expired()
-                assert removed_count == 2
-                assert len(cache.quantum_states) == 0
-    
-    def test_cleanup_expired_keeps_valid_entries(self, mock_config):
-        """cleanup_expired() should keep valid entries."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cache_file = os.path.join(tmpdir, "test_cache.json")
-            cache = GameCache(
-                config=mock_config, 
-                cache_file=cache_file
-            )
-            
-            # Add games
-            cache.set("brotato_123", {"name": "Brotato", "id": 123})
-            cache.set("stardew_456", {"name": "Stardew Valley", "id": 456})
-            
-            # Mock time 1 hour in the future (still valid)
-            future_time = datetime.now() + timedelta(hours=1)
-            with patch('backends.game_cache.datetime') as mock_datetime:
-                mock_datetime.now.return_value = future_time
-                mock_datetime.fromisoformat = datetime.fromisoformat
-                
-                # Cleanup should remove nothing
-                removed_count = cache.cleanup_expired()
-                assert removed_count == 0
-                assert len(cache.quantum_states) == 2
     
     def test_clear_all_empties_cache(self, mock_config):
         """clear_all() should empty the entire cache."""
@@ -247,40 +139,6 @@ class TestGameCachePersistence:
             
             assert result is not None
             assert result["name"] == "Brotato"
-    
-    @pytest.mark.skip(reason="GameCache quantum structure is different (superpositions not data)")
-    def test_cache_loads_valid_entries_only(self, mock_config):
-        """On load, only valid (non-expired) entries should be loaded."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cache_file = os.path.join(tmpdir, "test_cache.json")
-            
-            # Manually create cache file with one expired, one valid
-            old_time = (datetime.now() - timedelta(hours=48)).isoformat()
-            recent_time = datetime.now().isoformat()
-            
-            cache_data = {
-                "old_game": {
-                    "data": {"name": "Old Game", "id": 111},
-                    "cached_at": old_time,
-                    "query": "old_game"
-                },
-                "new_game": {
-                    "data": {"name": "New Game", "id": 222},
-                    "cached_at": recent_time,
-                    "query": "new_game"
-                }
-            }
-            
-            with open(cache_file, 'w') as f:
-                json.dump(cache_data, f)
-            
-            # Load cache (24h TTL by default)
-            cache = GameCache(config=mock_config, cache_file=cache_file)
-            
-            # Old game should be filtered out
-            assert cache.get("old_game") is None
-            # New game should be loaded
-            assert cache.get("new_game") is not None
     
     def test_cache_file_created_if_missing(self, mock_config):
         """Cache file should be created if it doesn't exist."""

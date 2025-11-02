@@ -59,64 +59,6 @@ class TestTranslationNoneChecks:
         assert source.count("if not ctx.message") >= 3  # Au moins 3 occurrences
 
 
-class TestQuantumCommandsAttributeChecks:
-    """Tests des attributs twitchio is_mod/is_broadcaster"""
-
-    @pytest.mark.skip(reason="Quantum commands integrated in message_handler")
-    def test_can_trigger_decoherence_checks_mod(self):
-        """🔍 Vérifie que _can_trigger_decoherence check is_mod"""
-        from commands.quantum_commands import QuantumCommands
-        import inspect
-
-        source = inspect.getsource(QuantumCommands._can_trigger_decoherence)
-
-        # Vérifie que is_mod est vérifié
-        assert "is_mod" in source
-
-    @pytest.mark.skip(reason="Quantum commands integrated in message_handler")
-    def test_can_trigger_decoherence_checks_broadcaster(self):
-        """🔍 Vérifie que _can_trigger_decoherence check is_broadcaster"""
-        from commands.quantum_commands import QuantumCommands
-        import inspect
-
-        source = inspect.getsource(QuantumCommands._can_trigger_decoherence)
-
-        # Vérifie que is_broadcaster est vérifié
-        assert "is_broadcaster" in source
-
-    @pytest.mark.skip(reason="Quantum commands integrated in message_handler")
-    def test_can_trigger_with_mock_mod(self):
-        """🔍 Test avec mock (is_mod=True)"""
-        from commands.quantum_commands import QuantumCommands
-
-        ctx = Mock()
-        ctx.author = Mock()
-        ctx.author.is_mod = True
-        ctx.author.is_broadcaster = False
-
-        quantum = QuantumCommands()
-        result = quantum._can_trigger_decoherence(ctx)
-
-        # Mod devrait pouvoir trigger
-        assert result is True
-
-    @pytest.mark.skip(reason="Quantum commands integrated in message_handler")
-    def test_can_trigger_with_mock_broadcaster(self):
-        """🔍 Test avec mock (is_broadcaster=True)"""
-        from commands.quantum_commands import QuantumCommands
-
-        ctx = Mock()
-        ctx.author = Mock()
-        ctx.author.is_mod = False
-        ctx.author.is_broadcaster = True
-
-        quantum = QuantumCommands()
-        result = quantum._can_trigger_decoherence(ctx)
-
-        # Broadcaster devrait pouvoir trigger
-        assert result is True
-
-
 class TestNoneChecksJustification:
     """Documente pourquoi les None checks sont nécessaires"""
 
