@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.5.0] - 2025-11-02
+
+### 🎉 KILLER FEATURE - Broadcast Command
+
+#### !kisscharity - Multi-Channel Broadcast
+- **New command**: `!kisscharity <message>` - Broadcast message to ALL connected channels
+  - **Permission**: Broadcaster only (strict security)
+  - **Cooldown**: 5 minutes global (anti-spam protection)
+  - **Limit**: 500 characters max (Twitch IRC limit)
+  - **Source tracking**: Messages show `[Source: channel_name]` on destination channels
+  - **Success reporting**: Returns `📢 Message diffusé avec succès sur X/Y channels ! 🎉`
+
+**Use Cases:**
+- 🎗️ **Charity events**: Announce charity streams across all channels
+- 🎮 **Community raids**: Coordinate multi-streamer raids
+- 🤝 **Collaborations**: Announce collabs to all partner channels
+- 📢 **Important announcements**: Broadcast news to entire network
+
+**Implementation:**
+- `commands/bot_commands/broadcast.py`: Command handler with validation & cooldown
+- `twitchapi/transports/irc_client.py`: `broadcast_message()` method
+- `core/message_handler.py`: Integration with `!help` command
+- `test_kisscharity_quick.py`: 7 comprehensive unit tests
+
+**Security:**
+- ✅ Broadcaster-only permission (room_id == user_id)
+- ✅ 5-minute cooldown (prevents spam)
+- ✅ 500-char limit (Twitch compliance)
+- ✅ Channel exclusion (no duplicate on origin channel)
+- ✅ Partial failure handling (continues on errors)
+
+**Production Validation:**
+- ✅ Tested on 2 channels (#el_serda, #morthycya)
+- ✅ Cross-channel broadcast confirmed
+- ✅ Source tracking displayed correctly
+- ✅ Cooldown enforcement validated
+- ✅ Broadcaster detection accurate
+
+**Example:**
+```
+On #el_serda:
+el_serda: !kisscharity 🎮 Event charity ce soir à 20h pour Sidaction !
+serda_bot: @el_serda 📢 Message diffusé avec succès sur 1 channels ! 🎉
+
+On #morthycya:
+serda_bot: [Source: el_serda] 🎮 Event charity ce soir à 20h pour Sidaction !
+```
+
+---
+
 ## [3.4.3] - 2025-11-01
 
 ### 🐛 Bug Fix

@@ -120,7 +120,29 @@
 - `!cache` - Cache statistics
 - `!serdagit` - Bot source code & creator info
 
-### 🔴 NEW: Stream Monitoring (Phase 3.3)
+### � NEW: Broadcast Command (Phase 3.5) 🎉
+
+**`!kisscharity <message>`** - Multi-channel broadcast (KILLER FEATURE!)
+
+- **Permission**: Broadcaster only (strict security)
+- **Cooldown**: 5 minutes between broadcasts
+- **Source tracking**: Messages show `[Source: channel_name]`
+- **Success reporting**: Get `X/Y` channels confirmation
+- **Use cases**: Charity events, raids, collabs, important announcements
+
+**Example:**
+```
+On #el_serda:
+el_serda: !kisscharity 🎮 Event charity ce soir à 20h pour Sidaction !
+serda_bot: @el_serda 📢 Message diffusé avec succès sur 2 channels ! 🎉
+
+On #morthycya:
+serda_bot: [Source: el_serda] 🎮 Event charity ce soir à 20h pour Sidaction !
+```
+
+> ⚠️ **Security**: Broadcaster-only command with 5-minute cooldown. Max 500 characters.
+
+### �🔴 NEW: Stream Monitoring (Phase 3.3)
 
 **Real-time stream detection with EventSub WebSocket + Polling fallback + System Monitoring**
 

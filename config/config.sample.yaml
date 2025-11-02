@@ -18,6 +18,12 @@ apis:
   # ⏱️ TIMEOUT API EXTERNE (RAWG, Steam, etc.)
   timeout: 10.0  # Secondes (APIs externes peuvent être lentes)
 
+# ⏱️ TIMEOUTS TRANSPORTS (Phase 2.6)
+timeouts:
+  irc_send: 5.0       # Timeout envoi message IRC (évite blocages)
+  helix_request: 8.0  # Timeout requête Helix API
+  llm_inference: 30.0 # Timeout inférence LLM (peut être long)
+
 bot:
   channel: test_channel
   cooldown: 5
@@ -42,6 +48,26 @@ commands:
   cache:
     joke_ttl: 300     # Durée cache blagues (5 minutes)
     joke_max_size: 100
+
+# 📢 STREAM ANNOUNCEMENTS (Phase 3.3)
+announcements:
+  # Stream monitoring settings
+  monitoring:
+    enabled: true  # Enable/disable all monitoring (polling + EventSub)
+    method: auto   # "auto" (EventSub + polling fallback), "eventsub" (EventSub only), "polling" (polling only)
+    polling_interval: 60  # Seconds between Helix API polls (fallback mode)
+  
+  # Stream ONLINE announcements
+  stream_online:
+    enabled: true  # Set to false to disable online announcements
+    message: "🔴 @{channel} est maintenant en live ! 🎮 {title}"
+    # Available variables: {channel}, {title}, {game_name}, {viewer_count}
+  
+  # Stream OFFLINE announcements (usually disabled to avoid spam)
+  stream_offline:
+    enabled: false  # Set to true to enable offline announcements
+    message: "💤 @{channel} est maintenant hors ligne. À bientôt !"
+    # Available variables: {channel}
 
 llm:
   enabled: true
@@ -124,12 +150,22 @@ translation:
   enabled: true
   rate_limit: 5
   target_language: fr
+
 twitch:
-  bot_id: '1209350837'
+  bot_id: '1209350837'  # ID de votre bot (obtenu via Twitch Dev Console)
+  broadcaster_id: 44456636  # ID du broadcaster principal
+  
+  # 📺 Channels où le bot se connecte (IRC + Stream Monitoring)
+  # Liste des channels Twitch à rejoindre (sans le #)
   channels:
-  - el_serda
-  client_id: m60vyrfkbrrdo3xp6h4rpneq6bh9d6
-  client_secret: your_client_secret_here
+  - your_channel_here
+  # - another_channel
+  # - third_channel
+  
   prefix: '!'
-  refresh_token: your_refresh_token_here
-  token: your_token_here
+  client_id: your_client_id_here
+  client_secret: your_client_secret_here
+  
+  # ⚠️ TOKENS: Les tokens sont stockés dans .tio.tokens.json (gitignored)
+  # Utilisez regenerate_bot_token.py pour générer les tokens
+  # Ne pas mettre de tokens ici ! (obsolète depuis Phase 3.3)

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Régénérer le token serda_bot avec les scopes IRC
+Régénérer le token serda_bot avec les scopes IRC + permissions
 Scopes requis:
 - user:read:chat (lire le chat)
 - user:write:chat (écrire dans le chat)
 - user:bot (agir en tant que bot)
 - chat:read (ancien scope, peut-être requis aussi)
 - chat:edit (ancien scope, peut-être requis aussi)
+- user:read:moderated_channels (⭐ lister où bot est mod - LA solution!)
 """
 
 import asyncio
@@ -37,13 +38,14 @@ async def main():
     app_id = config["twitch"]["client_id"]
     app_secret = config["twitch"]["client_secret"]
     
-    # Scopes requis pour IRC
+    # Scopes requis pour IRC + détection permissions
     scopes = [
         AuthScope.USER_READ_CHAT,   # Lire le chat
         AuthScope.USER_WRITE_CHAT,  # Écrire dans le chat
         AuthScope.USER_BOT,         # Agir en tant que bot
         AuthScope.CHAT_READ,        # Ancien scope (legacy)
-        AuthScope.CHAT_EDIT         # Ancien scope (legacy)
+        AuthScope.CHAT_EDIT,        # Ancien scope (legacy)
+        AuthScope.USER_READ_MODERATED_CHANNELS  # ⭐ Lister où bot est mod (LA solution!)
     ]
     
     print(f"\n🔑 Scopes requis:")

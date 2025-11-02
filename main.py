@@ -69,7 +69,7 @@ async def main():
     
     # Channels IRC à rejoindre
     # Phase 3.3: Ces channels sont aussi monitorés par StreamMonitor
-    irc_channels = ["el_serda","morthycya","pelerin_","squallchan","st0uffff","yurekb","quartiergaminclub"]
+    irc_channels = twitch_config.get("channels", [])
     
     if not app_id or not app_secret:
         LOGGER.error("client_id ou client_secret manquant")
@@ -259,6 +259,10 @@ async def main():
         channels=irc_channels,
         irc_send_timeout=irc_send_timeout
     )
+    
+    # Phase 3.5: Injecter IRC Client dans MessageHandler (pour !kisscharity)
+    message_handler.set_irc_client(irc_client)
+    
     LOGGER.info(f"🚀 KissBot démarré | Channels: {', '.join([f'#{c}' for c in irc_channels])} | Timeouts: IRC={irc_send_timeout}s, Helix={helix_timeout}s")
     
     # Démarrer IRC Client
@@ -306,7 +310,7 @@ async def main():
     print('=' * 70)
     
     # Test plusieurs channels pour trouver un stream live
-    test_channels = ["el_serda", "morthycya"]
+    test_channels = irc_channels  # Utiliser les channels de la config
     for channel in test_channels:
         print(f"\n📺 Test channel: {channel}")
         

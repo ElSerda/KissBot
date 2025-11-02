@@ -35,6 +35,9 @@ coverage.json
 htmlcov/
 badges/
 
+# Auto-generated metrics
+metrics.json
+
 # Debug scripts (commit README only)
 debug/*.log
 debug/test_*.local.py

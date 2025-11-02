@@ -31,7 +31,7 @@ LOGGER = logging.getLogger(__name__)
 
 class MessageHandler:
     """
-    Handler pour les commandes chat (Phase 3.4 - Quantum Commands Added)
+    Handler pour les commandes chat (Phase 3.5 - Broadcast Command Added)
     
     Traite les commandes:
     - !ping: Test du bot
@@ -45,6 +45,7 @@ class MessageHandler:
     - !collapse <name> <number>: Ancrer jeu vérité terrain (Phase 3.4)
     - !quantum: Stats système quantique multi-domain (Phase 3.4)
     - !decoherence: Cleanup manuel états quantiques (Phase 3.4)
+    - !kisscharity <message>: Broadcaster message sur tous les channels (Phase 3.5)
     """
     
     def __init__(self, bus: MessageBus, config: Optional[Dict] = None):
@@ -71,6 +72,9 @@ class MessageHandler:
         
         # Phase 3.3: System Monitor (pour !stats)
         self.system_monitor: Optional['SystemMonitor'] = None
+        
+        # Phase 3.5: IRC Client (pour !kisscharity broadcast)
+        self.irc_client = None
         
         # Phase 3.1: Game Lookup
         self.game_lookup: Optional[GameLookup] = None
@@ -126,6 +130,14 @@ class MessageHandler:
         """
         self.system_monitor = system_monitor
         LOGGER.debug("✅ SystemMonitor injecté dans MessageHandler")
+    
+    def set_irc_client(self, irc_client) -> None:
+        """
+        Phase 3.5: Injecte le IRC Client après initialisation
+        (pour broadcast_message via !kisscharity)
+        """
+        self.irc_client = irc_client
+        LOGGER.debug("✅ IRC Client injecté dans MessageHandler")
     
     async def _handle_chat_message(self, msg: ChatMessage) -> None:
         """
@@ -201,6 +213,9 @@ class MessageHandler:
         elif command == "!decoherence":
             # Phase 3.4: Quantum Cleanup
             await self._cmd_decoherence(msg, args)
+        elif command == "!kisscharity":
+            # Phase 3.5: Broadcast Message
+            await self._cmd_kisscharity(msg, args)
         else:
             # Commande inconnue, pas de réponse
             LOGGER.debug(f"Unknown command: {command}")
@@ -283,6 +298,10 @@ class MessageHandler:
         # Phase 3.2: Ajouter LLM command si disponible
         if self.llm_handler and self.llm_handler.is_available():
             commands_list += " !ask <question> | Mention @bot_name <message>"
+        
+        # Phase 3.5: Ajouter broadcast command (broadcaster only)
+        if msg.is_broadcaster:
+            commands_list += " !kisscharity <message> (broadcaster)"
         
         response = OutboundMessage(
             channel=msg.channel,
@@ -1006,6 +1025,53 @@ class MessageHandler:
             prefer="irc"
         ))
         LOGGER.info(f"✅ Specific decoherence completed: {deleted_count} deleted")
+    
+    async def _cmd_kisscharity(self, msg: ChatMessage, args: str) -> None:
+        """
+        Phase 3.5: !kisscharity <message> - Broadcaster un message sur tous les channels
+        
+        Commande KILLER FEATURE pour annonces multi-channels:
+        - Events charity
+        - Raids communautaires
+        - Collaborations multi-streamers
+        
+        Restrictions:
+        - Broadcaster only
+        - Cooldown 5 minutes global
+        - Max 500 caractères
+        """
+        from commands.bot_commands.broadcast import cmd_kisscharity
+        
+        # Check si IRC client est disponible
+        if not self.irc_client:
+            response_text = f"@{msg.user_login} ❌ Erreur système : IRC client non disponible"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            return
+        
+        # Parser les arguments
+        args_list = args.split() if args else []
+        
+        # Appeler le handler de broadcast
+        response_text = await cmd_kisscharity(
+            msg=msg,
+            args=args_list,
+            bus=self.bus,
+            irc_client=self.irc_client
+        )
+        
+        # Envoyer la réponse
+        if response_text:
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
     
     def get_stats(self) -> dict:
         """Retourne les stats du handler"""
