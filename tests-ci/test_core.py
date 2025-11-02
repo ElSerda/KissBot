@@ -71,34 +71,41 @@ class TestRateLimiter:
         """Test que le premier appel est toujours autorisé"""
         try:
             from core.rate_limiter import RateLimiter
-            limiter = RateLimiter(default_cooldown=5)
+            limiter = RateLimiter(per30_non_verified=18)
             
-            assert limiter.is_allowed("user1") is True
+            assert limiter.can_send("channel1", cost=1, is_mod=False) is True
         except ImportError:
             pytest.skip("core.rate_limiter n'existe pas")
     
     def test_rate_limiter_blocks_rapid_calls(self):
-        """Test que les appels rapides sont bloqués"""
+        """Test que les appels rapides respectent la limite"""
         try:
             from core.rate_limiter import RateLimiter
-            limiter = RateLimiter(default_cooldown=5)
+            import time
+            
+            limiter = RateLimiter(per30_non_verified=2)  # Limit to 2 per 30s
             
             # Premier appel OK
-            assert limiter.is_allowed("user1") is True
+            assert limiter.can_send("channel1", cost=1, is_mod=False) is True
+            limiter.record_send("channel1")
             
-            # Deuxième appel immédiat devrait être bloqué
-            assert limiter.is_allowed("user1") is False
+            # Deuxième appel OK
+            assert limiter.can_send("channel1", cost=1, is_mod=False) is True
+            limiter.record_send("channel1")
+            
+            # Troisième appel devrait être bloqué (limite atteinte)
+            assert limiter.can_send("channel1", cost=1, is_mod=False) is False
         except ImportError:
             pytest.skip("core.rate_limiter n'existe pas")
     
     def test_rate_limiter_different_users(self):
-        """Test que différents users ont des cooldowns séparés"""
+        """Test que différents channels ont des limites séparées"""
         try:
             from core.rate_limiter import RateLimiter
-            limiter = RateLimiter(default_cooldown=5)
+            limiter = RateLimiter(per30_non_verified=18)
             
-            assert limiter.is_allowed("user1") is True
-            assert limiter.is_allowed("user2") is True
+            assert limiter.can_send("channel1", cost=1, is_mod=False) is True
+            assert limiter.can_send("channel2", cost=1, is_mod=False) is True
         except ImportError:
             pytest.skip("core.rate_limiter n'existe pas")
 

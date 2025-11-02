@@ -36,6 +36,7 @@ class TestCommandsStructure:
         
         assert issubclass(TranslationCommands, commands.Component)
     
+    @pytest.mark.skip(reason="Quantum commands integrated in message_handler")
     def test_quantum_commands_exist(self):
         """Vérifie que QuantumCommands existe et est un Component"""
         from commands.quantum_commands import QuantumCommands
@@ -48,25 +49,23 @@ class TestCommandsCount:
     """Tests du nombre de commandes"""
     
     def test_expected_commands_count(self):
-        """Vérifie qu'on a bien ~26 commandes définies"""
-        import re
+        """Vérifie qu'on a bien les commandes principales dans MessageHandler"""
         from pathlib import Path
         
-        commands_dir = Path("commands")
-        command_count = 0
+        # MessageBus architecture: commands handled in message_handler.py
+        handler_file = Path("core/message_handler.py")
+        content = handler_file.read_text()
         
-        for py_file in commands_dir.glob("*.py"):
-            if py_file.name.startswith("__"):
-                continue
-            
-            content = py_file.read_text()
-            # Compter les @commands.command decorators
-            matches = re.findall(r'@commands\.command\(name="(\w+)"', content)
-            command_count += len(matches)
+        # Count command handlers (elif command == "!...")
+        import re
+        commands = re.findall(r'elif command == "(![\w]+)"', content)
         
-        # KissBot devrait avoir ~17-26 commandes
-        assert command_count >= 15, f"Seulement {command_count} commandes trouvées (attendu: ≥15)"
-        assert command_count <= 30, f"Trop de commandes: {command_count} (attendu: ≤30)"
+        # Expected commands: !ping, !uptime, !stats, !help, !gi, !gc, !ask, 
+        # !qgame, !collapse, !quantum, !decoherence, !kisscharity
+        command_count = len(set(commands))  # Unique commands
+        
+        assert command_count >= 10, f"Seulement {command_count} commandes trouvées (attendu: ≥10)"
+        assert command_count <= 20, f"Trop de commandes: {command_count} (attendu: ≤20)"
 
 
 class TestCriticalCommands:
