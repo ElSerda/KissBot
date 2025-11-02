@@ -35,6 +35,11 @@ coverage.json
 htmlcov/
 badges/
 
+# Tests locaux avec vraies clés API (ne pas commiter)
+tests-local/
+!tests-local/README.md
+!tests-local/pytest-local.ini
+
 # Auto-generated metrics
 metrics.jsonl
 
