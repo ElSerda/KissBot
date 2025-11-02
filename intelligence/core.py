@@ -267,37 +267,29 @@ def extract_mention_message(message_content: str, bot_name: str) -> str | None:
     Extrait le message d'une mention @bot ou bot_name.
 
     Args:
-        message_content: Contenu complet du message "@bot <message>" ou "bot_name <message>"
+        message_content: Contenu complet du message contenant bot_name
         bot_name: Nom du bot (case-insensitive)
 
     Returns:
-        str: Message extrait ou None si invalide
+        str: Message extrait (avec bot_name retiré) ou None si bot_name absent
         
     Règles de détection:
-    - Format @bot_name: Accepté n'importe où dans le message
-    - Format bot_name seul: Accepté UNIQUEMENT au début ou à la fin
+    - bot_name ou @bot_name N'IMPORTE OÙ dans le message = mention
+    - Le système neural (UCB bandit) gère ensuite le contexte et la pertinence
     """
     import re
     
     content_lower = message_content.lower()
     bot_lower = bot_name.lower()
     
-    # Pattern 1: @bot_name (n'importe où)
-    pattern_at = rf"@{re.escape(bot_name)}\b"
-    if re.search(pattern_at, message_content, flags=re.IGNORECASE):
-        message = re.sub(pattern_at, "", message_content, count=1, flags=re.IGNORECASE)
-        return message.strip() if message.strip() else None
+    # Vérifier si bot_name ou @bot_name est présent (case-insensitive)
+    if f"@{bot_lower}" not in content_lower and bot_lower not in content_lower:
+        return None
     
-    # Pattern 2: bot_name au début du message (suivi d'un espace ou ponctuation)
-    pattern_start = rf"^{re.escape(bot_name)}\b"
-    if re.match(pattern_start, message_content, flags=re.IGNORECASE):
-        message = re.sub(pattern_start, "", message_content, count=1, flags=re.IGNORECASE)
-        return message.strip() if message.strip() else None
+    # Pattern: @bot_name ou bot_name (word boundary pour éviter "leserda_bot")
+    pattern = rf"@?{re.escape(bot_name)}\b"
+    message = re.sub(pattern, "", message_content, count=1, flags=re.IGNORECASE)
+    message = message.strip()
     
-    # Pattern 3: bot_name à la fin du message (précédé d'un espace ou ponctuation)
-    pattern_end = rf"\b{re.escape(bot_name)}$"
-    if re.search(pattern_end, message_content, flags=re.IGNORECASE):
-        message = re.sub(pattern_end, "", message_content, count=1, flags=re.IGNORECASE)
-        return message.strip() if message.strip() else None
-    
-    return None
+    # Retourner le message même si vide (mention sans texte = ping)
+    return message if message else "ping"
