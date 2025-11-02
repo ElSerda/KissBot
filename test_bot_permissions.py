@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test de détection des permissions du bot (mod/VIP status)
-Phase 3.5 - Validation avant implémentation !kisscharity
+- Validation avant implémentation !kisscharity
 """
 
 import asyncio

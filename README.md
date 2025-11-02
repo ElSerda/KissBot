@@ -109,18 +109,17 @@
 ### 🤖 Classic Commands
 - `!gameinfo <name>` / `!gi` - Game info (RAWG + Steam APIs) *[90-99% reliable]*
 - `!gamecategory` / `!gc` - Auto-detect current stream game with enrichment
-- `!gi <game>` - **NEW Phase 3.1!** Game info with RAWG+Steam APIs
-- `!ask <question>` - **NEW Phase 3.2!** Ask the bot anything (LLM)
-- **@bot_name <message>** - **NEW Phase 3.2!** Mention bot for natural conversation
-- `!joke` - **NEW!** Bot tells a short joke (French)
+- `!ask <question>` - Ask the bot anything (LLM)
+- **@bot_name <message>** - Mention bot for natural conversation
+- `!joke` - Bot tells a short joke (French)
 - `!ping` - Bot latency
 - `!uptime` - Bot uptime & command count
-- `!stats` - **NEW Phase 3.3!** System metrics (CPU/RAM/Threads/Uptime)
+- `!stats` - System metrics (CPU/RAM/Threads/Uptime)
 - `!help` - Commands list
 - `!cache` - Cache statistics
 - `!serdagit` - Bot source code & creator info
 
-### � NEW: Broadcast Command (Phase 3.5) 🎉
+### 📢 Broadcast Command 🎉
 
 **`!kisscharity <message>`** - Multi-channel broadcast (KILLER FEATURE!)
 
@@ -142,7 +141,7 @@ serda_bot: [Source: el_serda] 🎮 Event charity ce soir à 20h pour Sidaction !
 
 > ⚠️ **Security**: Broadcaster-only command with 5-minute cooldown. Max 500 characters.
 
-### �🔴 NEW: Stream Monitoring (Phase 3.3)
+###  Stream Monitoring
 
 **Real-time stream detection with EventSub WebSocket + Polling fallback + System Monitoring**
 
@@ -159,7 +158,7 @@ serda_bot: [Source: el_serda] 🎮 Event charity ce soir à 20h pour Sidaction !
 **Example:**
 ```
 [Stream goes online - detected in < 1s via EventSub]
-serda_bot: 🔴 @el_serda est maintenant en live ! 🎮 Coding KissBot Phase 3.3
+serda_bot: 🔴 @el_serda est maintenant en live ! 🎮 Coding KissBot
 
 [User types !stats]
 serda_bot: @el_serda 📊 CPU: 1.0% | RAM: 54MB | Threads: 9 | Uptime: 2h34m
@@ -195,7 +194,7 @@ announcements:
 > **⚙️ Configuration guide:** [docs/STREAM_ANNOUNCEMENTS_CONFIG.md](docs/STREAM_ANNOUNCEMENTS_CONFIG.md)  
 > **📊 System monitoring guide:** [docs/SYSTEM_MONITORING.md](docs/SYSTEM_MONITORING.md)
 
-### 🔬 Phase 3.4: Quantum Game Learning
+### 🔬 Quantum Game Learning System
 - `!qgame <name>` - **Quantum game search** with superposition (numbered list 1-2-3)
 - `!collapse <name> <number>` - **Mods anchor truth** → permanent quantum state (crowdsourced learning)
 - `!quantum` - **Universal quantum stats** (GAME + MUSIC + future domains)
@@ -203,7 +202,7 @@ announcements:
 
 > **📋 Full commands documentation:** [docs/guides/COMMANDS.md](docs/guides/COMMANDS.md) - includes reliability details and edge cases
 
-### 🔬 Revolutionary Quantum Game Learning System
+### 🔬 Revolutionary Quantum Learning System
 
 **World's first quantum-inspired crowdsourced learning for game searches!**
 

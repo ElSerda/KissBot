@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AuthManager - Phase 2.1
+AuthManager
 Gestion centralisée des User Tokens (bot + broadcasters)
 """
 
@@ -163,7 +163,7 @@ class AuthManager:
         """
         LOGGER.info(f"[AuthManager] Ajout token pour {user_login}")
         
-        # TODO Phase 2.1 : Implémenter OAuth flow
+        # TODO : Implémenter OAuth flow
         # Pour l'instant, structure vide
         
         # Placeholder
@@ -342,7 +342,7 @@ class AuthManager:
             return False
         
         try:
-            # TODO Phase 2.1 : Appeler GET /validate
+            # TODO : Appeler GET /validate
             LOGGER.info(f"✅ Token {user_login} valide")
             return True
             

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test d'intégration mention → LLM
-Phase 3.2 - Bot Mention Feature
+- Bot Mention Feature
 """
 import asyncio
 import sys

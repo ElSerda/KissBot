@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test du rate limiting pour mentions
-Phase 3.2 - Bot Mention Feature
+- Bot Mention Feature
 """
 import asyncio
 import time

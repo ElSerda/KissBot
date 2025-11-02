@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 """
-Message Handler - Phase 2.3 (SIMPLIFIED)
-Traite les commandes chat basiques et publie les réponses sur MessageBus
-
-Phase 2.3: Commandes simples (!ping, !uptime, !help)
-Phase 2.4: Envoi des réponses via IRC
-Phase 3+: Commandes avancées (!gc, !gi, !ask)
+Message Handler
+Traite les commandes chat et publie les réponses sur MessageBus
 """
 import logging
 import time
@@ -20,7 +16,6 @@ from backends.music_cache import MusicCache
 from backends.llm_handler import LLMHandler
 from intelligence.core import extract_mention_message
 
-# Phase 3.1: Import conditionnel pour éviter dépendance circulaire
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from twitchapi.transports.helix_readonly import HelixReadOnlyClient
@@ -31,21 +26,21 @@ LOGGER = logging.getLogger(__name__)
 
 class MessageHandler:
     """
-    Handler pour les commandes chat (Phase 3.5 - Broadcast Command Added)
+    Handler pour les commandes chat
     
     Traite les commandes:
     - !ping: Test du bot
     - !uptime: Temps de fonctionnement
-    - !stats: Statistiques système (CPU/RAM/Threads) (Phase 3.3)
+    - !stats: Statistiques système (CPU/RAM/Threads)
     - !help: Liste des commandes
-    - !gi <game>: Info sur un jeu (Phase 3.1)
-    - !gc: Jeu en cours du streamer (Phase 3.1)
-    - !ask <question>: Question au LLM (Phase 3.2)
-    - !qgame <name>: Recherche quantique de jeux (Phase 3.4)
-    - !collapse <name> <number>: Ancrer jeu vérité terrain (Phase 3.4)
-    - !quantum: Stats système quantique multi-domain (Phase 3.4)
-    - !decoherence: Cleanup manuel états quantiques (Phase 3.4)
-    - !kisscharity <message>: Broadcaster message sur tous les channels (Phase 3.5)
+    - !gi <game>: Info sur un jeu
+    - !gc: Jeu en cours du streamer
+    - !ask <question>: Question au LLM
+    - !qgame <name>: Recherche quantique de jeux
+    - !collapse <name> <number>: Ancrer jeu vérité terrain
+    - !quantum: Stats système quantique multi-domain
+    - !decoherence: Cleanup manuel états quantiques
+    - !kisscharity <message>: Broadcaster message sur tous les channels
     """
     
     def __init__(self, bus: MessageBus, config: Optional[Dict] = None):
@@ -59,24 +54,24 @@ class MessageHandler:
         self.start_time = time.time()
         self.config = config or {}
         
-        # Phase 2.6: Deduplication pour éviter double traitement
+        # Deduplication pour éviter double traitement
         self._processed_messages = set()  # Cache des message IDs déjà traités
         self._cache_max_size = 100  # Limiter la taille du cache
         
-        # Phase 3.2: Rate limiting pour mentions (15s cooldown)
+        # Rate limiting pour mentions (15s cooldown)
         self._mention_last_time: Dict[str, float] = {}  # user_id -> timestamp
         self._mention_cooldown = config.get("commands", {}).get("cooldowns", {}).get("mention", 15.0)
         
-        # Phase 3.1: Helix client (pour !gc)
+        # Helix client (pour !gc)
         self.helix: Optional['HelixReadOnlyClient'] = None
         
-        # Phase 3.3: System Monitor (pour !stats)
+        # System Monitor (pour !stats)
         self.system_monitor: Optional['SystemMonitor'] = None
         
-        # Phase 3.5: IRC Client (pour !kisscharity broadcast)
+        # IRC Client (pour !kisscharity broadcast)
         self.irc_client = None
         
-        # Phase 3.1: Game Lookup
+        # Game Lookup
         self.game_lookup: Optional[GameLookup] = None
         if config and config.get("apis", {}).get("rawg_key"):
             try:
@@ -85,7 +80,7 @@ class MessageHandler:
             except Exception as e:
                 LOGGER.error(f"❌ GameLookup init failed: {e}")
         
-        # Phase 3.4: Quantum Game Cache
+        # Quantum Game Cache
         self.game_cache: Optional[GameCache] = None
         try:
             self.game_cache = GameCache(config)
@@ -93,7 +88,7 @@ class MessageHandler:
         except Exception as e:
             LOGGER.error(f"❌ QuantumGameCache init failed: {e}")
         
-        # Phase 3.4: Quantum Music Cache (POC)
+        # Quantum Music Cache (POC)
         self.music_cache: Optional[MusicCache] = None
         try:
             self.music_cache = MusicCache(config)
@@ -101,7 +96,7 @@ class MessageHandler:
         except Exception as e:
             LOGGER.error(f"❌ QuantumMusicCache init failed: {e}")
         
-        # Phase 3.2: LLM Handler
+        # LLM Handler
         self.llm_handler: Optional[LLMHandler] = None
         if config and config.get("apis", {}).get("openai_key"):
             try:
@@ -113,11 +108,11 @@ class MessageHandler:
         # Subscribe aux messages entrants
         self.bus.subscribe("chat.inbound", self._handle_chat_message)
         
-        LOGGER.info("MessageHandler initialisé (Phase 3.2 - LLM Added)")
+        LOGGER.info("MessageHandler initialisé")
     
     def set_helix(self, helix: 'HelixReadOnlyClient') -> None:
         """
-        Phase 3.1: Injecte le client Helix après initialisation
+        Injecte le client Helix après initialisation
         (car Helix est créé après MessageHandler dans main.py)
         """
         self.helix = helix
@@ -125,7 +120,7 @@ class MessageHandler:
     
     def set_system_monitor(self, system_monitor: 'SystemMonitor') -> None:
         """
-        Phase 3.3: Injecte le SystemMonitor après initialisation
+        Injecte le SystemMonitor après initialisation
         (pour accéder aux métriques système via !stats)
         """
         self.system_monitor = system_monitor
@@ -133,7 +128,7 @@ class MessageHandler:
     
     def set_irc_client(self, irc_client) -> None:
         """
-        Phase 3.5: Injecte le IRC Client après initialisation
+        Injecte le IRC Client après initialisation
         (pour broadcast_message via !kisscharity)
         """
         self.irc_client = irc_client
@@ -147,7 +142,7 @@ class MessageHandler:
         Args:
             msg: Message chat reçu
         """
-        # Phase 2.6: Deduplication - Créer ID unique basé sur user + text + timestamp (secondes)
+        # Deduplication - Créer ID unique basé sur user + text + timestamp (secondes)
         # Timestamp en secondes pour éviter duplicates dans la même seconde uniquement
         msg_timestamp = int(time.time())
         msg_id = f"{msg.user_id}:{msg.text}:{msg_timestamp}"
@@ -162,7 +157,7 @@ class MessageHandler:
             # Vider la moitié du cache (FIFO approximatif)
             self._processed_messages = set(list(self._processed_messages)[50:])
         
-        # Phase 3.2: Détection des mentions (@bot_name ou bot_name)
+        # Détection des mentions (@bot_name ou bot_name)
         # Prioritaire sur les commandes pour intercepter "@bot_name !ping"
         bot_name = self.config.get("bot_login_name", "serda_bot")
         mention_text = extract_mention_message(msg.text, bot_name)
@@ -190,33 +185,24 @@ class MessageHandler:
         elif command == "!uptime":
             await self._cmd_uptime(msg)
         elif command == "!stats":
-            # Phase 3.3: System Stats
             await self._cmd_stats(msg)
         elif command in ["!commands", "!help"]:
             await self._cmd_help(msg)
         elif command == "!gi":
-            # Phase 3.1: Game Info
             await self._cmd_game_info(msg, args)
         elif command == "!gc":
-            # Phase 3.1: Game Current
             await self._cmd_game_current(msg)
         elif command == "!ask":
-            # Phase 3.2: LLM Ask
             await self._cmd_ask(msg, args)
         elif command == "!qgame":
-            # Phase 3.4: Quantum Game Search
             await self._cmd_qgame(msg, args)
         elif command == "!collapse":
-            # Phase 3.4: Quantum Collapse
             await self._cmd_collapse(msg, args)
         elif command == "!quantum":
-            # Phase 3.4: Quantum Stats
             await self._cmd_quantum(msg)
         elif command == "!decoherence":
-            # Phase 3.4: Quantum Cleanup
             await self._cmd_decoherence(msg, args)
         elif command == "!kisscharity":
-            # Phase 3.5: Broadcast Message
             await self._cmd_kisscharity(msg, args)
         else:
             # Commande inconnue, pas de réponse
@@ -255,7 +241,7 @@ class MessageHandler:
     
     async def _cmd_stats(self, msg: ChatMessage) -> None:
         """
-        Commande !stats - Statistiques système (CPU/RAM/Threads) (Phase 3.3)
+        Commande !stats - Statistiques système (CPU/RAM/Threads)
         
         Affiche les métriques système en temps réel:
         - CPU%: Utilisation CPU du process bot
@@ -293,15 +279,15 @@ class MessageHandler:
         """Commande !help - Liste des commandes disponibles"""
         commands_list = "!ping !uptime !stats !help"
         
-        # Phase 3.1: Ajouter game commands si disponibles
+        # Ajouter game commands si disponibles
         if self.game_lookup:
             commands_list += " !gi <game> !gc"
         
-        # Phase 3.2: Ajouter LLM command si disponible
+        # Ajouter LLM command si disponible
         if self.llm_handler and self.llm_handler.is_available():
             commands_list += " !ask <question> | Mention @bot_name <message>"
         
-        # Phase 3.5: Ajouter broadcast command (broadcaster only)
+        # Ajouter broadcast command (broadcaster only)
         if msg.is_broadcaster:
             commands_list += " !kisscharity <message> (broadcaster)"
         
@@ -317,7 +303,7 @@ class MessageHandler:
     
     async def _cmd_game_info(self, msg: ChatMessage, game_name: str) -> None:
         """
-        Phase 3.1: Commande !gi <game> - Info sur un jeu
+        Commande !gi <game> - Info sur un jeu
         
         Args:
             msg: Message chat
@@ -346,7 +332,7 @@ class MessageHandler:
         try:
             LOGGER.info(f"🎮 Searching game: {game_name}")
             
-            # Phase 2.6: Timeout handling (config timeout déjà dans GameLookup)
+            # Timeout handling (config timeout déjà dans GameLookup)
             game = await self.game_lookup.search_game(game_name)
             
             if not game:
@@ -389,7 +375,7 @@ class MessageHandler:
     
     async def _cmd_game_current(self, msg: ChatMessage) -> None:
         """
-        Phase 3.1: Commande !gc - Jeu en cours du streamer (enrichi)
+        Commande !gc - Jeu en cours du streamer (enrichi)
         
         Utilise Helix get_stream() pour récupérer game_name,
         puis enrichit avec GameLookup pour infos complètes.
@@ -488,7 +474,7 @@ class MessageHandler:
     
     async def _cmd_ask(self, msg: ChatMessage, question: str) -> None:
         """
-        Phase 3.2: Commande !ask - Question au LLM
+        Commande !ask - Question au LLM
         
         Args:
             msg: Message entrant
@@ -563,7 +549,7 @@ class MessageHandler:
     
     async def _handle_mention(self, msg: ChatMessage, mention_text: str) -> None:
         """
-        Phase 3.2: Traite une mention du bot (@bot_name ou bot_name)
+        Traite une mention du bot (@bot_name ou bot_name)
         
         Args:
             msg: Message original
@@ -627,7 +613,7 @@ class MessageHandler:
             # Silent ignore en cas d'erreur
     
     # ============================================================
-    # Phase 3.4: QUANTUM COMMANDS
+    # QUANTUM COMMANDS
     # ============================================================
     
     async def _cmd_qgame(self, msg: ChatMessage, game_name: str) -> None:
@@ -1030,7 +1016,7 @@ class MessageHandler:
     
     async def _cmd_kisscharity(self, msg: ChatMessage, args: str) -> None:
         """
-        Phase 3.5: !kisscharity <message> - Broadcaster un message sur tous les channels
+        !kisscharity <message> - Broadcaster un message sur tous les channels
         
         Commande KILLER FEATURE pour annonces multi-channels:
         - Events charity

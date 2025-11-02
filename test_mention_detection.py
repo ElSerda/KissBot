@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test de la détection de mention (@bot_name)
-Phase 3.2 - Bot Mention Feature
+- Bot Mention Feature
 """
 from intelligence.core import extract_mention_message
 

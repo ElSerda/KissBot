@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test simulation timeout - Phase 2.6"""
+"""Test simulation timeout"""
 
 import asyncio
 import logging
@@ -31,7 +31,7 @@ def load_config():
 
 async def main():
     """Test timeout handling"""
-    print("🧪 Test Timeout Simulation - Phase 2.6")
+    print("🧪 Test Timeout Simulation")
     print("=" * 70)
     
     config = load_config()

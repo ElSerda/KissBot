@@ -1,5 +1,5 @@
 """
-🎵 Quantum Music Cache - KissBot Phase 3.4 (POC)
+🎵 Quantum Music Cache - KissBot (POC)
 
 Cache quantique pour musiques avec apprentissage crowdsourced.
 Proof of Concept pour multi-domain quantum system.
@@ -16,7 +16,7 @@ WORKFLOW :
 2. !collapse music 1 → Mod ancre la vraie track
 3. Bot apprend → Futures recherches améliorées
 
-NOTE: Phase 3.4 POC - Pas d'API externe pour l'instant (mock data OK)
+NOTE: POC - Pas d'API externe pour l'instant (mock data OK)
 """
 
 import json
@@ -30,7 +30,7 @@ from core.cache_interface import BaseCacheInterface, CacheStats
 
 class MusicCache(BaseCacheInterface):
     """
-    🔬 Quantum Music Cache - Phase 3.4 POC
+    🔬 Quantum Music Cache - POC
 
     QUANTUM FEATURES :
     - Superposition : Multiple track suggestions (1-2-3)

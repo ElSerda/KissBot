@@ -1,5 +1,5 @@
 """
-Phase 3.5: Broadcast Commands
+Broadcast Commands
 Commandes permettant de broadcaster des messages sur tous les channels.
 """
 

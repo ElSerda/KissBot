@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KissBot V4 - Phase 2.6: App Token + Helix + IRC Client + Timeout Handling"""
+"""KissBot V4 - Twitch Bot with IRC, Helix API, and Stream Monitoring"""
 
 import asyncio
 import json
@@ -48,16 +48,16 @@ def load_config():
 
 
 async def main():
-    """Phase 2.6: App Token + Helix + IRC Client (avec timeout handling)"""
+    """Main entry point: Initialize app token, Helix API, IRC client, and stream monitoring"""
     print("=" * 70)
-    print("KissBot V4 - Phase 2.6: Helix + IRC Client + Timeouts")
+    print("KissBot V4 - Twitch Bot with IRC + Helix + Stream Monitoring")
     print("=" * 70)
     
     config = load_config()
     twitch_config = config.get("twitch", {})
     bot_config = config.get("bot", {})
     
-    # Phase 2.6: Charger les timeouts depuis config
+    # Load timeouts from config
     timeouts = config.get("timeouts", {})
     irc_send_timeout = timeouts.get("irc_send", 5.0)
     helix_timeout = timeouts.get("helix_request", 8.0)
@@ -67,8 +67,7 @@ async def main():
     bot_name = bot_config.get("name", "serda_bot")
     bot_user_id = "1209350837"  # ID de serda_bot
     
-    # Channels IRC à rejoindre
-    # Phase 3.3: Ces channels sont aussi monitorés par StreamMonitor
+    # IRC channels to join (also monitored by StreamMonitor)
     irc_channels = twitch_config.get("channels", [])
     
     if not app_id or not app_secret:
@@ -78,7 +77,7 @@ async def main():
     # Initialisation silencieuse
     twitch_app = await Twitch(app_id, app_secret)
     
-    # Phase 2.2: Charger le Bot Token (User Token)
+    # Load bot token (User Token)
     auth_manager = AuthManager(twitch_app)
     bot_token = await auth_manager.load_token_from_file(bot_user_id)
     
@@ -90,7 +89,7 @@ async def main():
     # Créer instance Twitch avec User Token pour IRC
     twitch_bot = await Twitch(app_id, app_secret)
     
-    # Phase 3.3: Utiliser UserAuthenticationStorageHelper natif de pyTwitchAPI
+    # UserAuthenticationStorageHelper natif de pyTwitchAPI
     # Gère automatiquement: load token, refresh callback, save token
     from twitchAPI.oauth import UserAuthenticationStorageHelper
     from pathlib import Path
@@ -144,30 +143,30 @@ async def main():
     except Exception as e:
         LOGGER.error(f"Erreur test API: {e}")
     
-    # Initialisation architecture (silencieuse)
+    # Initialize message bus architecture
     bus = MessageBus()
     registry = Registry()
     rate_limiter = RateLimiter()
     
-    # Phase 1.3: Analytics Handler
+    # Analytics Handler
     analytics = AnalyticsHandler(bus)
     
-    # Phase 2.2: Chat Logger (pour voir les messages IRC)
+    # Chat Logger (log IRC messages)
     chat_logger = ChatLogger(bus)
     
-    # Phase 3.1: Message Handler (avec config pour GameLookup)
+    # Message Handler (with config for GameLookup, LLM, etc.)
     message_handler = MessageHandler(bus, config)
     
-    # Phase 2.3: Outbound Logger (DÉSACTIVÉ en Phase 2.4 - messages envoyés pour de vrai)
+    # Outbound Logger (DISABLED - real IRC send enabled)
     # outbound_logger = OutboundLogger(bus)
     
-    # Phase 2.6: Helix Read-Only (avec App Token + timeout)
+    # Helix Read-Only (with App Token + timeout)
     helix = HelixReadOnlyClient(twitch_app, bus, helix_timeout=helix_timeout)
     
-    # Phase 3.1: Injecter Helix dans MessageHandler (pour !gc)
+    # Inject Helix into MessageHandler (for !gc command)
     message_handler.set_helix(helix)
     
-    # Phase 3.3: Stream Announcer (auto-announce stream online/offline)
+    # Stream Announcer (auto-announce stream online/offline)
     announcements_config = config.get("announcements", {})
     monitoring_enabled = announcements_config.get("monitoring", {}).get("enabled", True)
     
@@ -250,7 +249,7 @@ async def main():
                 interval=polling_interval
             )
     
-    # Phase 2.6: IRC Client (avec Bot Token + timeout)
+    # IRC Client (with Bot Token + timeout)
     irc_client = IRCClient(
         twitch=twitch_bot,
         bus=bus,
@@ -260,7 +259,7 @@ async def main():
         irc_send_timeout=irc_send_timeout
     )
     
-    # Phase 3.5: Injecter IRC Client dans MessageHandler (pour !kisscharity)
+    # Inject IRC Client into MessageHandler (for !kisscharity broadcast)
     message_handler.set_irc_client(irc_client)
     
     LOGGER.info(f"🚀 KissBot démarré | Channels: {', '.join([f'#{c}' for c in irc_channels])} | Timeouts: IRC={irc_send_timeout}s, Helix={helix_timeout}s")
@@ -273,7 +272,7 @@ async def main():
     # Attendre que IRC soit connecté
     await asyncio.sleep(2)
     
-    # Phase 3.3: Démarrer Stream Monitoring (EventSub ou Polling)
+    # Start Stream Monitoring (EventSub or Polling)
     if eventsub_client:
         print('\n🔌 Démarrage EventSub WebSocket...')
         print('=' * 70)
@@ -334,7 +333,7 @@ async def main():
     # Attendre que toutes les tasks Analytics finissent
     await asyncio.sleep(0.1)  # Petite pause pour laisser les tasks se terminer
     
-    # Phase 3.3: System Monitoring (CPU/RAM metrics)
+    # System Monitoring (CPU/RAM metrics)
     system_monitor = SystemMonitor(
         interval=60,  # Log toutes les 60s
         log_file="metrics.json",
@@ -344,7 +343,7 @@ async def main():
     asyncio.create_task(system_monitor.start())
     LOGGER.info("📊 System monitoring started (metrics.json)")
     
-    # Phase 3.3: Injecter SystemMonitor dans MessageHandler (pour !stats)
+    # Inject SystemMonitor into MessageHandler (for !stats command)
     message_handler.set_system_monitor(system_monitor)
     
     # Stats Analytics
@@ -353,7 +352,7 @@ async def main():
     print(f"\n📊 Analytics: {stats['total_events']} événements traités")
     print(f"💬 Chat Logger: {chat_count} messages reçus")
     
-    # Phase 3.3: Info monitoring
+    # Info monitoring
     if eventsub_client or stream_monitor:
         if eventsub_client:
             print(f"🔌 Stream Monitoring: EventSub WebSocket (REAL-TIME)")
@@ -385,7 +384,7 @@ async def main():
     finally:
         LOGGER.info("Arret...")
         
-        # Phase 3.3: Arrêter monitoring (EventSub + Polling + System)
+        # Stop monitoring (EventSub + Polling + System)
         if eventsub_client:
             await eventsub_client.stop()
         

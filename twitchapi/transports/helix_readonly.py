@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Helix Read-Only Transport - Phase 2.6: avec timeout handling
+"""Helix Read-Only Transport - avec timeout handling
 
 Requêtes Helix publiques (sans User Token) :
 - get_streams() : Informations sur les streams actifs
@@ -9,7 +9,7 @@ Requêtes Helix publiques (sans User Token) :
 - search_categories() : Recherche de catégories
 
 Toutes les réponses sont publiées sur le MessageBus.
-Phase 2.6 : Ajout timeout pour éviter blocages.
+: Ajout timeout pour éviter blocages.
 """
 
 import asyncio
@@ -28,7 +28,7 @@ class HelixReadOnlyClient:
     """
     Client Helix pour requêtes publiques (App Token)
     
-    Phase 2.6 : Ajout timeout handling pour éviter blocages LLM.
+    : Ajout timeout handling pour éviter blocages LLM.
     """
     
     def __init__(self, twitch: Twitch, bus: MessageBus, helix_timeout: float = 8.0):
@@ -56,7 +56,7 @@ class HelixReadOnlyClient:
         try:
             LOGGER.debug(f"[HELIX] get_stream({user_login})")
             
-            # Phase 2.6: Wrap avec timeout
+            # Wrap avec timeout
             async def _fetch():
                 streams = []
                 async for stream in self.twitch.get_streams(user_login=[user_login]):

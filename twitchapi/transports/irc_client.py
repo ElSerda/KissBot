@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-IRC Client - Phase 2.6 (avec timeout handling)
+IRC Client - (avec timeout handling)
 Client IRC Twitch complet:
 - Écoute chat IRC → Publie sur chat.inbound
 - Écoute chat.outbound → Envoie via IRC
@@ -23,7 +23,7 @@ LOGGER = logging.getLogger(__name__)
 
 class IRCClient:
     """
-    Client IRC Twitch (Phase 2.4 - Bidirectionnel)
+    Client IRC Twitch (- Bidirectionnel)
     - Rejoint les channels
     - Écoute les messages → chat.inbound
     - Envoie les messages ← chat.outbound
@@ -58,11 +58,11 @@ class IRCClient:
         self._running = False
         self._joined_channels = set()  # Track channels we've already joined
         
-        # Phase 3.5: Track bot's permissions per channel (RAM cache)
+        # Track bot's permissions per channel (RAM cache)
         self._channel_permissions = {}   # channel -> {is_mod, is_vip, rate_limit, safe_delay}
         self._vip_status_cache = {}      # Glue code: Cache VIP status (pyTwitchAPI only caches mod/sub)
         
-        # Phase 2.4: Subscribe aux messages sortants
+        # Subscribe aux messages sortants
         self.bus.subscribe("chat.outbound", self._handle_outbound_message)
         
         LOGGER.info(f"IRCClient init pour {bot_login} sur {len(channels)} channels (timeout={irc_send_timeout}s)")
@@ -79,7 +79,7 @@ class IRCClient:
             # Créer instance Chat avec le user token
             self.chat = await Chat(self.twitch)
             
-            # Phase 3.5: Monkey-patch pyTwitchAPI pour cacher VIP depuis USERSTATE
+            # Monkey-patch pyTwitchAPI pour cacher VIP depuis USERSTATE
             # pyTwitchAPI cache mod/sub mais ignore vip dans _handle_user_state
             # → On wrappe le handler original pour extraire vip AVANT qu'il ne l'ignore
             original_handle_user_state = self.chat._handle_user_state
@@ -162,7 +162,7 @@ class IRCClient:
         if channel not in self._joined_channels:
             self._joined_channels.add(channel)
             
-            # Phase 3.5: Détecter et cacher les permissions
+            # Détecter et cacher les permissions
             # Note: VIP sera détecté via USERSTATE (monkey-patched handler)
             await self._update_channel_permissions(channel)
     
@@ -177,7 +177,7 @@ class IRCClient:
     
     async def _on_room_state_change(self, room_event: EventData) -> None:
         """
-        Phase 3.5: Callback quand l'état du room change
+        Callback quand l'état du room change
         Détecte les changements de permissions (mod/unmod, vip/unvip)
         """
         channel = room_event.room.name
@@ -187,7 +187,7 @@ class IRCClient:
     
     async def _on_notice(self, notice_event: EventData) -> None:
         """
-        Phase 3.5: Callback pour les NOTICE IRC
+        Callback pour les NOTICE IRC
         Détecte les mod/unmod/vip/unvip du bot
         """
         # NOTICE contient les messages système Twitch
@@ -214,7 +214,7 @@ class IRCClient:
     
     async def _update_channel_permissions(self, channel: str, log_change: bool = False) -> None:
         """
-        Phase 3.5: Détecte et met à jour les permissions du bot sur un channel
+        Détecte et met à jour les permissions du bot sur un channel
         Utilise Helix API get_moderated_channels() pour détection fiable.
         
         Args:
@@ -234,7 +234,7 @@ class IRCClient:
             LOGGER.warning(f"⚠️  Helix API get_moderated_channels() failed, fallback IRC: {e}")
             is_mod = self.chat.is_mod(channel)
         
-        # Phase 3.5: VIP detection via glue code (pyTwitchAPI doesn't cache VIP)
+        # VIP detection via glue code (pyTwitchAPI doesn't cache VIP)
         # Notre cache VIP est alimenté par les messages sortants du bot (_on_message)
         is_vip = self._vip_status_cache.get(channel.lower(), False)
         
@@ -335,7 +335,7 @@ class IRCClient:
     
     async def _handle_outbound_message(self, msg: OutboundMessage) -> None:
         """
-        Phase 2.6: Envoie un message via IRC avec timeout
+        Envoie un message via IRC avec timeout
         
         Args:
             msg: Message à envoyer
@@ -348,7 +348,7 @@ class IRCClient:
             # Log avant envoi
             LOGGER.info(f"📤 Tentative envoi IRC à #{msg.channel}: {msg.text}")
             
-            # Phase 2.6: Envoyer avec timeout pour éviter blocages
+            # Envoyer avec timeout pour éviter blocages
             await asyncio.wait_for(
                 self.chat.send_message(msg.channel, msg.text),
                 timeout=self.irc_send_timeout
@@ -372,7 +372,7 @@ class IRCClient:
     
     async def get_permissions(self, channel: str) -> dict:
         """
-        Phase 3.5: Récupère les permissions du bot sur un channel
+        Récupère les permissions du bot sur un channel
         
         Args:
             channel: Nom du channel (sans #)
@@ -399,7 +399,7 @@ class IRCClient:
     
     def get_all_permissions(self) -> dict[str, dict]:
         """
-        Phase 3.5: Retourne les permissions pour tous les channels
+        Retourne les permissions pour tous les channels
         
         Returns:
             Dict {channel: permissions_dict}
@@ -413,7 +413,7 @@ class IRCClient:
         exclude_channel: Optional[str] = None
     ) -> tuple[int, int]:
         """
-        Phase 3.5: Broadcast un message sur tous les channels connectés
+        Broadcast un message sur tous les channels connectés
         
         Args:
             message: Le message à broadcaster

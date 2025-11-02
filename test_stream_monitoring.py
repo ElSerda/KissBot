@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test StreamMonitor + StreamAnnouncer
-Phase 3.3 - Quick validation test
+- Quick validation test
 """
 import asyncio
 import logging

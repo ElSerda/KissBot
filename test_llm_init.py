@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test Phase 3.2 - Vérification LLMHandler sans vraie clé OpenAI
+Test - Vérification LLMHandler sans vraie clé OpenAI
 """
 import yaml
 from backends.llm_handler import LLMHandler
@@ -14,7 +14,7 @@ def test_llm_handler_init():
         config = yaml.safe_load(f)
     
     print("=" * 80)
-    print("TEST Phase 3.2 - LLMHandler Initialization")
+    print("TEST - LLMHandler Initialization")
     print("=" * 80)
     
     # Check si clé OpenAI configurée
