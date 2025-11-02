@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-System Monitor - Lightweight CPU/RAM monitoring avec JSON logging
+System Monitor - Lightweight CPU/RAM monitoring avec JSONL logging
 
-Log les métriques système du bot dans un fichier JSON pour monitoring externe.
-Permet de `cat metrics.json` ou `tail -f metrics.json` dans un terminal séparé.
+Log les métriques système du bot dans un fichier JSONL pour monitoring externe.
+Permet de `cat metrics.jsonl` ou `tail -f metrics.jsonl` dans un terminal séparé.
 """
 import asyncio
 import json
@@ -74,27 +74,27 @@ LOGGER = logging.getLogger(__name__)
 
 class SystemMonitor:
     """
-    Monitor CPU/RAM/Threads du bot et log dans JSON file.
+    Monitor CPU/RAM/Threads du bot et log dans JSONL file.
     
     Architecture KISS:
-        - 1 ligne JSON par sample
+        - 1 ligne JSON par sample (JSONL format)
         - tail -f friendly (newline-delimited JSON)
         - Configurable interval
         - Alertes automatiques si seuils dépassés
     
     Usage:
-        monitor = SystemMonitor(interval=60, log_file="metrics.json")
+        monitor = SystemMonitor(interval=60, log_file="metrics.jsonl")
         asyncio.create_task(monitor.start())
     
     Lecture externe:
-        tail -f metrics.json
-        cat metrics.json | jq '.[] | select(.cpu > 50)'  # Filtrer high CPU
+        tail -f metrics.jsonl
+        cat metrics.jsonl | jq -c 'select(.cpu_percent > 50)'  # Filtrer high CPU
     """
     
     def __init__(
         self,
         interval: int = 60,
-        log_file: str = "metrics.json",
+        log_file: str = "metrics.jsonl",
         cpu_threshold: float = 50.0,
         ram_threshold_mb: int = 500
     ):
@@ -103,7 +103,7 @@ class SystemMonitor:
         
         Args:
             interval: Seconds between samples (default: 60s, use 5-10 for dev)
-            log_file: JSON log file path (default: metrics.json)
+            log_file: JSONL log file path (default: metrics.jsonl)
             cpu_threshold: CPU % warning threshold (default: 50%)
             ram_threshold_mb: RAM MB warning threshold (default: 500MB)
         """

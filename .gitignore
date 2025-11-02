@@ -36,7 +36,7 @@ htmlcov/
 badges/
 
 # Auto-generated metrics
-metrics.json
+metrics.jsonl
 
 # Debug scripts (commit README only)
 debug/*.log
