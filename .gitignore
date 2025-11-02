@@ -60,9 +60,12 @@ cache/
 
 # Backups & Archives
 _archive/
+_archive_v3_user_tokens/
+_scripts_legacy/
 *_backup*/
-*.tar.gz
 *.backup
+*.old
+*.tar.gz
 
 # Config secrets
 config.yaml
