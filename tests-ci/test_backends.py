@@ -10,7 +10,7 @@ from unittest.mock import Mock, AsyncMock, patch
 class TestGameCache:
     """Tests du cache de jeux standard"""
     
-    def test_game_cache_imports(self):
+    def test_game_cache_imports(self, mock_config):
         """Vérifie que GameCache s'importe"""
         try:
             from backends.game_cache import GameCache
@@ -18,24 +18,22 @@ class TestGameCache:
         except ImportError:
             pytest.skip("GameCache n'existe pas")
     
-    def test_game_cache_instantiation(self):
+    def test_game_cache_instantiation(self, mock_config):
         """Test l'instantiation du cache"""
         try:
             from backends.game_cache import GameCache
             
-            config = {'rawg': {'api_key': 'test_key'}, 'cache': {'max_size': 100}}
-            cache = GameCache(config)
+            cache = GameCache(mock_config)
             assert cache is not None
         except ImportError:
             pytest.skip("GameCache n'existe pas")
     
-    def test_game_cache_basic_operations(self):
+    def test_game_cache_basic_operations(self, mock_config):
         """Test set/get du cache de jeux"""
         try:
             from backends.game_cache import GameCache
             
-            config = {'rawg': {'api_key': 'test_key'}, 'cache': {'max_size': 100}}
-            cache = GameCache(config)
+            cache = GameCache(mock_config)
             
             game_data = {
                 'id': 123,
@@ -56,7 +54,7 @@ class TestGameCache:
 class TestQuantumGameCache:
     """Tests du cache de jeux quantique"""
     
-    def test_quantum_game_cache_imports(self):
+    def test_quantum_game_cache_imports(self, mock_config):
         """Vérifie que QuantumGameCache s'importe"""
         try:
             from backends.quantum_game_cache import QuantumGameCache
@@ -64,16 +62,12 @@ class TestQuantumGameCache:
         except ImportError:
             pytest.skip("QuantumGameCache n'existe pas")
     
-    def test_quantum_game_cache_instantiation(self):
+    def test_quantum_game_cache_instantiation(self, mock_config):
         """Test l'instantiation du cache quantique"""
         try:
             from backends.quantum_game_cache import QuantumGameCache
             
-            config = {
-                'rawg': {'api_key': 'test_key_123'},
-                'cache': {'max_size': 100, 'ttl_seconds': 3600}
-            }
-            cache = QuantumGameCache(config)
+            cache = QuantumGameCache(mock_config)
             assert cache is not None
         except ValueError as e:
             if "API key" in str(e):
@@ -82,16 +76,12 @@ class TestQuantumGameCache:
         except ImportError:
             pytest.skip("QuantumGameCache n'existe pas")
     
-    def test_quantum_game_cache_quantum_state(self):
+    def test_quantum_game_cache_quantum_state(self, mock_config):
         """Test que le cache utilise des états quantiques"""
         try:
             from backends.quantum_game_cache import QuantumGameCache
             
-            config = {
-                'rawg': {'api_key': 'test_key_123'},
-                'cache': {'max_size': 100, 'ttl_seconds': 3600}
-            }
-            cache = QuantumGameCache(config)
+            cache = QuantumGameCache(mock_config)
             
             game_data = {'id': 456, 'name': 'Quantum Game'}
             cache.set('quantum_test', game_data, verified=True)
@@ -110,7 +100,7 @@ class TestQuantumGameCache:
 class TestGameLookup:
     """Tests de l'API RAWG lookup"""
     
-    def test_game_lookup_imports(self):
+    def test_game_lookup_imports(self, mock_config):
         """Vérifie que GameLookup s'importe"""
         try:
             from backends.game_lookup import GameLookup
@@ -118,13 +108,12 @@ class TestGameLookup:
         except ImportError:
             pytest.skip("GameLookup n'existe pas")
     
-    def test_game_lookup_instantiation(self):
+    def test_game_lookup_instantiation(self, mock_config):
         """Test l'instantiation avec clé API"""
         try:
             from backends.game_lookup import GameLookup
             
-            config = {'rawg': {'api_key': 'test_key_123'}}
-            lookup = GameLookup(config)
+            lookup = GameLookup(mock_config)
             assert lookup is not None
         except ValueError as e:
             if "API key" in str(e):
@@ -135,13 +124,12 @@ class TestGameLookup:
     
     @pytest.mark.asyncio
     @pytest.mark.slow
-    async def test_game_lookup_search(self):
+    async def test_game_lookup_search(self, mock_config):
         """Test la recherche de jeu (avec mock si pas d'API key)"""
         try:
             from backends.game_lookup import GameLookup
             
-            config = {'rawg': {'api_key': 'test_key_123'}}
-            lookup = GameLookup(config)
+            lookup = GameLookup(mock_config)
             
             # Mock de la requête HTTP
             with patch('aiohttp.ClientSession.get') as mock_get:
@@ -165,13 +153,12 @@ class TestGameLookup:
         except ImportError:
             pytest.skip("GameLookup n'existe pas")
     
-    def test_game_lookup_has_cache(self):
+    def test_game_lookup_has_cache(self, mock_config):
         """Vérifie que GameLookup utilise un cache"""
         try:
             from backends.game_lookup import GameLookup
             
-            config = {'rawg': {'api_key': 'test_key_123'}}
-            lookup = GameLookup(config)
+            lookup = GameLookup(mock_config)
             
             # Devrait avoir un cache (game_cache ou quantum)
             assert hasattr(lookup, 'cache') or hasattr(lookup, 'game_cache')
@@ -187,12 +174,12 @@ class TestGameLookup:
 class TestBackendsInit:
     """Tests du module backends/__init__.py"""
     
-    def test_backends_module_imports(self):
+    def test_backends_module_imports(self, mock_config):
         """Vérifie que le module backends s'importe"""
         import backends
         assert backends is not None
     
-    def test_backends_exports(self):
+    def test_backends_exports(self, mock_config):
         """Vérifie les exports du module backends"""
         try:
             import backends

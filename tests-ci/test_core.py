@@ -85,13 +85,11 @@ class TestRateLimiter:
             
             limiter = RateLimiter(per30_non_verified=2)  # Limit to 2 per 30s
             
-            # Premier appel OK
+            # Premier appel OK (enregistre automatiquement)
             assert limiter.can_send("channel1", cost=1, is_mod=False) is True
-            limiter.record_send("channel1")
             
-            # Deuxième appel OK
+            # Deuxième appel OK (enregistre automatiquement)
             assert limiter.can_send("channel1", cost=1, is_mod=False) is True
-            limiter.record_send("channel1")
             
             # Troisième appel devrait être bloqué (limite atteinte)
             assert limiter.can_send("channel1", cost=1, is_mod=False) is False

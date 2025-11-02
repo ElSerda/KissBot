@@ -25,8 +25,15 @@ def find_game_in_cache(user_query: str, game_cache, threshold: float = 80.0) -> 
     best_match = None
     best_score = 0.0
 
-    for cache_key, cache_entry in game_cache.cache.items():
-        game_data = cache_entry.get("data", {})
+    # Adapté pour GameCache quantum
+    for cache_key, quantum_state in game_cache.quantum_states.items():
+        superpositions = quantum_state.get("superpositions", [])
+        
+        # Prendre la première superposition (meilleur score)
+        if not superpositions:
+            continue
+            
+        game_data = superpositions[0].get("game", {})
         game_name = game_data.get("name", "")
 
         if not game_name:
