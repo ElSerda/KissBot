@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.5.2] - 2025-11-02
+
+### 🐛 Bug Fixes - Mention Detection & Deduplication
+
+#### Fix: Mention Detection - False Positives
+- **Problem**: `"le serda_bot"` was incorrectly detected as mention → text became `"le ?"`
+- **Root cause**: Regex matched bot_name anywhere in message, even mid-sentence
+- **Solution**: Strict position rules for bot_name detection:
+  - ✅ `@bot_name`: Accepted anywhere in message
+  - ✅ `bot_name` at **start** or **end** of message only
+  - ❌ `le bot_name` mid-sentence: Rejected
+
+**Example:**
+```python
+# Before
+"comment qu'il est codé le serda_bot ?" → Mention detected ❌
+# After
+"comment qu'il est codé le serda_bot ?" → No mention ✅
+"@serda_bot comment ça va ?" → Mention detected ✅
+"serda_bot tu peux m'aider ?" → Mention detected ✅
+```
+
+#### Fix: Message Deduplication - Repeated Messages Ignored
+- **Problem**: User sending same message twice → 2nd message silently ignored
+- **Root cause**: Deduplication used `user_id:text` without timestamp
+- **Solution**: Added per-second timestamp to dedup key: `user_id:text:timestamp`
+
+**Impact:**
+- ✅ Duplicate messages within same second still blocked (IRC spam)
+- ✅ Repeated messages after 1+ seconds now processed correctly
+- ✅ Users can retry commands/mentions without waiting cache expiry
+
+**Files Changed:**
+- `intelligence/core.py`: `extract_mention_message()` - Position-based detection
+- `core/message_handler.py`: Dedup key includes `int(time.time())`
+
+#### Personality Prompt Refinement
+- **Changed**: Reformulated personality from self-description to action directives
+- **Before**: "Tu es serda_bot, un bot Twitch codé en Python..."
+- **After**: "Nom: serda_bot. Tech: Python. Ton: drôle, sarcastique..."
+- **Goal**: Prevent LLM from reciting prompt verbatim when asked vague meta-questions
+- **Result**: More action-oriented behavior, less self-referential responses
+
+---
+
 ## [3.5.1] - 2025-11-02
 
 ### ⚡ Performance - CPU Optimization

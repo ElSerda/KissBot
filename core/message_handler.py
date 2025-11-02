@@ -147,8 +147,10 @@ class MessageHandler:
         Args:
             msg: Message chat reçu
         """
-        # Phase 2.6: Deduplication - Créer ID unique basé sur user + text + timestamp approx
-        msg_id = f"{msg.user_id}:{msg.text}"
+        # Phase 2.6: Deduplication - Créer ID unique basé sur user + text + timestamp (secondes)
+        # Timestamp en secondes pour éviter duplicates dans la même seconde uniquement
+        msg_timestamp = int(time.time())
+        msg_id = f"{msg.user_id}:{msg.text}:{msg_timestamp}"
         
         if msg_id in self._processed_messages:
             LOGGER.debug(f"⏭️ Message déjà traité, skip: {msg.text[:30]}")

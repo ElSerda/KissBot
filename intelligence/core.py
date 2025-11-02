@@ -272,27 +272,32 @@ def extract_mention_message(message_content: str, bot_name: str) -> str | None:
 
     Returns:
         str: Message extrait ou None si invalide
+        
+    Règles de détection:
+    - Format @bot_name: Accepté n'importe où dans le message
+    - Format bot_name seul: Accepté UNIQUEMENT au début ou à la fin
     """
-    content_lower = message_content.lower()
-    bot_lower = bot_name.lower()
-
-    # Chercher @bot_name ou bot_name seul
-    if f"@{bot_lower}" in content_lower:
-        # Format @bot_name
-        pass
-    elif bot_lower in content_lower:
-        # Format bot_name seul
-        pass
-    else:
-        return None
-
-    # Extraire le texte en retirant la mention (case-insensitive)
-    # On doit trouver la position exacte dans le message original
     import re
     
-    # Pattern case-insensitive pour @bot_name ou bot_name
-    pattern = rf"@?{re.escape(bot_name)}"
-    message = re.sub(pattern, "", message_content, count=1, flags=re.IGNORECASE)
-    message = message.strip()
-
-    return message if message else None
+    content_lower = message_content.lower()
+    bot_lower = bot_name.lower()
+    
+    # Pattern 1: @bot_name (n'importe où)
+    pattern_at = rf"@{re.escape(bot_name)}\b"
+    if re.search(pattern_at, message_content, flags=re.IGNORECASE):
+        message = re.sub(pattern_at, "", message_content, count=1, flags=re.IGNORECASE)
+        return message.strip() if message.strip() else None
+    
+    # Pattern 2: bot_name au début du message (suivi d'un espace ou ponctuation)
+    pattern_start = rf"^{re.escape(bot_name)}\b"
+    if re.match(pattern_start, message_content, flags=re.IGNORECASE):
+        message = re.sub(pattern_start, "", message_content, count=1, flags=re.IGNORECASE)
+        return message.strip() if message.strip() else None
+    
+    # Pattern 3: bot_name à la fin du message (précédé d'un espace ou ponctuation)
+    pattern_end = rf"\b{re.escape(bot_name)}$"
+    if re.search(pattern_end, message_content, flags=re.IGNORECASE):
+        message = re.sub(pattern_end, "", message_content, count=1, flags=re.IGNORECASE)
+        return message.strip() if message.strip() else None
+    
+    return None
