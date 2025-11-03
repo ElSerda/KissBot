@@ -358,6 +358,7 @@ class GameLookup:
             # 🎯 KISS Enhancement: Récupérer description Steam (FR puis EN en fallback)
             steam_description = None
             is_early_access = False
+            steam_metacritic = None  # 🏆 Metacritic depuis appdetails
             app_id = game.get("id")
             if app_id:
                 # Essayer français d'abord
@@ -369,6 +370,16 @@ class GameLookup:
                     details_data = details_response.json()
                     game_details = details_data.get(str(app_id), {}).get("data", {})
                     steam_description = game_details.get("short_description", "")
+                    
+                    # 🏆 Récupérer Metacritic score (int)
+                    metacritic_data = game_details.get("metacritic", {})
+                    if metacritic_data and isinstance(metacritic_data, dict):
+                        score = metacritic_data.get("score")
+                        if score is not None:
+                            try:
+                                steam_metacritic = int(score)
+                            except (ValueError, TypeError):
+                                steam_metacritic = None
                     
                     # 🚧 Détecter Early Access via genres Steam (FR ou EN)
                     genres = game_details.get("genres", [])
@@ -398,7 +409,7 @@ class GameLookup:
 
             return {
                 "name": game.get("name", ""),
-                "metacritic": game.get("metascore"),
+                "metacritic": steam_metacritic,  # 🏆 Int depuis appdetails
                 "platforms": platforms,
                 # 🇫🇷 Description en français de Steam !
                 "description": steam_description,
