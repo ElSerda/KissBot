@@ -652,9 +652,11 @@ class GameLookup:
         if result.publishers:
             output += f" - 📦 {', '.join(result.publishers[:2])}"
         
-        # Notes et plateformes
+        # Notes et plateformes (tout normalisé sur /5)
         if result.metacritic:
-            output += f" - 🏆 {result.metacritic}/100"
+            # Convertir Metacritic /100 → /5
+            rating_normalized = result.metacritic / 20.0
+            output += f" - ⭐ {rating_normalized:.1f}/5"
         elif result.rating_rawg > 0:
             output += f" - ⭐ {result.rating_rawg:.1f}/5"
         if result.platforms:

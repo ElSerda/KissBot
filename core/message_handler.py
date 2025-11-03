@@ -355,21 +355,41 @@ class MessageHandler:
                 response_text = f"@{msg.user_login} ❌ Game not found: {game_name}"
             else:
                 # Format compact pour Twitch chat
-                rating_str = f"{game.rating_rawg:.1f}" if game.rating_rawg > 0 else "N/A"
                 year_str = game.year if game.year != "?" else "?"
                 
-                # Platforms (max 3)
-                platforms = game.platforms[:3] if game.platforms else []
-                platforms_str = ", ".join(platforms) if platforms else "Unknown"
+                # 🎮 Base: Nom + Année + Early Access
+                response_text = f"@{msg.user_login} 🎮 {game.name}"
+                if game.is_early_access:
+                    response_text += " 🚧"
+                response_text += f" ({year_str})"
                 
-                response_text = (
-                    f"@{msg.user_login} 🎮 {game.name} ({year_str}) "
-                    f"⭐ {rating_str}/5 | {platforms_str}"
-                )
+                # 🎨 Développeurs + 📦 Éditeurs
+                if game.developers:
+                    response_text += f" - 🎨 {', '.join(game.developers[:2])}"
+                if game.publishers:
+                    response_text += f" - 📦 {', '.join(game.publishers[:2])}"
                 
-                # Ajouter metacritic si disponible
+                # ⭐ Rating unifié sur /5 (priorité Metacritic)
                 if game.metacritic and game.metacritic > 0:
-                    response_text += f" | MC: {game.metacritic}"
+                    # Convertir Metacritic /100 → /5
+                    rating_normalized = game.metacritic / 20.0
+                    response_text += f" - ⭐ {rating_normalized:.1f}/5"
+                elif game.rating_rawg > 0:
+                    response_text += f" - ⭐ {game.rating_rawg:.1f}/5"
+                
+                # 🕹️ Platforms
+                platforms = game.platforms[:3] if game.platforms else []
+                if platforms:
+                    response_text += f" - 🕹️ {', '.join(platforms)}"
+                
+                # 📝 Description (si espace disponible)
+                if game.summary:
+                    max_summary_len = 450 - len(response_text)
+                    if max_summary_len > 50:
+                        summary = game.summary[:max_summary_len]
+                        if len(game.summary) > max_summary_len:
+                            summary += "..."
+                        response_text += f" | {summary}"
             
             await self.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,
