@@ -143,6 +143,17 @@ class MessageHandler:
         Args:
             msg: Message chat reçu
         """
+        # Ignorer les messages des autres bots
+        KNOWN_BOTS = [
+            'nightbot', 'streamelements', 'streamlabs', 'moobot', 'fossabot',
+            'wizebot', 'botisimo', 'cloudbot', 'deepbot', 'ankhbot',
+            'phantombot', 'coebot', 'ohbot', 'revlobot', 'vivbot'
+        ]
+        
+        if msg.user_login.lower() in KNOWN_BOTS:
+            LOGGER.debug(f"🤖 Ignoring bot message from {msg.user_login}")
+            return
+        
         # Deduplication - Créer ID unique basé sur user + text + timestamp (secondes)
         # Timestamp en secondes pour éviter duplicates dans la même seconde uniquement
         msg_timestamp = int(time.time())
