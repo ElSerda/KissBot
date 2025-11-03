@@ -354,42 +354,22 @@ class MessageHandler:
             if not game:
                 response_text = f"@{msg.user_login} ❌ Game not found: {game_name}"
             else:
-                # Format compact pour Twitch chat
-                year_str = game.year if game.year != "?" else "?"
+                # Utiliser format_result() pour cohérence avec !gc
+                game_info = self.game_lookup.format_result(game, compact=True)
                 
-                # 🎮 Base: Nom + Année + Early Access
-                response_text = f"@{msg.user_login} 🎮 {game.name}"
-                if game.is_early_access:
-                    response_text += " 🚧"
-                response_text += f" ({year_str})"
-                
-                # 🎨 Développeurs + 📦 Éditeurs
-                if game.developers:
-                    response_text += f" - 🎨 {', '.join(game.developers[:2])}"
-                if game.publishers:
-                    response_text += f" - 📦 {', '.join(game.publishers[:2])}"
-                
-                # ⭐ Rating unifié sur /5 (priorité Metacritic)
-                if game.metacritic and game.metacritic > 0:
-                    # Convertir Metacritic /100 → /5
-                    rating_normalized = game.metacritic / 20.0
-                    response_text += f" - ⭐ {rating_normalized:.1f}/5"
-                elif game.rating_rawg > 0:
-                    response_text += f" - ⭐ {game.rating_rawg:.1f}/5"
-                
-                # 🕹️ Platforms
-                platforms = game.platforms[:3] if game.platforms else []
-                if platforms:
-                    response_text += f" - 🕹️ {', '.join(platforms)}"
-                
-                # 📝 Description (si espace disponible)
+                # Ajouter description si disponible
+                prefix = f"@{msg.user_login} {game_info}"
                 if game.summary:
-                    max_summary_len = 450 - len(response_text)
+                    max_summary_len = 450 - len(prefix) - 3  # -3 pour " | "
                     if max_summary_len > 50:
                         summary = game.summary[:max_summary_len]
                         if len(game.summary) > max_summary_len:
                             summary += "..."
-                        response_text += f" | {summary}"
+                        response_text = f"{prefix} | {summary}"
+                    else:
+                        response_text = prefix
+                else:
+                    response_text = prefix
             
             await self.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,
@@ -449,7 +429,7 @@ class MessageHandler:
                         # Ajouter la description si disponible
                         if game.summary:
                             # Calculer l'espace disponible (limite Twitch ~500 chars)
-                            prefix = f"@{msg.user_login} 🎮 {msg.channel} joue actuellement à {game_info} | "
+                            prefix = f"@{msg.user_login} {msg.channel} joue actuellement à {game_info} | "
                             max_summary_len = 450 - len(prefix)  # Marge de sécurité
                             
                             # Tronquer intelligemment (phrase complète si possible)
@@ -469,19 +449,19 @@ class MessageHandler:
                         else:
                             # Fallback sur viewers si pas de description
                             response_text = (
-                                f"@{msg.user_login} 🎮 {msg.channel} joue actuellement à "
+                                f"@{msg.user_login} {msg.channel} joue actuellement à "
                                 f"{game_info} ({viewer_count} viewers)"
                             )
                     else:
                         # Fallback si enrichissement échoue
                         response_text = (
-                            f"@{msg.user_login} 🎮 {msg.channel} joue actuellement à "
+                            f"@{msg.user_login} {msg.channel} joue actuellement à "
                             f"**{game_name}** ({viewer_count} viewers)"
                         )
                 else:
                     # Pas de GameLookup configuré
                     response_text = (
-                        f"@{msg.user_login} 🎮 {msg.channel} joue actuellement à "
+                        f"@{msg.user_login} {msg.channel} joue actuellement à "
                         f"**{game_name}** ({viewer_count} viewers)"
                     )
             else:

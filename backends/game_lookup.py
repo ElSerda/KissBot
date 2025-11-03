@@ -648,9 +648,11 @@ class GameLookup:
         
         # Développeurs/Éditeurs (prioritaire)
         if result.developers:
-            output += f" - 🎨 {', '.join(result.developers[:2])}"
+            dev_names = ', '.join(result.developers[:2])
+            output += f" - Dev: {dev_names}"
         if result.publishers:
-            output += f" - 📦 {', '.join(result.publishers[:2])}"
+            pub_names = ', '.join(result.publishers[:2])
+            output += f" - Pub: {pub_names}"
         
         # Notes et plateformes (tout normalisé sur /5)
         if result.metacritic:
