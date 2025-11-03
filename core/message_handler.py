@@ -208,6 +208,8 @@ class MessageHandler:
             await self._cmd_ask(msg, args)
         elif command == "!wiki":
             await self._cmd_wiki(msg, args)
+        elif command == "!kissanniv":
+            await self._cmd_kissanniv(msg, args)
         elif command == "!qgame":
             await self._cmd_qgame(msg, args)
         elif command == "!collapse":
@@ -655,6 +657,48 @@ Réponds en te basant sur ces informations factuelles."""
         except Exception as e:
             LOGGER.error(f"❌ Error processing !wiki: {e}", exc_info=True)
             response_text = f"@{msg.user_login} ❌ Erreur lors de la recherche Wikipedia"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+    
+    async def _cmd_kissanniv(self, msg: ChatMessage, args: str) -> None:
+        """
+        Commande !kissanniv [name] - Souhaiter un joyeux anniversaire
+        
+        Args:
+            msg: Message original
+            args: Nom de la personne (optionnel)
+        """
+        try:
+            from commands.user_commands.kissanniv import cmd_kissanniv
+            await cmd_kissanniv(self.bus, msg, args)
+        except Exception as e:
+            LOGGER.error(f"❌ Error processing !kissanniv: {e}", exc_info=True)
+            response_text = f"@{msg.user_login} ❌ Erreur lors de l'envoi du message d'anniversaire"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+    
+    async def _cmd_anniv(self, msg: ChatMessage, name: str) -> None:
+        """
+        Commande !anniv <name> - Souhaiter un joyeux anniversaire
+        
+        Args:
+            msg: Message original
+            name: Nom de la personne
+        """
+        try:
+            from commands.user_commands.anniv import cmd_anniv
+            await cmd_anniv(msg, name, self.bus, self.config)
+        except Exception as e:
+            LOGGER.error(f"❌ Error processing !anniv: {e}", exc_info=True)
+            response_text = f"@{msg.user_login} ❌ Erreur lors de l'envoi du message d'anniversaire"
             await self.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,
                 channel_id=msg.channel_id,
