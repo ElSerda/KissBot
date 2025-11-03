@@ -441,6 +441,49 @@ ollama pull qwen2.5:7b-instruct
 - **OLLAMA_LINUX_SETUP.md** - Complete Linux/Ollama guide with systemd service
 - **COMPLETE_API_SETUP_GUIDE.md** - All APIs configuration
 
+### 4. Run the Bot
+
+**Option A: Direct Python**
+```bash
+python main.py
+```
+
+**Option B: Management Script (Recommended for Production)**
+
+The bot includes a management script for easy start/stop/restart:
+
+```bash
+# Make executable
+chmod +x kissbot.sh
+
+# Start bot in background
+./kissbot.sh start
+
+# Check status (shows PID, uptime, memory)
+./kissbot.sh status
+
+# View logs (last 50 lines)
+./kissbot.sh logs
+
+# Follow logs in real-time
+./kissbot.sh logs -f
+
+# Restart bot
+./kissbot.sh restart
+
+# Stop bot
+./kissbot.sh stop
+```
+
+**Features:**
+- ✅ Runs in background with nohup
+- ✅ Graceful shutdown (10s timeout)
+- ✅ PID tracking
+- ✅ Status monitoring (uptime, memory usage)
+- ✅ Log management
+
+**Perfect for VPS/Production deployment!** 🚀
+
 ### 🔐 OAuth Token Auto-Refresh
 
 **NEW in v3.4.1**: KissBot automatically refreshes expired tokens!
