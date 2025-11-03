@@ -662,8 +662,8 @@ class GameLookup:
         if result.platforms:
             output += f" - 🕹️ {', '.join(result.platforms[:3])}"
         
-        # Description (summary) si disponible
-        if result.summary:
+        # Description (summary) si disponible - SEULEMENT en mode non-compact
+        if not compact and result.summary:
             # Limiter à 150 caractères pour Twitch
             summary_short = result.summary[:150].strip()
             if len(result.summary) > 150:
