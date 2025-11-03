@@ -1,94 +1,76 @@
 """
 Tests de chargement des commandes
 Vérifie que toutes les commandes sont correctement enregistrées
+Architecture: pytwitchAPI (pas TwitchIO)
 """
 import pytest
 
 
-class TestCommandsStructure:
-    """Tests de structure des commandes"""
+class TestCommandsRegistry:
+    """Tests du registry des commandes"""
     
-    def test_utils_commands_exist(self):
-        """Vérifie que UtilsCommands existe et est un Component"""
-        from commands.utils_commands import UtilsCommands
-        from twitchio.ext import commands
-        
-        assert issubclass(UtilsCommands, commands.Component)
+    def test_registry_import(self):
+        """Vérifie que le registry peut être importé"""
+        from commands.registry import register_all_commands
+        assert callable(register_all_commands)
     
-    def test_game_commands_exist(self):
-        """Vérifie que GameCommands existe et est un Component"""
-        from commands.game_commands import GameCommands
-        from twitchio.ext import commands
+    def test_user_commands_exist(self):
+        """Vérifie que les commandes utilisateur existent"""
+        from commands.user_commands.intelligence import handle_ask, handle_joke
+        from commands.user_commands.game import handle_gc, handle_gi
+        from commands.user_commands.wiki import handle_wiki
         
-        assert issubclass(GameCommands, commands.Component)
+        assert callable(handle_ask)
+        assert callable(handle_joke)
+        assert callable(handle_gc)
+        assert callable(handle_gi)
+        assert callable(handle_wiki)
     
-    def test_intelligence_commands_exist(self):
-        """Vérifie que IntelligenceCommands existe et est un Component"""
-        from commands.intelligence_commands import IntelligenceCommands
-        from twitchio.ext import commands
+    def test_bot_commands_exist(self):
+        """Vérifie que les commandes bot existent"""
+        from commands.bot_commands.system import handle_ping, handle_uptime
         
-        assert issubclass(IntelligenceCommands, commands.Component)
-    
-    def test_translation_commands_exist(self):
-        """Vérifie que TranslationCommands existe et est un Component"""
-        from commands.translation import TranslationCommands
-        from twitchio.ext import commands
-        
-        assert issubclass(TranslationCommands, commands.Component)
+        assert callable(handle_ping)
+        assert callable(handle_uptime)
 
 
-class TestCommandsCount:
-    """Tests du nombre de commandes"""
+class TestBackendHandlers:
+    """Tests des backends"""
     
-    def test_expected_commands_count(self):
-        """Vérifie qu'on a bien les commandes principales dans MessageHandler"""
-        from pathlib import Path
+    def test_wikipedia_handler(self):
+        """Vérifie que le Wikipedia handler existe"""
+        from backends.wikipedia_handler import search_wikipedia, is_valid_wiki_query
         
-        # MessageBus architecture: commands handled in message_handler.py
-        handler_file = Path("core/message_handler.py")
-        content = handler_file.read_text()
+        assert callable(search_wikipedia)
+        assert callable(is_valid_wiki_query)
+    
+    def test_game_lookup(self):
+        """Vérifie que le game lookup existe"""
+        from backends.game_lookup import GameLookup
         
-        # Count command handlers (elif command == "!...")
-        import re
-        commands = re.findall(r'elif command == "(![\w]+)"', content)
-        
-        # Expected commands: !ping, !uptime, !stats, !help, !gi, !gc, !ask, 
-        # !qgame, !collapse, !quantum, !decoherence, !kisscharity
-        command_count = len(set(commands))  # Unique commands
-        
-        assert command_count >= 10, f"Seulement {command_count} commandes trouvées (attendu: ≥10)"
-        assert command_count <= 20, f"Trop de commandes: {command_count} (attendu: ≤20)"
+        assert GameLookup is not None
 
 
 class TestCriticalCommands:
     """Tests des commandes critiques"""
     
-    def test_ping_command_exists(self):
-        """Vérifie que !ping existe"""
-        from commands.utils_commands import UtilsCommands
-        utils = UtilsCommands()
-        assert hasattr(utils, 'ping_command')
-    
     def test_ask_command_exists(self):
         """Vérifie que !ask existe"""
-        from commands.intelligence_commands import IntelligenceCommands
-        intel = IntelligenceCommands()
-        assert hasattr(intel, 'ask_command')
+        from commands.user_commands.intelligence import handle_ask
+        assert callable(handle_ask)
     
-    def test_trad_command_exists(self):
-        """Vérifie que !trad existe"""
-        from commands.translation import TranslationCommands
-        trad = TranslationCommands()
-        assert hasattr(trad, 'translate_text')
+    def test_wiki_command_exists(self):
+        """Vérifie que !wiki existe"""
+        from commands.user_commands.wiki import handle_wiki
+        assert callable(handle_wiki)
     
-    def test_gameinfo_command_exists(self):
-        """Vérifie que !gameinfo existe"""
-        from commands.game_commands import GameCommands
-        game = GameCommands()
-        assert hasattr(game, 'game_command')
+    def test_game_commands_exist(self):
+        """Vérifie que !gi et !gc existent"""
+        from commands.user_commands.game import handle_gi, handle_gc
+        assert callable(handle_gi)
+        assert callable(handle_gc)
     
-    def test_gamecategory_command_exists(self):
-        """Vérifie que !gamecategory / !gc existe"""
-        from commands.game_commands import GameCommands
-        game = GameCommands()
-        assert hasattr(game, 'game_category_command')
+    def test_ping_command_exists(self):
+        """Vérifie que !ping existe"""
+        from commands.bot_commands.system import handle_ping
+        assert callable(handle_ping)

@@ -96,6 +96,11 @@ class EventSubClient:
         self._failed_offline_subs: List[Dict[str, str]] = []  # Subscriptions échouées (cost exceeded)
         self._retry_task: Optional[asyncio.Task] = None  # Background retry task
         
+        # Reconnection tracking (NEW - fix session expiry)
+        self._reconnect_task: Optional[asyncio.Task] = None
+        self._max_reconnect_attempts = 5
+        self._reconnect_delay = 10  # seconds
+        
         LOGGER.info(f"🔌 EventSubClient initialized for {len(channels)} channels")
     
     async def start(self):
@@ -154,6 +159,10 @@ class EventSubClient:
             if self._failed_offline_subs:
                 LOGGER.info(f"🔄 Starting retry task for {len(self._failed_offline_subs)} failed subscriptions...")
                 self._retry_task = asyncio.create_task(self._retry_failed_subscriptions())
+            
+            # Start health check task (NEW - monitor WebSocket connection)
+            self._reconnect_task = asyncio.create_task(self._health_check_loop())
+            LOGGER.info("🏥 Health check loop started")
         
         except Exception as e:
             LOGGER.error(f"❌ EventSub start failed: {e}")
@@ -298,6 +307,83 @@ class EventSubClient:
         
         LOGGER.info("✅ Retry task finished (no more failed subscriptions)")
     
+    async def _health_check_loop(self):
+        """
+        Health check loop pour détecter déconnexions WebSocket.
+        
+        Vérifie périodiquement l'état de la connexion EventSub.
+        Si déconnecté, tente de reconnecter automatiquement.
+        
+        IMPORTANT: Ce workaround est nécessaire car pyTwitchAPI peut échouer
+        à se reconnecter automatiquement quand la session WebSocket expire
+        (erreur "websocket transport session does not exist").
+        
+        Stratégie:
+            - Check toutes les 60s
+            - Si self.eventsub est None ou non connecté → reconnect
+            - Max 5 tentatives avec backoff exponentiel
+        """
+        check_interval = 60  # Check every 60s
+        reconnect_attempts = 0
+        
+        while self._running:
+            try:
+                await asyncio.sleep(check_interval)
+                
+                # Check if EventSub is still alive
+                if not self.eventsub or not self._running:
+                    LOGGER.warning("⚠️  Health check: EventSub connection lost!")
+                    
+                    if reconnect_attempts < self._max_reconnect_attempts:
+                        reconnect_attempts += 1
+                        LOGGER.info(f"🔄 Attempting reconnect ({reconnect_attempts}/{self._max_reconnect_attempts})...")
+                        
+                        try:
+                            # Stop proprement l'ancienne connexion
+                            if self.eventsub:
+                                try:
+                                    await self.eventsub.stop()
+                                except:
+                                    pass
+                            
+                            # Reset état
+                            self._subscription_ids.clear()
+                            self._running = False
+                            
+                            # Attendre avant reconnexion
+                            await asyncio.sleep(self._reconnect_delay)
+                            
+                            # Restart complet
+                            await self.start()
+                            
+                            LOGGER.info("✅ Reconnection successful!")
+                            reconnect_attempts = 0  # Reset counter on success
+                            
+                        except Exception as e:
+                            LOGGER.error(f"❌ Reconnect attempt {reconnect_attempts} failed: {e}")
+                            
+                            if reconnect_attempts >= self._max_reconnect_attempts:
+                                LOGGER.error("❌ Max reconnect attempts reached, giving up")
+                                LOGGER.error("⚠️  Manual restart or polling fallback required")
+                                self._running = False
+                                break
+                    else:
+                        LOGGER.error("❌ EventSub permanently disconnected, health check stopped")
+                        break
+                else:
+                    # Connection OK, reset attempt counter
+                    if reconnect_attempts > 0:
+                        reconnect_attempts = 0
+                
+            except asyncio.CancelledError:
+                LOGGER.info("🛑 Health check loop cancelled")
+                break
+            except Exception as e:
+                LOGGER.error(f"❌ Health check error: {e}")
+                await asyncio.sleep(check_interval)
+        
+        LOGGER.info("🛑 Health check loop stopped")
+    
     async def stop(self):
         """
         Arrête EventSub WebSocket et nettoie les subscriptions.
@@ -308,6 +394,15 @@ class EventSubClient:
             return
         
         LOGGER.info("🛑 Stopping EventSub WebSocket...")
+        
+        # Cancel health check task if running (NEW)
+        if self._reconnect_task and not self._reconnect_task.done():
+            LOGGER.info("🛑 Cancelling health check task...")
+            self._reconnect_task.cancel()
+            try:
+                await self._reconnect_task
+            except asyncio.CancelledError:
+                pass
         
         # Cancel retry task if running
         if self._retry_task and not self._retry_task.done():
@@ -400,8 +495,16 @@ class EventSubClient:
         broadcaster_id = event_data.get("broadcaster_user_id")
         broadcaster_login = event_data.get("broadcaster_user_login")
         
+        # Ignorer les événements malformés sans broadcaster_id
+        if not broadcaster_id:
+            LOGGER.debug(
+                f"🔍 [EventSub] Ignoring stream.offline with missing broadcaster_id | "
+                f"Raw: {event_data}"
+            )
+            return
+        
         # Fallback: Si broadcaster_login absent, retrouver via broadcaster_id
-        if not broadcaster_login and broadcaster_id:
+        if not broadcaster_login:
             for channel, stored_id in self.broadcaster_ids.items():
                 if stored_id == broadcaster_id:
                     broadcaster_login = channel
@@ -409,11 +512,11 @@ class EventSubClient:
                     break
         
         if not broadcaster_login:
-            broadcaster_login = "unknown"
             LOGGER.warning(
-                f"⚠️ [EventSub] Received stream.offline with missing broadcaster_user_login "
-                f"(broadcaster_id={broadcaster_id})"
+                f"⚠️ [EventSub] Cannot resolve broadcaster_login for stream.offline "
+                f"(broadcaster_id={broadcaster_id}) | Known IDs: {list(self.broadcaster_ids.values())}"
             )
+            return
         
         LOGGER.info(f"⚫ [EventSub] {broadcaster_login} is now OFFLINE")
         

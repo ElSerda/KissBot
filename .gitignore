@@ -112,3 +112,36 @@ braindev/
 !braindev/README.md
 
 .ruff_cache/
+
+# 📊 Données sensibles / Exports
+metrics.jsonl
+*.jsonl
+analytics/
+
+# 🔬 Expérimentations non publiables
+experiments/
+sandbox/
+drafts/
+
+# 📦 Build artifacts
+*.whl
+*.tar.gz
+*.zip
+
+# 🎯 IDE et éditeur
+*.sublime-*
+*.code-workspace
+.history/
+
+# 🔐 Protection supplémentaire tokens/clés
+*.env.*
+!*.env.example
+secrets/
+private/
+*.private.*
+
+# 🔒 Δₛ³ Algorithm (BSL 1.1) - Separate repo
+delta-s3/
+!delta-s3/README.md
+!delta-s3/LICENSE
+!delta-s3/COMMERCIAL_LICENSE.md

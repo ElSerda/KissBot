@@ -494,14 +494,47 @@ KissBot/
 │
 ├── backends/                 # Supporting: API integrations
 │   ├── game_lookup.py       # RAWG + Steam fusion
-│   └── game_cache.py        # Game caching
+│   ├── game_cache.py        # Game caching
+│   ├── wikipedia_handler.py # Wikipedia search + optional filtering
+│   └── llm_handler.py       # LLM API wrapper
 │
 ├── core/                     # Supporting: Infrastructure
 │   ├── cache.py             # Generic TTL cache
-│   └── rate_limiter.py      # Per-user cooldowns
+│   ├── rate_limiter.py      # Per-user cooldowns
+│   └── message_handler.py   # Command routing + RAG
 │
 └── tests/                    # Testing suite
 
+---
+
+## � Wikipedia Search
+
+**Simple Wikipedia integration with caching.**
+
+### Features
+
+- 🔍 **Basic Wikipedia Search**: MediaWiki API via `wikipediaapi`
+- 📦 **Local Caching**: JSON cache (30 days TTL)
+- � **Multi-language**: Configurable via `config.yaml`
+- ⚡ **Fast Fallback**: Title variations (title/lower/upper)
+
+### Usage
+
+```python
+from backends.wikipedia_handler import search_wikipedia
+
+# Returns formatted string ready for IRC
+result = search_wikipedia("artificial intelligence", lang="en")
+# → "📚 Artificial intelligence: AI is intelligence demonstrated by machines..."
+```
+
+### Configuration
+
+```yaml
+# config.yaml
+wikipedia:
+  lang: fr  # Default language (en, fr, es, etc.)
+```
 
 ---
 

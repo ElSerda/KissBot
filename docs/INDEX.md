@@ -24,6 +24,8 @@
 - **[Quantum Code Inference](QUANTUM_INFERENCE.md)** - Algorithmes Shannon H(X) = -Σ p(x)log₂(p(x))
 - **[Neural Pathways](NEURAL_PATHWAYS.md)** - Local/Cloud Synapses, Reflexes
 - **[Cache Systems](CACHE_SYSTEMS.md)** - Game Cache, Quantum Cache, Rate Limiting
+- **[Semantic Delta (Δₛ)](SEMANTIC_DELTA.md)** - ⭐ Métrique physics-driven pour RAG filtering
+- **[Δₛ Scientific Paper](DELTA_S_PAPER.md)** - 📄 Publication-ready (73/73 tests, r=-0.904)
 
 ---
 

@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
-"""KissBot V4 - Twitch Bot with IRC, Helix API, and Stream Monitoring"""
+"""
+KissBot V4 - Twitch Bot with IRC, Helix API, and Stream Monitoring
+
+════════════════════════════════════════════════════════════════════════════
+Copyright (c) 2024-2025 ElSerda
+
+Licensed under the Business Source License 1.1 (BSL 1.1).
+See LICENSE file for full terms.
+
+This bot includes the Δₛ³ semantic filtering algorithm.
+Commercial production use requires a license (see COMMERCIAL_LICENSE.md).
+After 2029-11-03, this code is available under Apache License 2.0.
+════════════════════════════════════════════════════════════════════════════
+"""
 
 import asyncio
 import json

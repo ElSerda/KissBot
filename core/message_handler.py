@@ -5,6 +5,7 @@ Traite les commandes chat et publie les réponses sur MessageBus
 """
 import logging
 import time
+import asyncio
 from typing import Any, Dict, Optional
 
 from core.message_bus import MessageBus
@@ -194,6 +195,8 @@ class MessageHandler:
             await self._cmd_game_current(msg)
         elif command == "!ask":
             await self._cmd_ask(msg, args)
+        elif command == "!wiki":
+            await self._cmd_wiki(msg, args)
         elif command == "!qgame":
             await self._cmd_qgame(msg, args)
         elif command == "!collapse":
@@ -504,9 +507,44 @@ class MessageHandler:
         try:
             LOGGER.info(f"🧠 LLM request from {msg.user_login}: {question[:50]}...")
             
-            # Appeler le LLM
+            # 🔥 RAG: Tentative Wikipedia pour contexte factuel (best-effort)
+            wiki_context = None
+            try:
+                from backends.wikipedia_handler import search_wikipedia
+                
+                LOGGER.debug(f"🔍 Attempting Wikipedia lookup for RAG: {question[:30]}...")
+                wiki_context = await asyncio.wait_for(
+                    search_wikipedia(question, lang=self.config.get("wikipedia", {}).get("lang", "fr")),
+                    timeout=2.0  # Max 2s pour ne pas bloquer
+                )
+                
+                if wiki_context:
+                    LOGGER.info(f"✅ Wikipedia context retrieved: {wiki_context['title']}")
+                else:
+                    LOGGER.debug(f"⚠️ No Wikipedia result for: {question[:30]}")
+                    
+            except asyncio.TimeoutError:
+                LOGGER.warning(f"⏰ Wikipedia timeout (>2s) for: {question[:30]}")
+            except Exception as e:
+                LOGGER.warning(f"⚠️ Wikipedia error: {e}")
+            
+            # Construire la query pour le LLM (avec ou sans contexte Wikipedia)
+            if wiki_context:
+                # RAG: Injecter le contexte Wikipedia dans le prompt
+                enhanced_question = f"""[Contexte factuel Wikipedia: {wiki_context['summary']}]
+
+Question utilisateur: {question}
+
+Réponds en te basant sur ces informations factuelles."""
+                LOGGER.debug(f"📚 RAG enabled: Query enhanced with Wikipedia context")
+            else:
+                # Pas de contexte: prompt normal
+                enhanced_question = question
+                LOGGER.debug(f"🤷 RAG disabled: No Wikipedia context available")
+            
+            # Appeler le LLM avec la query (enrichie ou non)
             llm_response = await self.llm_handler.ask(
-                question=question,
+                question=enhanced_question,
                 user_name=msg.user_login,
                 channel=msg.channel,
                 game_cache=None  # TODO: Ajouter game_cache si besoin
@@ -540,6 +578,72 @@ class MessageHandler:
         except Exception as e:
             LOGGER.error(f"❌ Error processing !ask: {e}", exc_info=True)
             response_text = f"@{msg.user_login} ❌ Erreur lors du traitement de ta question"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+    
+    async def _cmd_wiki(self, msg: ChatMessage, query: str) -> None:
+        """
+        Commande !wiki - Recherche Wikipedia sans LLM
+        
+        Args:
+            msg: Message entrant
+            query: Requête de recherche (args après !wiki)
+        """
+        if not query or len(query.strip()) == 0:
+            response_text = f"@{msg.user_login} 📚 Usage: !wiki <sujet>"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            return
+        
+        try:
+            from backends.wikipedia_handler import search_wikipedia
+            
+            # Basic validation
+            if not query or len(query.strip()) < 2:
+                response_text = f"@{msg.user_login} ❌ Requête trop courte"
+                await self.bus.publish("chat.outbound", OutboundMessage(
+                    channel=msg.channel,
+                    channel_id=msg.channel_id,
+                    text=response_text,
+                    prefer="irc"
+                ))
+                LOGGER.debug(f"❌ Invalid wiki query from {msg.user_login}: {query}")
+                return
+            
+            LOGGER.info(f"📚 Wikipedia request from {msg.user_login}: {query[:50]}...")
+            
+            # Récupérer la langue depuis config
+            wiki_lang = self.config.get("wikipedia", {}).get("lang", "en")
+            
+            # Rechercher sur Wikipedia (retourne string formatée)
+            result = search_wikipedia(query, lang=wiki_lang, max_length=350)
+            
+            # Ajouter le @mention
+            response_text = f"@{msg.user_login} {result}"
+            
+            # Tronquer si trop long (limite Twitch 500 chars)
+            if len(response_text) > 500:
+                response_text = response_text[:497] + "..."
+            
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            LOGGER.info(f"✅ Wikipedia response sent to {msg.user_login}")
+                
+        except Exception as e:
+            LOGGER.error(f"❌ Error processing !wiki: {e}", exc_info=True)
+            response_text = f"@{msg.user_login} ❌ Erreur lors de la recherche Wikipedia"
             await self.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,
                 channel_id=msg.channel_id,
