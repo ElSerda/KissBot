@@ -15,15 +15,21 @@ NC='\033[0m' # No Color
 
 # Function to check if bot is running
 is_running() {
+    # Check PID file first
     if [ -f "$PID_FILE" ]; then
         PID=$(cat "$PID_FILE")
         if ps -p "$PID" > /dev/null 2>&1; then
             return 0
         else
             rm -f "$PID_FILE"
-            return 1
         fi
     fi
+    
+    # Check for any main.py process (catches manual starts)
+    if pgrep -f "python3.*main\.py" > /dev/null 2>&1; then
+        return 0
+    fi
+    
     return 1
 }
 
@@ -63,27 +69,40 @@ stop() {
         return 1
     fi
     
-    PID=$(cat "$PID_FILE")
+    # Try to get PID from file first
+    if [ -f "$PID_FILE" ]; then
+        PID=$(cat "$PID_FILE")
+    else
+        # Find PID by process name
+        PID=$(pgrep -f "python3.*main\.py" | head -n 1)
+    fi
+    
+    if [ -z "$PID" ]; then
+        echo -e "${RED}❌ Could not find KissBot process${NC}"
+        return 1
+    fi
+    
     echo -e "${YELLOW}🛑 Stopping KissBot (PID: $PID)...${NC}"
     
-    kill "$PID"
+    # Kill all main.py processes (in case of duplicates)
+    pkill -f "python3.*main\.py"
     
-    # Wait for process to stop (max 10 seconds)
+    # Wait for processes to stop (max 10 seconds)
     for i in {1..10}; do
-        if ! ps -p "$PID" > /dev/null 2>&1; then
+        if ! pgrep -f "python3.*main\.py" > /dev/null 2>&1; then
             break
         fi
         sleep 1
     done
     
     # Force kill if still running
-    if ps -p "$PID" > /dev/null 2>&1; then
+    if pgrep -f "python3.*main\.py" > /dev/null 2>&1; then
         echo -e "${RED}⚠️  Force killing...${NC}"
-        kill -9 "$PID"
+        pkill -9 -f "python3.*main\.py"
     fi
     
     rm -f "$PID_FILE"
-    echo -e "${GREEN}✅ KissBot stopped${NC}"
+    echo -e "${GREEN}✅ KissBot stopped (all instances)${NC}"
 }
 
 # Function to restart the bot
@@ -96,8 +115,28 @@ restart() {
 
 # Function to show status
 status() {
-    if is_running; then
+    # Count all main.py processes
+    PROCESS_COUNT=$(pgrep -f "python3.*main\.py" | wc -l)
+    
+    if [ "$PROCESS_COUNT" -eq 0 ]; then
+        echo -e "${RED}❌ KissBot is not running${NC}"
+        return
+    fi
+    
+    if [ "$PROCESS_COUNT" -gt 1 ]; then
+        echo -e "${RED}⚠️  WARNING: Multiple instances detected ($PROCESS_COUNT)!${NC}"
+        echo -e "${YELLOW}   PIDs: $(pgrep -f 'python3.*main\.py' | tr '\n' ' ')${NC}"
+        echo -e "${YELLOW}   Run './kissbot.sh stop' to kill all instances${NC}"
+    fi
+    
+    # Show info for first/main process
+    if [ -f "$PID_FILE" ]; then
         PID=$(cat "$PID_FILE")
+    else
+        PID=$(pgrep -f "python3.*main\.py" | head -n 1)
+    fi
+    
+    if ps -p "$PID" > /dev/null 2>&1; then
         echo -e "${GREEN}✅ KissBot is running (PID: $PID)${NC}"
         
         # Show uptime
@@ -107,8 +146,6 @@ status() {
         # Show memory usage
         MEM=$(ps -p "$PID" -o rss= | awk '{printf "%.1f MB", $1/1024}')
         echo -e "${GREEN}💾 Memory: $MEM${NC}"
-    else
-        echo -e "${RED}❌ KissBot is not running${NC}"
     fi
 }
 
