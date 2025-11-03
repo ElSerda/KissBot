@@ -89,7 +89,7 @@ class IRCClient:
                 channel = parsed['command']['channel'][1:]  # Remove '#'
                 
                 # VIP est dans badges dict, pas dans tags directs !
-                badges = parsed['tags'].get('badges', {})
+                badges = parsed['tags'].get('badges') or {}
                 is_vip = badges.get('vip') is not None  # Si badge 'vip' existe → VIP=True
                 
                 # Cache VIP status (pyTwitchAPI ne le fait pas !)

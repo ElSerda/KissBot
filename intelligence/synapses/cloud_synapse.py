@@ -66,12 +66,16 @@ class CloudSynapse:
         self.max_backoff = 60.0
         self.current_backoff = self.base_backoff
 
-        # ⏱️ TIMEOUTS EXPLICITES (2 valeurs claires)
+        # ⏱️ TIMEOUTS EXPLICITES (4 valeurs httpx obligatoires)
         # timeout_connect: Connexion HTTP (court: 5s)
         # timeout_inference: Génération LLM (long: 30s)
+        # timeout_write: Envoi payload (moyen: 10s)
+        # timeout_pool: Pool connexions (court: 5s)
         neural_config = config.get("neural_llm", {})
         self.timeout_connect = neural_config.get("timeout_connect", 5.0)
         self.timeout_inference = neural_config.get("timeout_inference", 30.0)
+        self.timeout_write = neural_config.get("timeout_write", 10.0)
+        self.timeout_pool = neural_config.get("timeout_pool", 5.0)
 
         # 📊 MÉTRIQUES CLOUD
         self.response_times: list[float] = []
@@ -109,8 +113,12 @@ class CloudSynapse:
 
     def can_execute(self) -> bool:
         """⚡ CIRCUIT BREAKER + RATE LIMIT CHECK"""
+        # 🛡️ DEBUG FORCE LOG
+        self.logger.warning(f"☁️ DEBUG can_execute: is_enabled={self.is_enabled}, circuit_state={self.circuit_state}, rate_limited_until={self.rate_limited_until}, quota_exhausted={self.quota_exhausted}")
+        
         # 🛡️ PROTECTION: Si synapse désactivée, retourne False immédiatement
         if not self.is_enabled:
+            self.logger.warning("☁️❌ can_execute: is_enabled=False")
             return False
         
         current_time = time.time()
@@ -138,12 +146,21 @@ class CloudSynapse:
         correlation_id: str = "",
     ) -> str | None:
         """🔥 TRANSMISSION SYNAPTIQUE CLOUD V2.0"""
-        if not self.api_key or not self.can_execute():
+        if not self.api_key:
+            self.logger.warning(f"☁️❌ [{correlation_id}] API key missing or invalid")
+            return None
+        
+        if not self.can_execute():
+            self.logger.warning(f"☁️❌ [{correlation_id}] can_execute() returned False (circuit_state={self.circuit_state}, is_enabled={self.is_enabled})")
             return None
 
+        self.logger.warning(f"☁️ DEBUG fire(): Starting transmission for stimulus_class={stimulus_class}, timeout={self.timeout_inference}s")
+        
         # Utilise timeout_inference pour l'opération complète (génération LLM)
         timeout = self.timeout_inference
         optimized_messages = self._optimize_signal_for_gpt(stimulus, context)
+        
+        self.logger.warning(f"☁️ DEBUG fire(): Messages optimized, calling _transmit_cloud_signal...")
 
         start_time = time.time()
         try:
@@ -223,6 +240,8 @@ class CloudSynapse:
         self, messages: list[dict[str, str]], context: str, correlation_id: str
     ) -> str | None:
         """📡 TRANSMISSION CLOUD OPTIMISÉE"""
+        self.logger.warning(f"☁️ DEBUG _transmit_cloud_signal: START")
+        
         # 🧠 Paramètres d'inférence depuis config (avec fallbacks)
         llm_config = self.config.get("llm", {})
         inference_config = llm_config.get("inference", {})
@@ -244,30 +263,43 @@ class CloudSynapse:
 
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
+        self.logger.warning(f"☁️ DEBUG: About to send POST to {self.endpoint}")
+        
         if self.current_backoff > self.base_backoff:
             jitter = random.uniform(0.8, 1.2)
             wait_time = self.current_backoff * jitter
             await asyncio.sleep(wait_time)
 
         # ⏱️ TIMEOUTS EXPLICITES (connect court, inference long)
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(
-                connect=self.timeout_connect,  # Connexion HTTP (court: 5s)
-                read=self.timeout_inference     # Inférence LLM (long: 30s)
-            )
-        ) as client:
-            response = await client.post(self.endpoint, json=payload, headers=headers)
-            response.raise_for_status()
+        try:
+            self.logger.warning(f"☁️ DEBUG: Creating httpx client...")
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(
+                    connect=self.timeout_connect,   # Connexion HTTP (court: 5s)
+                    read=self.timeout_inference,    # Inférence LLM (long: 30s)
+                    write=self.timeout_write,       # Envoi payload (moyen: 10s)
+                    pool=self.timeout_pool          # Pool connexion (court: 5s)
+                )
+            ) as client:
+                self.logger.warning(f"☁️ DEBUG: Sending POST request...")
+                response = await client.post(self.endpoint, json=payload, headers=headers)
+                self.logger.warning(f"☁️ DEBUG: Got response, status={response.status_code}")
+                response.raise_for_status()
 
-            data = response.json()
-            if "choices" in data and data["choices"]:
-                raw_response = data["choices"][0]["message"]["content"]
-                cleaned = raw_response.strip() if raw_response else ""
+                data = response.json()
+                if "choices" in data and data["choices"]:
+                    raw_response = data["choices"][0]["message"]["content"]
+                    cleaned = raw_response.strip() if raw_response else ""
 
-                if cleaned and len(cleaned) >= 3:
-                    return cleaned
+                    if cleaned and len(cleaned) >= 3:
+                        self.logger.warning(f"☁️ DEBUG: Returning response: {cleaned[:50]}...")
+                        return cleaned
 
-        return None
+            self.logger.warning(f"☁️ DEBUG: No valid response found, returning None")
+            return None
+        except Exception as e:
+            self.logger.error(f"☁️❌ _transmit_cloud_signal exception: {e}", exc_info=True)
+            raise
 
     def _is_valid_response(self, response: str, stimulus: str) -> bool:
         """🎖️ VALIDATION RÉPONSE CLOUD"""
