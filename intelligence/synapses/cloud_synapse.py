@@ -186,16 +186,39 @@ class CloudSynapse:
 
         except asyncio.TimeoutError:
             self._record_failure(f"Timeout {timeout}s")
+            self.logger.warning(f"☁️⏱️ Timeout OpenAI après {timeout}s (réseau lent ou réponse longue)")
             return None
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
                 self._handle_rate_limit(e.response)
-            elif e.response.status_code == 402:
+            elif e.response.status_code in (402, 403):
+                # 402: Payment Required, 403: Forbidden (quota/billing)
                 self._handle_quota_exhaustion()
+            elif e.response.status_code == 401:
+                # Clé API invalide ou expirée
+                self.logger.error(f"☁️🔑 API Key invalide ou expirée (HTTP 401) - Vérifier config.apis.openai_key")
+                self._record_failure("API Key invalide")
+            elif e.response.status_code == 500:
+                # Erreur serveur OpenAI
+                self.logger.error(f"☁️💥 Erreur serveur OpenAI (HTTP 500) - Problème temporaire côté OpenAI, réessayer plus tard")
+                self._record_failure("Erreur serveur OpenAI")
+            elif e.response.status_code == 503:
+                # Service indisponible (maintenance OpenAI ou surcharge)
+                self.logger.warning(f"☁️🛠️ OpenAI surchargé/en maintenance (HTTP 503) - Réessayer plus tard")
+                self._record_failure("Service surchargé")
             else:
+                # Autre erreur HTTP (problème côté OpenAI)
+                self.logger.warning(f"☁️⚠️ Erreur API OpenAI (HTTP {e.response.status_code}) - Problème côté serveur OpenAI")
                 self._record_failure(f"HTTP {e.response.status_code}")
             return None
+        except httpx.ConnectError as e:
+            # Problème réseau/DNS
+            self.logger.error(f"☁️🌐 Impossible de contacter OpenAI - Vérifier connexion réseau")
+            self._record_failure("Erreur réseau")
+            return None
         except Exception as e:
+            # Erreur inattendue (potentiellement bug code)
+            self.logger.error(f"☁️❌ Erreur inattendue (possiblement bug KissBot): {e}", exc_info=True)
             self._record_failure(str(e))
             return None
 
@@ -342,14 +365,20 @@ class CloudSynapse:
         self.rate_limited_until = time.time() + wait_time
         self.rate_limit_errors += 1
 
-        self.logger.warning(f"☁️⏳ Rate limit OpenAI - Attente {wait_time}s")
+        self.logger.warning(
+            f"☁️⏳ Rate limit OpenAI (HTTP 429) - Trop de requêtes, attente {wait_time}s "
+            f"(Problème: compte OpenAI free/quota)"
+        )
         self._record_failure(f"Rate limit {wait_time}s")
 
     def _handle_quota_exhaustion(self):
         """💸 GESTION QUOTA ÉPUISÉ V2.0"""
         self.quota_exhausted = True
         self.quota_errors += 1
-        self.logger.error("☁️💸 Quota OpenAI épuisé")
+        self.logger.error(
+            f"☁️💸 Quota OpenAI épuisé (HTTP 402/403) - "
+            f"Ajouter des crédits sur https://platform.openai.com/account/billing"
+        )
         self._record_failure("Quota épuisé")
 
     def _increase_backoff(self):

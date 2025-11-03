@@ -1,11 +1,18 @@
-"""SerdaBot V1 - Game Lookup API multi-sources (RAWG + Steam) - Architecture KISS."""
+"""SerdaBot V1 - Game Lookup API multi-sources (RAWG + Steam + Scraping) - Architecture KISS."""
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
 import httpx
+
+try:
+    from bs4 import BeautifulSoup
+    HAS_BS4 = True
+except ImportError:
+    HAS_BS4 = False
 
 # Import optionnel de CacheManager
 CacheManager: Optional[Any] = None
@@ -37,6 +44,7 @@ class GameResult:
     playtime: int = 0
     popularity: int = 0  # "added" count
     esrb_rating: str = ""
+    is_early_access: bool = False  # 🚧 Détecté via Steam genres ou scraping HTML
     # 🎮 KISS Enhancement: Summary pour enrichissement LLM contexte
     summary: str | None = None  # Description courte du jeu (RAWG API)
     description_raw: str | None = None  # Description complète si nécessaire
@@ -135,7 +143,26 @@ class GameLookup:
                 result.reliability_score = self._calculate_reliability(result, game_name)
                 result.confidence = self._get_confidence_level(result.reliability_score)
 
-                # 🎯 Détection faute de frappe simplifiée (écart input/output)
+                # 🌐 ENRICHISSEMENT STEAM STORE HTML (Fallback ultime pour dates EA)
+                # Scraper uniquement si on a des données Steam (sinon pas sur Steam)
+                if steam_dict and steam_dict.get("app_id"):
+                    app_id = steam_dict.get("app_id")
+                    scrape_data = await self._scrape_steam_store(app_id)
+                    
+                    if scrape_data:
+                        # Enrichir année si scrape plus récente (correction EA → 1.0)
+                        scrape_year = scrape_data.get("year")
+                        if scrape_year and result.year.isdigit() and scrape_year > result.year:
+                            old_year = result.year
+                            result.year = scrape_year
+                            self.logger.info(f"🌐 Steam scrape: année {old_year} → {result.year}")
+                        
+                        # Enrichir Early Access si pas détecté par API genres
+                        if scrape_data.get("is_early_access") and not result.is_early_access:
+                            result.is_early_access = True
+                            self.logger.info(f"🌐 Steam scrape: Early Access détecté via HTML")
+
+                # �🎯 Détection faute de frappe simplifiée (écart input/output)
                 name_lower = result.name.lower()
                 query_lower = game_name.lower()
                 if query_lower not in name_lower and name_lower not in query_lower:
@@ -267,6 +294,25 @@ class GameLookup:
             if not best_game:
                 return None
 
+            # 🎯 Récupérer developers/publishers via /games/{id} (pas dans search)
+            game_id = best_game.get("id")
+            developers = []
+            publishers = []
+            
+            if game_id:
+                try:
+                    details_response = await self.http_client.get(
+                        f"https://api.rawg.io/api/games/{game_id}",
+                        params={"key": self.rawg_key}
+                    )
+                    details_response.raise_for_status()
+                    details = details_response.json()
+                    
+                    developers = [dev.get("name", "") for dev in details.get("developers", [])]
+                    publishers = [pub.get("name", "") for pub in details.get("publishers", [])]
+                except Exception as e:
+                    self.logger.debug(f"RAWG details fetch failed for {game_id}: {e}")
+
             return {
                 "name": best_game.get("name", ""),
                 "released": best_game.get("released", ""),
@@ -278,6 +324,8 @@ class GameLookup:
                 ],
                 # 🎮 KISS Enhancement: Récupérer genres et description pour contexte LLM
                 "genres": [g.get("name", "") for g in best_game.get("genres", [])],
+                "developers": developers,
+                "publishers": publishers,
                 "description": best_game.get("description", ""),  # Sera null dans search
                 "description_raw": best_game.get("description_raw", ""),  # Sera null dans search
                 "source": "rawg",
@@ -309,6 +357,7 @@ class GameLookup:
 
             # 🎯 KISS Enhancement: Récupérer description Steam (FR puis EN en fallback)
             steam_description = None
+            is_early_access = False
             app_id = game.get("id")
             if app_id:
                 # Essayer français d'abord
@@ -320,6 +369,13 @@ class GameLookup:
                     details_data = details_response.json()
                     game_details = details_data.get(str(app_id), {}).get("data", {})
                     steam_description = game_details.get("short_description", "")
+                    
+                    # 🚧 Détecter Early Access via genres Steam (FR ou EN)
+                    genres = game_details.get("genres", [])
+                    is_early_access = any(
+                        genre.get("description", "").lower() in ["early access", "accès anticipé"]
+                        for genre in genres
+                    )
                     
                     # Fallback anglais si description FR vide
                     if not steam_description or len(steam_description.strip()) < 10:
@@ -347,11 +403,71 @@ class GameLookup:
                 # 🇫🇷 Description en français de Steam !
                 "description": steam_description,
                 "description_raw": steam_description,
+                "is_early_access": is_early_access,  # 🚧 Flag Early Access
+                "app_id": app_id,  # 🌐 Pour le scraping HTML ultérieur
                 "source": "steam",
             }
 
         except Exception as e:
             self.logger.error(f"Steam API error: {e}")
+            return None
+
+    async def _scrape_steam_store(self, app_id: int) -> dict | None:
+        """
+        🌐 SCRAPING STEAM STORE HTML (Enrichissement ultime)
+        
+        Récupère des infos additionnelles depuis la page Steam Store HTML :
+        - Date de release exacte (1.0 ou EA)
+        - Détection Early Access via bannière HTML
+        
+        Args:
+            app_id: Steam App ID du jeu
+        
+        Note: Utilisé en dernier recours pour corriger les dates EA → 1.0
+        """
+        if not HAS_BS4:
+            return None
+            
+        try:
+            # Scraper la page HTML directement avec app_id
+            url = f"https://store.steampowered.com/app/{app_id}/"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept-Language": "en-US,en;q=0.9"
+            }
+            
+            response = await self.http_client.get(url, headers=headers, params={"l": "english"})
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, "lxml")
+            
+            # Extraire date de release
+            release_year = None
+            release_date_elem = soup.find("div", class_="release_date")
+            if release_date_elem:
+                date_text = release_date_elem.get_text(strip=True)
+                # Extraire année depuis "Release Date:20 Jun, 2024"
+                year_match = re.search(r'\d{4}', date_text)
+                if year_match:
+                    release_year = year_match.group(0)
+            
+            # Détecter Early Access via bannières HTML
+            early_access_header = soup.find("div", class_="early_access_header")
+            game_area_ea = soup.find("div", class_="game_area_early_access")
+            is_early_access = bool(early_access_header or game_area_ea)
+            
+            self.logger.debug(
+                f"🌐 Steam scrape (app {app_id}): year={release_year}, EA={is_early_access}"
+            )
+            
+            return {
+                "year": release_year,
+                "is_early_access": is_early_access,
+                "source": "steam_scrape"
+            }
+            
+        except Exception as e:
+            self.logger.debug(f"Steam Store scrape failed for app {app_id}: {e}")
             return None
 
     def _find_best_game_lean(self, games: list[dict], query: str) -> dict | None:
@@ -413,10 +529,13 @@ class GameLookup:
             rating_rawg=data.get("rating", 0),
             metacritic=data.get("metacritic"),
             platforms=data.get("platforms", [])[:3],  # Max 3 plateformes
-            # 🇫� Descriptions fusionnées avec priorité français !
+            # 🇫🇷 Descriptions fusionnées avec priorité français !
             summary=summary,
             description_raw=description_raw,
             genres=data.get("genres", []),  # 🎯 FIX: Assigner les genres !
+            developers=data.get("developers", []),  # 🎨 Developers depuis RAWG
+            publishers=data.get("publishers", []),  # 📦 Publishers depuis RAWG
+            is_early_access=steam_data.get("is_early_access", False) if steam_data else False,  # 🚧 EA depuis Steam
             source_count=1,
             primary_source="RAWG" if rawg_data else "Steam",
             api_sources=["RAWG"] if rawg_data else ["Steam"],
@@ -508,14 +627,35 @@ class GameLookup:
             compact: Si True, format ultra-compact pour !gc (sans confidence/sources)
         """
         output = f"🎮 {result.name}"
+        
+        # Early Access flag
+        if result.is_early_access:
+            output += " 🚧"
+        
         if result.year != "?":
             output += f" ({result.year})"
+        
+        # Développeurs/Éditeurs (prioritaire)
+        if result.developers:
+            output += f" - 🎨 {', '.join(result.developers[:2])}"
+        if result.publishers:
+            output += f" - 📦 {', '.join(result.publishers[:2])}"
+        
+        # Notes et plateformes
         if result.metacritic:
             output += f" - 🏆 {result.metacritic}/100"
         elif result.rating_rawg > 0:
             output += f" - ⭐ {result.rating_rawg:.1f}/5"
         if result.platforms:
             output += f" - 🕹️ {', '.join(result.platforms[:3])}"
+        
+        # Description (summary) si disponible
+        if result.summary:
+            # Limiter à 150 caractères pour Twitch
+            summary_short = result.summary[:150].strip()
+            if len(result.summary) > 150:
+                summary_short += "..."
+            output += f" | {summary_short}"
         
         # Version compacte : pas de confidence/sources
         if compact:
