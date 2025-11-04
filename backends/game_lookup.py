@@ -110,26 +110,22 @@ class GameLookup:
                 return cached
 
         try:
-            # Recherche parallèle RAWG + Steam
-            # Note: RAWG agrège déjà itch.io, Epic, GOG → 99%+ couverture
-            rawg_task = self._fetch_rawg(game_name)
-            steam_task = self._fetch_steam(game_name)
-
-            # asyncio.gather avec return_exceptions peut retourner Exception ou les vrais résultats
-            results = await asyncio.gather(rawg_task, steam_task, return_exceptions=True)
-
-            # Helper pour traiter les résultats API (Exception ou Dict)
-            def process_api_result(data: Any, api_name: str) -> dict[str, Any] | None:
-                if isinstance(data, Exception):
-                    self.logger.warning(f"{api_name} error: {data}")
-                    return None
-                elif isinstance(data, dict):
-                    return data
-                return None
-
-            # Traiter les résultats en une ligne chacun
-            rawg_dict = process_api_result(results[0], "RAWG")
-            steam_dict = process_api_result(results[1], "Steam")
+            # 🎯 STRATÉGIE UNIFIÉE: Steam PRIORITAIRE + validation RAWG
+            # Même logique que enrich_game_from_igdb_name pour cohérence
+            steam_dict = await self._fetch_steam(game_name)
+            rawg_dict = await self._fetch_rawg(game_name)
+            
+            # 🎯 VALIDATION: Si Steam ET RAWG trouvent, vérifier cohérence des noms
+            if steam_dict and rawg_dict:
+                steam_name = steam_dict.get("name", "").lower()
+                rawg_name = rawg_dict.get("name", "").lower()
+                # Si les noms sont trop différents, ignorer RAWG (fuzzy search a dérapé)
+                if steam_name not in rawg_name and rawg_name not in steam_name:
+                    self.logger.warning(
+                        f"⚠️ Name mismatch: Steam='{steam_dict.get('name')}' "
+                        f"vs RAWG='{rawg_dict.get('name')}' → Ignoring RAWG"
+                    )
+                    rawg_dict = None  # Ignorer RAWG, garder seulement Steam
 
             # Fusionner les données
             # S'assurer que les données sont des dicts valides
@@ -143,24 +139,33 @@ class GameLookup:
                 result.reliability_score = self._calculate_reliability(result, game_name)
                 result.confidence = self._get_confidence_level(result.reliability_score)
 
-                # 🌐 ENRICHISSEMENT STEAM STORE HTML (Fallback ultime pour dates EA)
+                # 🌐 ENRICHISSEMENT STEAM STORE HTML (Fallback ultime pour dates EA + dev/pub)
                 # Scraper uniquement si on a des données Steam (sinon pas sur Steam)
                 if steam_dict and steam_dict.get("app_id"):
                     app_id = steam_dict.get("app_id")
                     scrape_data = await self._scrape_steam_store(app_id)
                     
                     if scrape_data:
-                        # Enrichir année si scrape plus récente (correction EA → 1.0)
+                        # Enrichir année si manquante ou si scrape plus récente (correction EA → 1.0)
                         scrape_year = scrape_data.get("year")
-                        if scrape_year and result.year.isdigit() and scrape_year > result.year:
-                            old_year = result.year
-                            result.year = scrape_year
-                            self.logger.info(f"🌐 Steam scrape: année {old_year} → {result.year}")
+                        if scrape_year:
+                            if result.year == "?" or (result.year.isdigit() and scrape_year > result.year):
+                                old_year = result.year
+                                result.year = scrape_year
+                                self.logger.info(f"🌐 Steam scrape: année {old_year} → {result.year}")
                         
                         # Enrichir Early Access si pas détecté par API genres
                         if scrape_data.get("is_early_access") and not result.is_early_access:
                             result.is_early_access = True
                             self.logger.info(f"🌐 Steam scrape: Early Access détecté via HTML")
+                        
+                        # 🎨 Enrichir dev/pub si manquants (fallback Steam HTML quand RAWG échoue)
+                        if not result.developers and scrape_data.get("developers"):
+                            result.developers = scrape_data.get("developers")
+                            self.logger.info(f"🌐 Steam scrape: dev ajouté via HTML")
+                        if not result.publishers and scrape_data.get("publishers"):
+                            result.publishers = scrape_data.get("publishers")
+                            self.logger.info(f"🌐 Steam scrape: pub ajouté via HTML")
 
                 # �🎯 Détection faute de frappe simplifiée (écart input/output)
                 name_lower = result.name.lower()
@@ -218,21 +223,27 @@ class GameLookup:
                 return cached
 
         try:
-            # 2. Enrichissement RAWG + Steam (parallèle)
-            rawg_task = self._fetch_rawg(igdb_name)
-            steam_task = self._fetch_steam(igdb_name)
-
-            results = await asyncio.gather(rawg_task, steam_task, return_exceptions=True)
-
-            # Process results
-            def process_result(data: Any, api: str) -> dict | None:
-                if isinstance(data, Exception):
-                    self.logger.warning(f"{api} error: {data}")
-                    return None
-                return data if isinstance(data, dict) else None
-
-            rawg_dict = process_result(results[0], "RAWG")
-            steam_dict = process_result(results[1], "Steam")
+            # 2. 🎯 STRATÉGIE IGDB: Steam PRIORITAIRE pour match exact
+            # Steam d'abord pour validation du nom (plus fiable pour jeux PC)
+            steam_dict = await self._fetch_steam(igdb_name)
+            
+            # TOUJOURS enrichir avec RAWG pour dev/pub/année (même si Steam trouve)
+            rawg_dict = await self._fetch_rawg(igdb_name)
+            
+            # 🎯 VALIDATION: Si Steam ET RAWG trouvent, vérifier cohérence des noms
+            if steam_dict and rawg_dict:
+                steam_name = steam_dict.get("name", "").lower()
+                rawg_name = rawg_dict.get("name", "").lower()
+                # Si les noms sont trop différents, ignorer RAWG (fuzzy search a dérapé)
+                if steam_name not in rawg_name and rawg_name not in steam_name:
+                    self.logger.warning(
+                        f"⚠️ Name mismatch: Steam='{steam_dict.get('name')}' "
+                        f"vs RAWG='{rawg_dict.get('name')}' → Ignoring RAWG"
+                    )
+                    rawg_dict = None  # Ignorer RAWG, garder seulement Steam
+            
+            # Si Steam trouve ET RAWG aussi, privilégier le nom Steam
+            # (RAWG peut retourner des variantes bizarres du nom)
 
             # 3. Build GameResult
             if rawg_dict is not None or steam_dict is not None:
@@ -257,6 +268,32 @@ class GameLookup:
 
                 # Pas de flag typo (source IGDB = ground truth)
                 result.possible_typo = False
+                
+                # 🌐 ENRICHISSEMENT STEAM STORE HTML (dev/pub/année/EA)
+                if steam_dict and steam_dict.get("app_id"):
+                    app_id = steam_dict.get("app_id")
+                    scrape_data = await self._scrape_steam_store(app_id)
+                    
+                    if scrape_data:
+                        # Enrichir année si manquante ou si scrape plus récente
+                        scrape_year = scrape_data.get("year")
+                        if scrape_year:
+                            if result.year == "?" or (result.year.isdigit() and scrape_year > result.year):
+                                result.year = scrape_year
+                                self.logger.info(f"🌐 Steam scrape: année enrichie → {result.year}")
+                        
+                        # Enrichir Early Access
+                        if scrape_data.get("is_early_access") and not result.is_early_access:
+                            result.is_early_access = True
+                            self.logger.info(f"🌐 Steam scrape: Early Access détecté via HTML")
+                        
+                        # 🎨 Enrichir dev/pub si manquants (fallback Steam HTML quand RAWG échoue)
+                        if not result.developers and scrape_data.get("developers"):
+                            result.developers = scrape_data.get("developers")
+                            self.logger.info(f"🌐 Steam scrape: dev ajouté via HTML")
+                        if not result.publishers and scrape_data.get("publishers"):
+                            result.publishers = scrape_data.get("publishers")
+                            self.logger.info(f"🌐 Steam scrape: pub ajouté via HTML")
 
                 # 4. Cache avec metadata
                 if self.cache is not None:
@@ -467,13 +504,41 @@ class GameLookup:
             game_area_ea = soup.find("div", class_="game_area_early_access")
             is_early_access = bool(early_access_header or game_area_ea)
             
+            # 🎨 Extraire Developer et Publisher depuis HTML
+            developers = []
+            publishers = []
+            
+            # Chercher dans les "dev_row" (Developer et Publisher sont dans des divs séparées)
+            dev_rows = soup.find_all("div", class_="dev_row")
+            for row in dev_rows:
+                label = row.find("div", class_="subtitle")
+                if label:
+                    label_text = label.get_text(strip=True).lower()
+                    value_div = row.find("div", class_="summary")
+                    
+                    if value_div:
+                        # Peut contenir des liens <a> ou juste du texte
+                        links = value_div.find_all("a")
+                        if links:
+                            names = [link.get_text(strip=True) for link in links]
+                        else:
+                            names = [value_div.get_text(strip=True)]
+                        
+                        if "developer" in label_text:
+                            developers.extend(names)
+                        elif "publisher" in label_text:
+                            publishers.extend(names)
+            
             self.logger.debug(
-                f"🌐 Steam scrape (app {app_id}): year={release_year}, EA={is_early_access}"
+                f"🌐 Steam scrape (app {app_id}): year={release_year}, EA={is_early_access}, "
+                f"dev={developers}, pub={publishers}"
             )
             
             return {
                 "year": release_year,
                 "is_early_access": is_early_access,
+                "developers": developers if developers else None,
+                "publishers": publishers if publishers else None,
                 "source": "steam_scrape"
             }
             
@@ -510,9 +575,12 @@ class GameLookup:
         self, rawg_data: dict | None, steam_data: dict | None, query: str
     ) -> GameResult | None:
         """Fusionne les données RAWG + Steam - Version LEAN."""
-        # Prioriser RAWG, fallback Steam
-        data = rawg_data or steam_data
-        if not data:
+        # 🎯 PRIORITÉ NOM: Steam > RAWG (Steam plus fiable pour match exact)
+        # Pour les autres données: RAWG > Steam (RAWG a dev/pub/année)
+        name_source = steam_data or rawg_data  # Nom depuis Steam prioritaire
+        data_source = rawg_data or steam_data  # Autres données depuis RAWG
+        
+        if not name_source or not data_source:
             return None
 
         # 🎯 FIX FUSION: Fusionner descriptions intelligemment
@@ -529,23 +597,23 @@ class GameLookup:
             summary = rawg_data.get("description", "").strip()[:300]
             description_raw = rawg_data.get("description_raw", "").strip()[:500]
 
-        # Créer résultat de base
+        # Créer résultat de base avec NOM de Steam et DONNÉES de RAWG
         result = GameResult(
-            name=data["name"],
+            name=name_source.get("name", query),  # 🎯 Nom depuis Steam
             year=(
-                self._extract_year(data.get("released", ""), data.get("tba", False))
+                self._extract_year(data_source.get("released", ""), data_source.get("tba", False))
                 if rawg_data
                 else "?"
             ),
-            rating_rawg=data.get("rating", 0),
-            metacritic=data.get("metacritic"),
-            platforms=data.get("platforms", [])[:3],  # Max 3 plateformes
+            rating_rawg=data_source.get("rating", 0),
+            metacritic=data_source.get("metacritic"),
+            platforms=data_source.get("platforms", [])[:3],  # Max 3 plateformes
             # 🇫🇷 Descriptions fusionnées avec priorité français !
             summary=summary,
             description_raw=description_raw,
-            genres=data.get("genres", []),  # 🎯 FIX: Assigner les genres !
-            developers=data.get("developers", []),  # 🎨 Developers depuis RAWG
-            publishers=data.get("publishers", []),  # 📦 Publishers depuis RAWG
+            genres=data_source.get("genres", []),  # 🎯 FIX: Assigner les genres !
+            developers=data_source.get("developers", []),  # 🎨 Developers depuis RAWG
+            publishers=data_source.get("publishers", []),  # 📦 Publishers depuis RAWG
             is_early_access=steam_data.get("is_early_access", False) if steam_data else False,  # 🚧 EA depuis Steam
             source_count=1,
             primary_source="RAWG" if rawg_data else "Steam",

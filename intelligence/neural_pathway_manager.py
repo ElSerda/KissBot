@@ -161,8 +161,15 @@ class NeuralPathwayManager:
         scores = {}
 
         for synapse_name, synapse in self.synapses.items():
-            if not hasattr(synapse, "can_execute") or not synapse.can_execute():
+            if not hasattr(synapse, "can_execute"):
+                scores[synapse_name] = -float("inf")
+                self.logger.debug(f"❌ {synapse_name}: pas de can_execute()")
+                continue
+                
+            can_exec = synapse.can_execute()
+            if not can_exec:
                 scores[synapse_name] = -float("inf")  # Synapse indisponible
+                self.logger.debug(f"❌ {synapse_name}: can_execute() = False")
                 continue
 
             stats = synapse.get_bandit_stats()
