@@ -19,6 +19,9 @@ lxml>=4.9.0
 # Configuration
 PyYAML==6.0.3
 
+# Database et cryptographie (Phase 2 - Multi-process)
+cryptography>=43.0.0
+
 # Smart Context - Fuzzy matching pour noms de jeux
 rapidfuzz>=3.0.0
 

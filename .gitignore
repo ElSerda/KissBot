@@ -157,3 +157,11 @@ delta-s3/
 !delta-s3/README.md
 !delta-s3/LICENSE
 !delta-s3/COMMERCIAL_LICENSE.md
+
+# EventSub Hub runtime files
+logs/hub.out
+logs/supervisor_test.log
+pids/*.pid
+
+# Test files
+test_supervisor_hub.log

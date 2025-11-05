@@ -7,6 +7,136 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.1.0] - 2025-11-05
+
+### 🚀 Major Feature - EventSub Hub Architecture
+
+**Centralized WebSocket manager** for multi-bot deployments. Replaces N WebSocket connections (1 per bot) with **1 persistent WebSocket** multiplexing hundreds of subscriptions.
+
+#### Why This Matters
+
+**Problem**: Twitch limits applications to **3 WebSocket transports**. Each bot in direct mode = 1 WebSocket.
+
+**Solution**: Hub mode uses **1 WebSocket** for entire application, multiplexing 100s of subscriptions. Bots communicate via IPC (Unix sockets).
+
+**Result**: Scale from 3 bots → ∞ bots (limited by system resources, not Twitch).
+
+#### Core Components
+
+- **EventSub Hub** (`eventsub_hub.py`, 1000+ lines):
+  - Single persistent WebSocket to Twitch EventSub
+  - IPC server on Unix socket (`/tmp/kissbot_hub.sock`)
+  - Reconciliation loop: diff desired vs active subscriptions (rate-limited 2 req/s + jitter)
+  - Event routing: Forward Twitch events to correct bot via IPC
+  - Health monitoring: Auto-reconnect with exponential backoff (2/4/8/16/32/60s, max 10 attempts)
+  - Session binding: Track `current_session_id`, `ws_reconnect_count`
+
+- **IPC Protocol** (`core/ipc_protocol.py`, 500+ lines):
+  - 8 message types: `hello`, `subscribe`, `unsubscribe`, `ping`, `ack`, `error`, `event`, `pong`
+  - Async server (`IPCServer`) with multi-client support
+  - Async client (`IPCClient`) with generator-based receive()
+
+- **Hub Client** (`twitchapi/transports/hub_eventsub_client.py`, 200+ lines):
+  - Bot-side wrapper for Hub connection
+  - Drop-in replacement for `EventSubClient`
+  - Transparent translation: IPC `EventMessage` → `SystemEvent` → `MessageBus`
+
+#### Database v5.0
+
+- **New tables**:
+  - `desired_subscriptions`: Source of truth (channel_id, topic, version, transport)
+  - `active_subscriptions`: Observed Twitch state (twitch_sub_id, status, cost)
+  - `hub_state`: Key-value metrics (ws_state, current_session_id, total_events_routed, etc.)
+
+- **Migration script** (`database/migrate_hub_v1.py`):
+  - Idempotent migration v4.0.1 → v5.0
+  - Auto-backup before migration
+  - Post-migration verification
+
+#### Supervisor Integration
+
+- **Modified** `supervisor_v1.py`:
+  - `--enable-hub` flag to activate Hub mode
+  - Starts Hub **BEFORE** bots (critical: bots need socket)
+  - Health check monitors Hub + bots (auto-restart on crash every 30s)
+  - Interactive CLI: `hub-status`, `hub-restart`, `status` commands
+
+#### Operations & Observability
+
+- **Hub Control CLI** (`scripts/hub_ctl.py`):
+  - `status`: Hub state, subscriptions, metrics, IPC alive check
+  - `metrics`: Detailed counters (events routed, reconciliations, reconnects)
+  - `subscriptions`: List desired/active with filtering
+  - `resync`, `drain`, `restart`: Planned features (TODO)
+
+- **Configuration** (`config.yaml`):
+  - `eventsub.hub.enabled`: Enable Hub mode (default: false)
+  - `eventsub.hub.socket_path`: Unix socket (default: `/tmp/kissbot_hub.sock`)
+  - `eventsub.reconcile_interval`: Reconciliation frequency (default: 60s)
+  - `eventsub.req_rate_per_s`: Rate limit (default: 2.0)
+  - `eventsub.req_jitter_ms`: Jitter (default: 200ms)
+  - `eventsub.ws_backoff_base`, `ws_backoff_max`: Backoff strategy
+
+- **Documentation** (`docs/EVENTSUB_HUB.md`, 15 pages):
+  - Architecture diagrams
+  - IPC protocol specification
+  - Deployment guide
+  - Operations runbook
+  - Troubleshooting (8 scenarios)
+  - Performance benchmarks
+  - Migration guide
+
+#### Bot Integration
+
+- **Modified** `main.py`:
+  - `--eventsub` flag: `direct` (default), `hub`, or `disabled`
+  - `--hub-socket` flag: Custom Hub socket path
+  - Auto-detection: Use `HubEventSubClient` when `--eventsub=hub`
+
+#### Performance Benchmarks
+
+**Tested Configuration** (25s test):
+- 6 channels, 12 subscriptions: <2% CPU, 60 MB RAM, <20ms latency ✅
+
+**Estimated Scaling** (not tested, theoretical):
+- 10-50 channels: 5-15% CPU, 500 MB RAM, <50ms latency (SQLite OK)
+- 50-100 channels: 15-30% CPU, 1-2 GB RAM, <100ms (SQLite locks possible)
+- 100+ channels: 30%+ CPU, 5+ GB RAM (PostgreSQL recommended)
+
+**Known Bottlenecks**:
+- Rate limiting: 2 req/s → 500 subs = 4min initial sync
+- SQLite locks: >50 concurrent bots may cause contention
+- Memory: ~30-50 MB per bot process
+
+#### Deployment
+
+```bash
+# 1. Migrate database
+python database/migrate_hub_v1.py
+
+# 2. Enable Hub in config.yaml
+# eventsub.hub.enabled: true
+
+# 3. Start with supervisor
+python supervisor_v1.py --use-db --enable-hub
+
+# 4. Verify
+python scripts/hub_ctl.py status
+```
+
+#### Fixed
+
+- **Twitch 4003 error**: Hub creates first subscription <10s to avoid "connection unused"
+- **Token refresh**: Proper broadcaster token handling for EventSub Hub
+- **Reconnection storms**: Exponential backoff with max cap (60s)
+
+#### Security
+
+- **Unix socket permissions**: Consider `chmod 600 /tmp/kissbot_hub.sock` in production
+- **Token isolation**: Bots keep own tokens (IRC, Helix), Hub uses broadcaster token only
+
+---
+
 ## [4.0.0] - 2025-11-05
 
 ### 🚀 Major Release - Database Layer + Encrypted Tokens

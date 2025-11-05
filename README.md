@@ -138,6 +138,73 @@ Les deux modes peuvent coexister :
 
 ⚠️ **IMPORTANT** : La clé `.kissbot.key` est nécessaire pour déchiffrer les tokens. Sans elle, vous perdez l'accès aux tokens !
 
+### 🌐 EventSub Hub (v4.1.0) - Centralized WebSocket Manager
+
+**NOUVEAU** : Architecture Hub pour gérer des centaines de bots avec **1 seul WebSocket** Twitch !
+
+#### Pourquoi EventSub Hub ?
+
+**Problème** : Twitch limite à **3 WebSocket transports** par application. Chaque bot en mode direct = 1 WebSocket.
+
+**Solution** : Le Hub utilise **1 WebSocket** pour toute l'application, multiplexant des centaines de subscriptions. Les bots communiquent via IPC (Unix sockets).
+
+**Résultat** : Passez de 3 bots → ∞ bots (limité par vos ressources, pas par Twitch).
+
+#### Démarrage Rapide
+
+```bash
+# 1. Migrer la database (ajoute 3 tables Hub)
+python database/migrate_hub_v1.py
+
+# 2. Activer Hub dans config.yaml
+# eventsub.hub.enabled: true
+
+# 3. Démarrer avec supervisor
+python supervisor_v1.py --use-db --enable-hub
+
+# 4. Vérifier le statut
+python scripts/hub_ctl.py status
+```
+
+#### Architecture Hub
+
+```
+[Twitch EventSub] ←→ [Hub - 1 WS] ←→ [Bot #1, Bot #2, ..., Bot #N]
+                                       (IPC via Unix sockets)
+```
+
+**Composants** :
+- **EventSub Hub** (`eventsub_hub.py`) : WebSocket unique + IPC server
+- **Hub Client** (`twitchapi/transports/hub_eventsub_client.py`) : Client IPC pour bots
+- **Hub Control CLI** (`scripts/hub_ctl.py`) : Commandes d'administration
+
+#### Commandes Hub
+
+```bash
+# Statut complet (WS, subscriptions, métriques, IPC)
+python scripts/hub_ctl.py status
+
+# Métriques détaillées
+python scripts/hub_ctl.py metrics
+
+# Lister les subscriptions
+python scripts/hub_ctl.py subscriptions
+```
+
+#### Performance
+
+**Tested** (6 channels, 25s):
+- CPU: <2%, RAM: 60 MB, Latency: <20ms ✅
+
+**Estimated scaling** (not tested):
+- 10-50 channels: 5-15% CPU, 500 MB RAM, <50ms
+- 50-100 channels: 15-30% CPU, 1-2 GB RAM, <100ms (SQLite locks possible)
+- 100+ channels: PostgreSQL recommended (SQLite locks)
+
+**Bottlenecks**: Rate limiting (2 req/s), SQLite locks (>50 bots), RAM (~30-50 MB/bot)
+
+📚 **[Documentation complète EventSub Hub](docs/EVENTSUB_HUB.md)** (15 pages : architecture, IPC protocol, déploiement, troubleshooting, migration)
+
 ---
 
 ## 🎉🚀 TwitchIO 3.x Migration Ready !

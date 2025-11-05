@@ -38,6 +38,7 @@ from database.manager import DatabaseManager
 from twitchapi.auth_manager import AuthManager
 from twitchapi.monitors.stream_monitor import StreamMonitor
 from twitchapi.transports.eventsub_client import EventSubClient
+from twitchapi.transports.hub_eventsub_client import HubEventSubClient
 from twitchapi.transports.helix_readonly import HelixReadOnlyClient
 from twitchapi.transports.irc_client import IRCClient
 from core.system_monitor import SystemMonitor
@@ -70,6 +71,19 @@ def parse_args():
         type=str,
         default='kissbot.db',
         help='Path to database file (default: kissbot.db)'
+    )
+    parser.add_argument(
+        '--eventsub',
+        type=str,
+        choices=['direct', 'hub', 'disabled'],
+        default='direct',
+        help='EventSub mode: direct (own WebSocket), hub (connect to Hub via IPC), disabled (polling only)'
+    )
+    parser.add_argument(
+        '--hub-socket',
+        type=str,
+        default='/tmp/kissbot_hub.sock',
+        help='Path to EventSub Hub IPC socket (default: /tmp/kissbot_hub.sock)'
     )
     return parser.parse_args()
 
@@ -463,7 +477,43 @@ async def main():
                 LOGGER.warning(f"⚠️ Cannot get broadcaster ID for {channel}")
         
         # Logique hybrid: auto, eventsub, ou polling
-        if monitoring_method == "auto":
+        # NEW: Support pour --eventsub=hub mode
+        eventsub_mode = args.eventsub if hasattr(args, 'eventsub') else 'direct'
+        
+        if eventsub_mode == 'disabled':
+            # Force polling only
+            LOGGER.info("🎯 EventSub disabled via --eventsub=disabled, using polling")
+            stream_monitor = StreamMonitor(
+                helix=helix,
+                bus=bus,
+                channels=irc_channels,
+                interval=polling_interval
+            )
+        
+        elif eventsub_mode == 'hub':
+            # Connect to EventSub Hub via IPC
+            LOGGER.info("🎯 EventSub mode: hub (connecting to centralized Hub via IPC)")
+            try:
+                hub_socket = args.hub_socket if hasattr(args, 'hub_socket') else '/tmp/kissbot_hub.sock'
+                eventsub_client = HubEventSubClient(
+                    bus=bus,
+                    channels=irc_channels,
+                    broadcaster_ids=broadcaster_ids,
+                    hub_socket_path=hub_socket
+                )
+                LOGGER.info(f"✅ Hub client created (socket: {hub_socket})")
+            except Exception as e:
+                LOGGER.error(f"❌ Failed to create Hub client: {e}")
+                LOGGER.warning("⚠️  Falling back to polling")
+                eventsub_client = None
+                stream_monitor = StreamMonitor(
+                    helix=helix,
+                    bus=bus,
+                    channels=irc_channels,
+                    interval=polling_interval
+                )
+        
+        elif monitoring_method == "auto":
             # Auto: Try EventSub first, fallback to polling if fails
             try:
                 LOGGER.info("🎯 Method=auto: Trying EventSub WebSocket first...")

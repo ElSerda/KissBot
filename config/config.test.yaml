@@ -1,0 +1,168 @@
+apis:
+  openai_key: sk-proj-FAKE_KEY_FOR_TESTING_ONLY_REPLACE_WITH_REAL_KEY
+  rawg_key: 2be95642f3334633998bad840316f6fa
+  timeout: 10.0  # Timeout général pour APIs externes (RAWG, OpenAI, etc.)
+
+# ⏱️ Timeouts pour les transports (Phase 2.6)
+timeouts:
+  irc_send: 5.0       # Timeout envoi message IRC
+  helix_request: 8.0  # Timeout requête Helix API
+  llm_inference: 30.0 # Timeout inférence LLM (peut être long)
+bot:
+  cooldown: 5
+  debug: true
+  name: serda_bot
+  personality: |
+    Nom: serda_bot (bot Twitch). Tech: Python + asyncio + pyTwitchAPI + aiohttp.
+    Ton: drôle, sarcastique, direct, geek.
+    
+    Style de réponse:
+    - Phrases courtes et percutantes (1-2 max)
+    - Emojis stylés: 😎 🔥 💻 🐍
+    - Jeux de mots et vannes amicales
+    - Pas d'explications longues, reste punchy
+    
+    Cas spécifiques:
+    - Question technique sur ton code → "100% Python 🐍, asyncio pour la perf, pyTwitchAPI pour Twitch !"
+    - Question perso (ça va?) → "En mode AFK mental, et toi?" ou "Je carbure aux bits, et toi?"
+    - Question vague → Demande de précision avec humour
+cache:
+  max_size: 1000
+  ttl_seconds: 3600
+commands:
+  cooldowns:
+    ask: 10.0
+    joke: 10.0
+    mention: 15.0
+    translate: 5.0
+    game_current: 5.0
+    game_info: 5.0
+    wiki: 5.0  # Plus court que !ask car pas de LLM
+  cache:
+    joke_ttl: 300
+    joke_max_size: 100
+
+# 📚 Wikipedia configuration
+wikipedia:
+  lang: fr  # Langue par défaut (fr, en, es, etc.)
+
+# 📢 Phase 3.3 - Stream Announcements (online/offline)
+announcements:
+  # Stream monitoring settings
+  monitoring:
+    enabled: true  # Enable/disable all monitoring (polling + EventSub)
+    method: auto   # "auto" (EventSub + polling fallback), "eventsub" (EventSub only), "polling" (polling only)
+    polling_interval: 60  # Seconds between Helix API polls (fallback mode)
+  
+  # Stream ONLINE announcements
+  stream_online:
+    enabled: true  # Set to false to disable online announcements
+    message: "🔴 @{channel} est maintenant en live ! 🎮 {title}"
+    # Available variables: {channel}, {title}, {game_name}, {viewer_count}
+  
+  # Stream OFFLINE announcements (usually disabled to avoid spam)
+  stream_offline:
+    enabled: false  # Set to true to enable offline announcements
+    message: "💤 @{channel} est maintenant hors ligne. À bientôt !"
+    # Available variables: {channel}
+llm:
+  enabled: true
+  fallback_mode: fun
+  fallback_provider: none
+  language: fr
+  local_llm: false
+  max_tokens_ask: 200
+  max_tokens_chill: 150
+  model_endpoint: http://127.0.0.1:1234/v1/chat/completions
+  model_name: mistralai/mistral-7b-instruct-v0.3
+  openai_model: gpt-3.5-turbo
+  personality_only_on_cloud: true
+  provider: cloud
+  inference:
+    ask:
+      max_tokens: 200
+      temperature: 0.3
+      repeat_penalty: 1.1
+      stop_tokens:
+      - "\n\n"
+      - "🔚"  # Emoji END
+    mention:
+      max_tokens: 200
+      temperature: 0.7
+      repeat_penalty: 1.1
+      stop_tokens:
+      - "\n\n"
+    gen_long:
+      max_tokens: 100
+      temperature: 0.4
+      repeat_penalty: 1.2
+      stop_tokens:
+      - "🔚"  # Emoji END
+      - "\n\n"
+      - "400."
+      - "Exemple :"
+      - "En résumé,"
+    joke:
+      max_tokens: 150
+      temperature: 0.7
+      repeat_penalty: 1.1
+      stop_tokens:
+      - '
+
+        '
+    cloud:
+      max_tokens_short: 90
+      max_tokens_long: 60
+      temperature_short: 0.4
+      temperature_long: 0.8
+  stream_response_debug: 'on'
+  temperature_ask: 0.5
+  temperature_chill: 0.8
+  use_personality_on_ask: false
+  use_personality_on_mention: true
+logging:
+  file: serdabot_v2.log
+  level: DEBUG
+neural_llm:
+  cloud_failure_threshold: 5
+  cloud_recovery_time: 600
+  ema_alpha: 0.2
+  enabled: true
+  local_failure_threshold: 3
+  local_recovery_time: 300
+  max_correlation_history: 100
+  min_trials_per_synapse: 3
+  timeout_connect: 5.0
+  timeout_inference: 30.0
+  timeout_write: 10.0
+  timeout_pool: 5.0
+  ucb_exploration_factor: 1.4
+rawg:
+  api_key: 2be95642f3334633998bad840316f6fa
+translation:
+  enabled: true
+  rate_limit: 5
+  target_language: fr
+twitch:
+  bot_id: '1209350837'
+  broadcaster_id: 44456636
+  
+  # 📺 Channels où le bot se connecte (IRC + Stream Monitoring)
+  # Liste des channels Twitch à rejoindre (sans le #)
+  channels:
+  - ekylybryum
+  - pelerin_
+  # - autre_channel
+  
+  prefix: '!'
+  client_id: ui01kfembjhzqpnyorsyrs286fwshp
+  client_secret: hebko26qf4paukueiod44v949zc6ba
+  tokens:
+    serda_bot:
+      user_id: '1209350837'
+      access_token: yrxyuiyffxiqsbc6cpr5y7utl7xmtd
+      refresh_token: kwgxkn1ylz67vho6yoh6q88pj26xve9m4hwwa8ztcx82bd3n1z
+    el_serda:
+      user_id: '44456636'
+      access_token: 9e1kynpb9f1syfuzy0zspl31mrpt9m
+      refresh_token: mb3kjsjioyg98qlskirq9vw01zplfr726dyt5zqf8u3zk1d6l4
