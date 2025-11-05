@@ -141,13 +141,14 @@ def load_config(config_path='config/config.yaml'):
         return yaml.safe_load(f)
 
 
-def load_token_from_db(db_manager, twitch_login):
+def load_token_from_db(db_manager, twitch_login, token_type='bot'):
     """
     Load OAuth token from database.
     
     Args:
         db_manager: Instance of DatabaseManager
         twitch_login: Twitch login (e.g., 'serda_bot', 'el_serda')
+        token_type: Type of token ('bot' or 'broadcaster')
     
     Returns:
         Dict with 'access_token', 'refresh_token', 'user_id' or None if not found
@@ -159,18 +160,24 @@ def load_token_from_db(db_manager, twitch_login):
             LOGGER.error(f"❌ User {twitch_login} not found in database")
             return None
         
-        # Get decrypted tokens
-        tokens = db_manager.get_tokens(user['id'])
+        # Get decrypted tokens by type
+        tokens = db_manager.get_tokens(user['id'], token_type=token_type)
         if not tokens:
-            LOGGER.error(f"❌ No tokens found for user {twitch_login}")
+            LOGGER.error(f"❌ No {token_type} tokens found for user {twitch_login}")
             return None
         
         # Check if tokens need reauth
         if tokens.get('needs_reauth'):
-            LOGGER.error(f"❌ Tokens for {twitch_login} need reauthorization (refresh failed 3x)")
+            LOGGER.error(f"❌ Tokens for {twitch_login} (type={token_type}) need reauthorization (refresh failed 3x)")
             return None
         
-        LOGGER.info(f"✅ Loaded tokens for {twitch_login} from database (expires: {tokens['expires_at']})")
+        # Check status
+        status = tokens.get('status', 'valid')
+        if status == 'revoked':
+            LOGGER.error(f"❌ Tokens for {twitch_login} (type={token_type}) have been revoked")
+            return None
+        
+        LOGGER.info(f"✅ Loaded {token_type} tokens for {twitch_login} from database (expires: {tokens['expires_at']}, status: {status})")
         
         # Parse scopes from JSON if available
         scopes = []
@@ -254,15 +261,15 @@ async def main():
     # Initialisation silencieuse
     twitch_app = await Twitch(app_id, app_secret)
     
-    # Load bot token (User Token)
-    # Mode DB: load from database
+    # Load bot token (User Token for IRC)
+    # Mode DB: load from database (token_type='bot')
     # Mode YAML: load from .tio.tokens.json via AuthManager
     if args.use_db:
         LOGGER.info(f"🔐 Loading bot token from database: {bot_name}")
-        bot_token_data = load_token_from_db(db_manager, bot_name)
+        bot_token_data = load_token_from_db(db_manager, bot_name, token_type='bot')
         
         if not bot_token_data:
-            LOGGER.error(f"❌ Token bot '{bot_name}' introuvable dans la DB !")
+            LOGGER.error(f"❌ Bot token '{bot_name}' introuvable dans la DB !")
             await twitch_app.close()
             sys.exit(1)
         
@@ -309,7 +316,7 @@ async def main():
         """Callback appelé automatiquement par pyTwitchAPI quand le token est refreshé"""
         try:
             if args.use_db:
-                # Save to database
+                # Save to database with token_type
                 user = db_manager.get_user_by_login(bot_name)
                 if user:
                     # Store refreshed tokens with 4 hours expiry (will be updated on next validate)
@@ -318,9 +325,11 @@ async def main():
                         access_token=token,
                         refresh_token=refresh_token,
                         expires_in=14400,  # 4 hours
-                        scopes=None  # Keep existing scopes
+                        scopes=bot_token.scopes,  # Keep existing scopes
+                        token_type='bot',  # This is the bot token
+                        status='valid'
                     )
-                    LOGGER.info(f"✅ Token auto-refreshé et sauvegardé dans DB pour {bot_name}")
+                    LOGGER.info(f"✅ Bot token auto-refreshed and saved to DB for {bot_name}")
             else:
                 # Save to .tio.tokens.json (legacy mode)
                 token_file = Path(".tio.tokens.json")

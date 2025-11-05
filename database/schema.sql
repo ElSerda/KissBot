@@ -19,19 +19,30 @@ CREATE INDEX IF NOT EXISTS idx_users_login ON users(twitch_login);
 CREATE TABLE IF NOT EXISTS oauth_tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
+    token_type TEXT NOT NULL CHECK(token_type IN ('bot','broadcaster')),  -- Type de token
     access_token_encrypted TEXT NOT NULL,
     refresh_token_encrypted TEXT NOT NULL,
-    scopes TEXT,  -- JSON array des scopes (optionnel, sera rempli par validate token)
+    scopes TEXT NOT NULL,  -- JSON array des scopes (requis, rempli à l'OAuth)
     expires_at TIMESTAMP NOT NULL,
+    last_refresh INTEGER,  -- Timestamp UNIX du dernier refresh
+    status TEXT NOT NULL DEFAULT 'valid' CHECK(status IN ('valid','expired','revoked')),
+    key_version INTEGER NOT NULL DEFAULT 1,  -- Version de la clé de chiffrement (rotation)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     needs_reauth BOOLEAN DEFAULT 0,  -- Flag si refresh a échoué 3x
     refresh_failures INTEGER DEFAULT 0,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, token_type)  -- Un seul token de chaque type par user
 );
 
 -- Index pour recherche par user_id
 CREATE INDEX IF NOT EXISTS idx_oauth_user ON oauth_tokens(user_id);
+
+-- Index pour recherche par type de token
+CREATE INDEX IF NOT EXISTS idx_oauth_type ON oauth_tokens(token_type);
+
+-- Index pour recherche par statut
+CREATE INDEX IF NOT EXISTS idx_oauth_status ON oauth_tokens(status);
 
 -- Index pour scan des tokens expirant bientôt
 CREATE INDEX IF NOT EXISTS idx_oauth_expires ON oauth_tokens(expires_at);
@@ -96,7 +107,8 @@ INSERT OR IGNORE INTO config (key, value, description) VALUES
     ('token_refresh_interval', '60', 'Intervalle de refresh des tokens (secondes avant expiration)'),
     ('health_check_interval', '30', 'Intervalle des health checks (secondes)'),
     ('max_crash_count', '3', 'Nombre max de crashes avant désactivation auto'),
-    ('log_retention_days', '30', 'Durée de rétention des audit logs (jours)');
+    ('log_retention_days', '30', 'Durée de rétention des audit logs (jours)'),
+    ('app_token_cache_ttl', '3600', 'TTL du cache pour app access token (secondes)');
 
 -- Trigger pour mettre à jour updated_at automatiquement
 CREATE TRIGGER IF NOT EXISTS update_users_timestamp 

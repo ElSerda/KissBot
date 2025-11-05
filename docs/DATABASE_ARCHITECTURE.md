@@ -182,21 +182,37 @@ CREATE TABLE users (
 CREATE TABLE oauth_tokens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
+    token_type TEXT NOT NULL CHECK(token_type IN ('bot','broadcaster')),  -- Type de token
     access_token_encrypted TEXT NOT NULL,   -- Token chiffré Fernet
     refresh_token_encrypted TEXT NOT NULL,  -- Refresh token chiffré
-    scopes TEXT,                            -- JSON array des scopes
+    scopes TEXT NOT NULL,                   -- JSON array des scopes (requis)
     expires_at TIMESTAMP NOT NULL,          -- Date d'expiration
+    last_refresh INTEGER,                   -- Timestamp UNIX du dernier refresh
+    status TEXT NOT NULL DEFAULT 'valid' CHECK(status IN ('valid','expired','revoked')),
+    key_version INTEGER NOT NULL DEFAULT 1, -- Version clé de chiffrement (rotation)
     needs_reauth BOOLEAN DEFAULT 0,         -- Flag réautorisation nécessaire
     refresh_failures INTEGER DEFAULT 0,     -- Compteur échecs refresh
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, token_type)             -- Un token de chaque type par user
 );
 ```
 
 **Index** :
 - `idx_oauth_user` : Lookup rapide par user_id
+- `idx_oauth_type` : Filtrage par type de token (bot/broadcaster)
+- `idx_oauth_status` : Filtrage par statut (valid/expired/revoked)
 - `idx_oauth_expires` : Scan des tokens expirant bientôt
+
+**Types de tokens** :
+- `bot` : Token du compte bot (ex: @serda_bot) - utilisé pour IRC chat
+- `broadcaster` : Token du channel (ex: @el_serda) - utilisé pour EventSub/Helix
+
+**Statuts** :
+- `valid` : Token actif et valide
+- `expired` : Token expiré (peut être refresh)
+- `revoked` : Token révoqué par l'utilisateur (nécessite réautorisation)
 
 #### `instances` - Instances de bot actives
 
@@ -263,6 +279,232 @@ log_retention_days = 30              # Rétention des audit logs
 ---
 
 ## 🔐 Sécurité
+
+### Types de Credentials et Utilisation
+
+KissBot utilise **3 types de credentials** différents :
+
+#### 1. APP Credentials (Application KissBot)
+
+**Localisation** : `config/config.yaml` (PAS dans la DB)
+
+```yaml
+twitch:
+  client_id: "ekylybryum..."        # Public
+  client_secret: "***************"  # Secret
+```
+
+**Utilisé pour** :
+- Initialiser `TwitchAPI`
+- Générer app access tokens (Helix public)
+
+**Scopes** : Aucun (app-level)
+
+**Sécurité** :
+- ⚠️ Ne JAMAIS commit dans Git
+- 🔒 Permissions 600 sur config.yaml
+- 💡 Prod : utiliser ENV vars (`KISSBOT_CLIENT_ID`, `KISSBOT_CLIENT_SECRET`)
+
+#### 2. BOT User Token (ex: @serda_bot)
+
+**Localisation** : `database/oauth_tokens` (token_type='bot')
+
+**Utilisé pour** :
+- 💬 **IRC Chat** (join_room, send_message, read chat)
+- Toutes les interactions chat en tant que bot
+
+**Scopes requis** :
+```json
+[
+  "chat:read",
+  "chat:edit",
+  "user:bot",
+  "user:read:chat",
+  "user:write:chat"
+]
+```
+
+**Sécurité** :
+- ✅ Chiffré Fernet dans la DB
+- ✅ Auto-refresh avant expiration
+- ✅ Audit log de tous les refreshs
+
+#### 3. BROADCASTER User Token (ex: @el_serda)
+
+**Localisation** : `database/oauth_tokens` (token_type='broadcaster')
+
+**Utilisé pour** :
+- 📡 **EventSub** topics user-based (subs, points, follows, raids)
+- 🎛️ **Helix "On-Behalf-Of"** (annonces, prédictions, modération, raids)
+
+**Scopes requis** (principe du moindre privilège) :
+```json
+[
+  "channel:read:subscriptions",        // Subs
+  "channel:read:redemptions",          // Points de chaîne
+  "moderator:manage:announcements",    // Annonces
+  "channel:manage:predictions",        // Prédictions
+  "moderator:manage:banned_users",     // Bans
+  "channel:manage:raids"               // Raids
+]
+```
+
+**Sécurité** :
+- ✅ Chiffré Fernet dans la DB
+- ✅ Scopes limités au strict nécessaire
+- ✅ Status tracking (valid/expired/revoked)
+
+---
+
+### Tableau récapitulatif : Quel Token pour Quoi ?
+
+---
+
+### 🧩 Twitch Permissions Matrix — KissBot Architecture
+
+#### ⚙️ Les différents types de tokens
+
+| Type de Token | Porté par | Description | Exemple |
+|---------------|-----------|-------------|---------|
+| **APP Token** | Application | Authentifie KissBot lui-même (client_id / client_secret) | KissBot App |
+| **BOT Token** | Compte utilisateur du bot | Permet à un compte (ex: serda_bot) d'agir en tant que bot | @serda_bot |
+| **BROADCASTER Token** | Compte streamer | Permet d'interagir avec la chaîne du streamer | @el_serda |
+
+---
+
+#### 🧠 Permissions et usages par feature
+
+| 🔹 Fonction / Action | 🔑 Token utilisé | 🧾 Type | 🧠 Scopes nécessaires | 🌐 API utilisée | 🎖️ Effet spécial |
+|---------------------|------------------|---------|----------------------|----------------|------------------|
+| Lire le chat | Bot | User | `chat:read` | IRC | — |
+| Écrire dans le chat | Bot | User | `chat:edit` | IRC | — |
+| Recevoir/Envoyer via API Chat | Bot + Broadcaster | User / App | `user:read:chat`, `user:write:chat`, `user:bot`, `channel:bot` | Send Chat Message API (Helix) | 🟣 Active le badge "Verified Bot" |
+| Écouter EventSub Chat (nouvelle API) | Bot + Broadcaster | User | `user:read:chat`, `user:bot`, `channel:bot` | EventSub Chat | 🟣 Nécessaire pour "Bot Verified" |
+| Lire viewers / catégories / jeux | App | App | (aucun) | Helix public | — |
+| Lire ou gérer les points de chaîne | Broadcaster | User | `channel:read:redemptions`, `channel:manage:redemptions` | Helix | — |
+| Gérer annonces / shoutouts / raids | Broadcaster | User | `channel:manage:announcements`, `channel:manage:raids`, `moderator:read:shoutouts` | Helix | — |
+| Suivre les events (raid, sub, follow…) | Broadcaster | User | `channel:read:subscriptions`, `moderator:read:followers` | EventSub | — |
+| Modération (timeout, ban, purge) | Broadcaster | User | `moderator:manage:banned_users` | Helix | — |
+| Lancer une prédiction | Broadcaster | User | `channel:manage:predictions` | Helix | — |
+| Générer App Access Token | App | App | (client_credentials) | OAuth2 | — |
+| Rafraîchir un User Token | Bot / Broadcaster | User | (refresh_token) | OAuth2 | — |
+
+---
+
+#### 🏷️ Le badge "Bot Verified" (🟣)
+
+Pour que Twitch affiche le badge "Verified Bot" à côté du pseudo de ton bot :
+
+| Condition | Description |
+|-----------|-------------|
+| ✅ Le bot a autorisé ton application via OAuth | `user:bot` présent dans les scopes du **BOT** |
+| ✅ Le streamer a autorisé le bot via OAuth | `channel:bot` présent dans les scopes du **BROADCASTER** |
+| ✅ Ton app utilise les nouveaux endpoints Chat / EventSub Chat | (`user:read:chat`, `user:write:chat`) |
+| ✅ Le bot respecte les règles anti-spam & modération Twitch | (évalué automatiquement par Twitch) |
+
+**Une fois ces conditions remplies**, le badge est attribué automatiquement au compte bot après quelques jours d'activité stable.
+👉 Cela se fait via l'API Helix (aucune action manuelle à faire).
+
+---
+
+#### 🧩 Modes supportés par KissBot
+
+| Mode | Description | Tokens nécessaires | Utilisation principale | Avantage |
+|------|-------------|-------------------|----------------------|----------|
+| **IRC Mode** (classique) | Connexion directe aux serveurs IRC Twitch | BOT uniquement (`chat:read`, `chat:edit`) | Léger, auto-hébergé, VPS | Simplicité & faible latence |
+| **Cloud Chat Mode** | Utilise les APIs Helix & EventSub Chat | BOT + BROADCASTER (`user:bot`, `channel:bot`) | SaaS, intégration Web, mod avancée | 🟣 Éligible au badge Verified Bot |
+
+---
+
+#### 💾 Recommandation de stockage dans la DB
+
+| Champ | Exemple | Description |
+|-------|---------|-------------|
+| `token_type` | `"bot"` / `"broadcaster"` | Type de token |
+| `scopes` | `["user:read:chat","user:bot","channel:bot"]` | Scopes exacts de l'OAuth |
+| `status` | `"valid"` / `"expired"` / `"revoked"` | État du token |
+| `last_refresh` | `1730781453` | Timestamp UNIX du dernier refresh |
+| `key_version` | `1` | Pour rotation Fernet |
+| `user_id` | `1` | Référence table users |
+
+---
+
+#### ⚙️ Flow d'authentification (Cloud Mode)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. APP Credentials (client_id/secret)                       │
+│    └─→ config.yaml                                          │
+└─────────────────────────────────────────────────────────────┘
+          │
+          ├─→ OAuth: Bot Token
+          │   └─→ Scopes: user:bot + chat:read + chat:edit + user:write:chat
+          │   └─→ Stocké: database (token_type='bot')
+          │
+          └─→ OAuth: Broadcaster Token
+              └─→ Scopes: channel:bot + moderator:manage:*
+              └─→ Stocké: database (token_type='broadcaster')
+          
+          ↓
+┌─────────────────────────────────────────────────────────────┐
+│ EventSub Chat + Send Chat Message API (Helix)               │
+└─────────────────────────────────────────────────────────────┘
+          ↓
+┌─────────────────────────────────────────────────────────────┐
+│ ✅ Bot "Verified" - badge violet 🟣 sur Twitch              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 🧭 Résumé rapide
+
+| Élément | Type | Obligatoire | Pour "Bot Verified" |
+|---------|------|-------------|---------------------|
+| `user:bot` | Bot | ✅ Oui | ✅ Oui |
+| `channel:bot` | Broadcaster | ✅ Oui | ✅ Oui |
+| `user:read:chat` / `user:write:chat` | Bot | Optionnel (Cloud) | ✅ Oui |
+| `chat:read` / `chat:edit` | Bot | ✅ IRC Mode | ❌ Non |
+| `client_id` / `client_secret` | App | ✅ Oui | ✅ Oui |
+
+**💬 En résumé :**
+
+- **IRC mode** → simple et rapide
+- **Cloud mode** → plus moderne, plus riche, et donne le badge "Bot Verified" 🟣
+- **KissBot supporte les deux**, pour un upgrade progressif sans stress 💪
+
+---
+
+### Tableau récapitulatif : Quel Token pour Quoi ?
+
+| Action | Token utilisé | Scopes requis | Type |
+|--------|---------------|---------------|------|
+| **Lire/écrire chat (IRC)** | BOT user token | `chat:read`, `chat:edit` | User |
+| **EventSub user-based** (subs, points, raids) | BROADCASTER user token | `channel:read:subscriptions`, etc. | User |
+| **Helix "on-behalf-of"** (annonces, prédictions, modération) | BROADCASTER user token | `moderator:manage:announcements`, etc. | User |
+| **Helix public** (jeux, catégories, infos globales) | APP access token | Aucun | App |
+
+---
+
+### Flow de Démarrage
+
+```
+1. Charger APP creds (client_id/secret) → config.yaml
+   └─→ Initialiser TwitchAPI
+   
+2. Charger BOT token (décrypté) → database (token_type='bot')
+   └─→ set_user_authentication(bot_token)
+   └─→ IRC join & speak
+   
+3. Charger BROADCASTER token (décrypté) → database (token_type='broadcaster')
+   └─→ EventSub user-based topics
+   └─→ Helix on-behalf-of actions
+   
+4. Générer APP access token → TwitchAPI
+   └─→ Helix endpoints publics
+```
+
+---
 
 ### Chiffrement Fernet
 

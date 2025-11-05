@@ -210,20 +210,21 @@ class DatabaseManager:
     
     # ==================== OAUTH TOKENS ====================
     
-    def get_tokens(self, user_id: int) -> Optional[Dict[str, Any]]:
+    def get_tokens(self, user_id: int, token_type: str = 'bot') -> Optional[Dict]:
         """
-        Récupère les tokens OAuth d'un utilisateur (déchiffrés).
+        Récupère et déchiffre les tokens OAuth d'un utilisateur.
         
         Args:
             user_id: ID de l'utilisateur en base
+            token_type: Type de token ('bot' ou 'broadcaster')
         
         Returns:
             Dict avec access_token, refresh_token, expires_at, etc.
         """
         with self._get_connection() as conn:
             cursor = conn.execute(
-                "SELECT * FROM oauth_tokens WHERE user_id = ?",
-                (user_id,)
+                "SELECT * FROM oauth_tokens WHERE user_id = ? AND token_type = ?",
+                (user_id, token_type)
             )
             row = cursor.fetchone()
             if not row:
@@ -238,13 +239,14 @@ class DatabaseManager:
                 del data['access_token_encrypted']
                 del data['refresh_token_encrypted']
             except Exception as e:
-                logger.error(f"Failed to decrypt tokens for user {user_id}: {e}")
+                logger.error(f"Failed to decrypt tokens for user {user_id} (type={token_type}): {e}")
                 return None
             
             return data
     
     def store_tokens(self, user_id: int, access_token: str, refresh_token: str,
-                    expires_in: int, scopes: Optional[List[str]] = None) -> bool:
+                    expires_in: int, scopes: Optional[List[str]] = None, 
+                    token_type: str = 'bot', status: str = 'valid') -> bool:
         """
         Stocke ou met à jour les tokens OAuth d'un utilisateur.
         
@@ -253,7 +255,9 @@ class DatabaseManager:
             access_token: Token d'accès OAuth
             refresh_token: Token de rafraîchissement
             expires_in: Durée de validité en secondes
-            scopes: Liste des scopes OAuth (optionnel)
+            scopes: Liste des scopes OAuth (obligatoire en v4.0.1)
+            token_type: Type de token ('bot' ou 'broadcaster')
+            status: Statut du token ('valid', 'expired', 'revoked')
         
         Returns:
             True si succès
@@ -265,14 +269,19 @@ class DatabaseManager:
         # Calculer la date d'expiration
         expires_at = datetime.now() + timedelta(seconds=expires_in)
         
-        # Sérialiser les scopes
-        scopes_json = json.dumps(scopes) if scopes else None
+        # Sérialiser les scopes (requis en v4.0.1)
+        if scopes is None:
+            scopes = []  # Liste vide si pas fourni (pour compatibilité)
+        scopes_json = json.dumps(scopes)
+        
+        # Timestamp UNIX du refresh
+        last_refresh = int(datetime.now().timestamp())
         
         with self._get_connection() as conn:
-            # Vérifier si des tokens existent déjà
+            # Vérifier si des tokens existent déjà pour ce type
             cursor = conn.execute(
-                "SELECT id FROM oauth_tokens WHERE user_id = ?",
-                (user_id,)
+                "SELECT id FROM oauth_tokens WHERE user_id = ? AND token_type = ?",
+                (user_id, token_type)
             )
             existing = cursor.fetchone()
             
@@ -285,11 +294,14 @@ class DatabaseManager:
                         refresh_token_encrypted = ?,
                         expires_at = ?,
                         scopes = ?,
+                        last_refresh = ?,
+                        status = ?,
                         needs_reauth = 0,
                         refresh_failures = 0
-                    WHERE user_id = ?
+                    WHERE user_id = ? AND token_type = ?
                     """,
-                    (access_encrypted, refresh_encrypted, expires_at, scopes_json, user_id)
+                    (access_encrypted, refresh_encrypted, expires_at, scopes_json, 
+                     last_refresh, status, user_id, token_type)
                 )
                 action = "updated"
             else:
@@ -297,11 +309,12 @@ class DatabaseManager:
                 conn.execute(
                     """
                     INSERT INTO oauth_tokens
-                    (user_id, access_token_encrypted, refresh_token_encrypted,
-                     expires_at, scopes, needs_reauth, refresh_failures)
-                    VALUES (?, ?, ?, ?, ?, 0, 0)
+                    (user_id, token_type, access_token_encrypted, refresh_token_encrypted,
+                     expires_at, scopes, last_refresh, status, key_version, needs_reauth, refresh_failures)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0)
                     """,
-                    (user_id, access_encrypted, refresh_encrypted, expires_at, scopes_json)
+                    (user_id, token_type, access_encrypted, refresh_encrypted, expires_at, 
+                     scopes_json, last_refresh, status)
                 )
                 action = "created"
             
@@ -310,18 +323,24 @@ class DatabaseManager:
                 conn=conn,
                 event_type=f"tokens_{action}",
                 user_id=user_id,
-                details={"expires_at": expires_at.isoformat(), "scopes": scopes}
+                details={
+                    "token_type": token_type,
+                    "expires_at": expires_at.isoformat(), 
+                    "scopes": scopes,
+                    "status": status
+                }
             )
             
-            logger.info(f"Tokens {action} for user {user_id}, expires: {expires_at}")
+            logger.info(f"Tokens {action} for user {user_id} (type={token_type}), expires: {expires_at}")
             return True
     
-    def mark_tokens_expired(self, user_id: int, reason: str = "manual") -> bool:
+    def mark_tokens_expired(self, user_id: int, token_type: str = 'bot', reason: str = "manual") -> bool:
         """
         Marque les tokens comme nécessitant une réautorisation.
         
         Args:
             user_id: ID de l'utilisateur
+            token_type: Type de token ('bot' ou 'broadcaster')
             reason: Raison de l'expiration
         
         Returns:
@@ -329,8 +348,8 @@ class DatabaseManager:
         """
         with self._get_connection() as conn:
             cursor = conn.execute(
-                "UPDATE oauth_tokens SET needs_reauth = 1 WHERE user_id = ?",
-                (user_id,)
+                "UPDATE oauth_tokens SET needs_reauth = 1, status = 'expired' WHERE user_id = ? AND token_type = ?",
+                (user_id, token_type)
             )
             
             if cursor.rowcount > 0:
@@ -338,13 +357,43 @@ class DatabaseManager:
                     conn=conn,
                     event_type="tokens_expired",
                     user_id=user_id,
-                    details={"reason": reason},
+                    details={"reason": reason, "token_type": token_type},
                     severity="warning"
                 )
-                logger.warning(f"Tokens expired for user {user_id}: {reason}")
+                logger.warning(f"Tokens expired for user {user_id} (type={token_type}): {reason}")
                 return True
             
             return False
+    
+    def increment_refresh_failures(self, user_id: int, token_type: str = 'bot') -> int:
+        """
+        Incrémente le compteur d'échecs de refresh.
+        
+        Args:
+            user_id: ID de l'utilisateur
+            token_type: Type de token ('bot' ou 'broadcaster')
+        
+        Returns:
+            Nouveau nombre d'échecs
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE oauth_tokens
+                SET refresh_failures = refresh_failures + 1
+                WHERE user_id = ? AND token_type = ?
+                RETURNING refresh_failures
+                """,
+                (user_id, token_type)
+            )
+            row = cursor.fetchone()
+            failures = row[0] if row else 0
+            
+            if failures >= 3:
+                conn.execute(
+                    "UPDATE oauth_tokens SET needs_reauth = 1, status = 'expired' WHERE user_id = ? AND token_type = ?",
+                    (user_id, token_type)
+                )
     
     def increment_refresh_failures(self, user_id: int) -> int:
         """
