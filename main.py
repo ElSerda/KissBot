@@ -5,23 +5,26 @@ KissBot V4 - Twitch Bot with IRC, Helix API, and Stream Monitoring
 ════════════════════════════════════════════════════════════════════════════
 Copyright (c) 2024-2025 ElSerda
 
-Licensed under the Business Source License 1.1 (BSL 1.1).
-See LICENSE file for full terms.
+Licence propriétaire "Source-Disponible" - Voir LICENSE et EULA_FR.md
 
-This bot includes the Δₛ³ semantic filtering algorithm.
-Commercial production use requires a license (see COMMERCIAL_LICENSE.md).
-After 2029-11-03, this code is available under Apache License 2.0.
+✅ Gratuit pour usage personnel, éducatif et recherche
+⚠️ Usage commercial nécessite une licence KissBot Pro
+
+Ce bot inclut l'algorithme de filtrage sémantique Δₛ³.
 ════════════════════════════════════════════════════════════════════════════
 """
 
+import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
 import yaml
 from twitchAPI.twitch import Twitch
+from twitchAPI.type import AuthScope
 
 from core.message_bus import MessageBus
 from core.registry import Registry
@@ -31,6 +34,7 @@ from core.chat_logger import ChatLogger
 from core.message_handler import MessageHandler
 from core.outbound_logger import OutboundLogger
 from core.stream_announcer import StreamAnnouncer
+from database.manager import DatabaseManager
 from twitchapi.auth_manager import AuthManager
 from twitchapi.monitors.stream_monitor import StreamMonitor
 from twitchapi.transports.eventsub_client import EventSubClient
@@ -38,37 +42,192 @@ from twitchapi.transports.helix_readonly import HelixReadOnlyClient
 from twitchapi.transports.irc_client import IRCClient
 from core.system_monitor import SystemMonitor
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
-    handlers=[
-        logging.FileHandler("kissbot_production.log"),
-        logging.StreamHandler()
-    ]
-)
-
+# Logger will be configured in parse_args()
 LOGGER = logging.getLogger(__name__)
 
 
-def load_config():
+def parse_args():
+    """Parse command-line arguments for single-channel mode"""
+    parser = argparse.ArgumentParser(description="KissBot V4 - Twitch Bot")
+    parser.add_argument(
+        '--channel',
+        type=str,
+        help='Run bot for a single channel (for multi-process mode)'
+    )
+    parser.add_argument(
+        '--config',
+        type=str,
+        default='config/config.yaml',
+        help='Path to config file (default: config/config.yaml)'
+    )
+    parser.add_argument(
+        '--use-db',
+        action='store_true',
+        help='Use database for tokens instead of config.yaml'
+    )
+    parser.add_argument(
+        '--db',
+        type=str,
+        default='kissbot.db',
+        help='Path to database file (default: kissbot.db)'
+    )
+    return parser.parse_args()
+
+
+def setup_logging(channel=None):
+    """Setup logging with per-channel log files if channel specified"""
+    # Create logs directory if needed
+    logs_dir = Path("logs")
+    logs_dir.mkdir(exist_ok=True)
+    
+    # Determine log file
+    if channel:
+        log_file = logs_dir / f"{channel}.log"
+    else:
+        log_file = "kissbot_production.log"
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ],
+        force=True  # Override any existing config
+    )
+    
+    return log_file
+
+
+def write_pid_file(channel=None):
+    """Write PID file for process tracking"""
+    # Create pids directory if needed
+    pids_dir = Path("pids")
+    pids_dir.mkdir(exist_ok=True)
+    
+    # Determine PID file
+    if channel:
+        pid_file = pids_dir / f"{channel}.pid"
+    else:
+        pid_file = pids_dir / "kissbot.pid"
+    
+    # Write current PID
+    pid = os.getpid()
+    with open(pid_file, 'w') as f:
+        f.write(str(pid))
+    
+    LOGGER.info(f"📝 PID {pid} written to {pid_file}")
+    return pid_file
+
+
+def remove_pid_file(pid_file):
+    """Remove PID file on shutdown"""
+    try:
+        if pid_file.exists():
+            pid_file.unlink()
+            LOGGER.info(f"🗑️ PID file {pid_file} removed")
+    except Exception as e:
+        LOGGER.warning(f"⚠️ Could not remove PID file {pid_file}: {e}")
+
+
+def load_config(config_path='config/config.yaml'):
     """Charge config.yaml"""
-    config_file = Path("config/config.yaml")
+    config_file = Path(config_path)
     if not config_file.exists():
-        LOGGER.error("config/config.yaml introuvable")
+        LOGGER.error(f"Config file {config_path} not found")
         sys.exit(1)
     with open(config_file, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 
+def load_token_from_db(db_manager, twitch_login):
+    """
+    Load OAuth token from database.
+    
+    Args:
+        db_manager: Instance of DatabaseManager
+        twitch_login: Twitch login (e.g., 'serda_bot', 'el_serda')
+    
+    Returns:
+        Dict with 'access_token', 'refresh_token', 'user_id' or None if not found
+    """
+    try:
+        # Get user from DB
+        user = db_manager.get_user_by_login(twitch_login)
+        if not user:
+            LOGGER.error(f"❌ User {twitch_login} not found in database")
+            return None
+        
+        # Get decrypted tokens
+        tokens = db_manager.get_tokens(user['id'])
+        if not tokens:
+            LOGGER.error(f"❌ No tokens found for user {twitch_login}")
+            return None
+        
+        # Check if tokens need reauth
+        if tokens.get('needs_reauth'):
+            LOGGER.error(f"❌ Tokens for {twitch_login} need reauthorization (refresh failed 3x)")
+            return None
+        
+        LOGGER.info(f"✅ Loaded tokens for {twitch_login} from database (expires: {tokens['expires_at']})")
+        
+        # Parse scopes from JSON if available
+        scopes = []
+        if tokens.get('scopes'):
+            try:
+                scopes = json.loads(tokens['scopes'])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        
+        return {
+            'access_token': tokens['access_token'],
+            'refresh_token': tokens['refresh_token'],
+            'user_id': user['twitch_user_id'],
+            'scopes': scopes
+        }
+    
+    except Exception as e:
+        LOGGER.error(f"❌ Failed to load token from DB for {twitch_login}: {e}")
+        return None
+
+
 async def main():
     """Main entry point: Initialize app token, Helix API, IRC client, and stream monitoring"""
+    # Parse args first
+    args = parse_args()
+    
+    # Setup logging (per-channel if --channel specified)
+    log_file = setup_logging(args.channel)
+    
+    # Write PID file for process tracking
+    pid_file = write_pid_file(args.channel)
+    
     print("=" * 70)
     print("KissBot V4 - Twitch Bot with IRC + Helix + Stream Monitoring")
+    if args.channel:
+        print(f"Mode: SINGLE-CHANNEL ({args.channel})")
+    else:
+        print("Mode: MULTI-CHANNEL")
+    if args.use_db:
+        print(f"Token Source: DATABASE ({args.db})")
+    else:
+        print("Token Source: YAML (config.yaml)")
     print("=" * 70)
     
-    config = load_config()
+    config = load_config(args.config)
     twitch_config = config.get("twitch", {})
     bot_config = config.get("bot", {})
+    
+    # Initialize DatabaseManager if --use-db
+    db_manager = None
+    if args.use_db:
+        try:
+            db_manager = DatabaseManager(db_path=args.db)
+            LOGGER.info(f"📦 Connected to database: {args.db}")
+        except Exception as e:
+            LOGGER.error(f"❌ Failed to connect to database: {e}")
+            sys.exit(1)
     
     # Load timeouts from config
     timeouts = config.get("timeouts", {})
@@ -83,6 +242,11 @@ async def main():
     # IRC channels to join (also monitored by StreamMonitor)
     irc_channels = twitch_config.get("channels", [])
     
+    # Override channels if --channel specified (single-channel mode)
+    if args.channel:
+        irc_channels = [args.channel]
+        LOGGER.info(f"🎯 Single-channel mode: {args.channel}")
+    
     if not app_id or not app_secret:
         LOGGER.error("client_id ou client_secret manquant")
         sys.exit(1)
@@ -91,13 +255,42 @@ async def main():
     twitch_app = await Twitch(app_id, app_secret)
     
     # Load bot token (User Token)
-    auth_manager = AuthManager(twitch_app)
-    bot_token = await auth_manager.load_token_from_file(bot_user_id)
-    
-    if not bot_token:
-        LOGGER.error(f"❌ Token bot '{bot_name}' introuvable !")
-        await twitch_app.close()
-        sys.exit(1)
+    # Mode DB: load from database
+    # Mode YAML: load from .tio.tokens.json via AuthManager
+    if args.use_db:
+        LOGGER.info(f"🔐 Loading bot token from database: {bot_name}")
+        bot_token_data = load_token_from_db(db_manager, bot_name)
+        
+        if not bot_token_data:
+            LOGGER.error(f"❌ Token bot '{bot_name}' introuvable dans la DB !")
+            await twitch_app.close()
+            sys.exit(1)
+        
+        # Create a simple object to hold token data
+        class TokenData:
+            def __init__(self, access_token, refresh_token, user_login, scopes=None):
+                self.access_token = access_token
+                self.refresh_token = refresh_token
+                self.user_login = user_login
+                self.scopes = scopes or []
+        
+        bot_token = TokenData(
+            access_token=bot_token_data['access_token'],
+            refresh_token=bot_token_data['refresh_token'],
+            user_login=bot_name,
+            scopes=bot_token_data.get('scopes', [])
+        )
+        bot_user_id = bot_token_data['user_id']
+        
+    else:
+        LOGGER.info(f"🔐 Loading bot token from YAML: {bot_name}")
+        auth_manager = AuthManager(twitch_app)
+        bot_token = await auth_manager.load_token_from_file(bot_user_id)
+        
+        if not bot_token:
+            LOGGER.error(f"❌ Token bot '{bot_name}' introuvable !")
+            await twitch_app.close()
+            sys.exit(1)
     
     # Créer instance Twitch avec User Token pour IRC
     twitch_bot = await Twitch(app_id, app_secret)
@@ -115,30 +308,85 @@ async def main():
     async def save_refreshed_token(token: str, refresh_token: str):
         """Callback appelé automatiquement par pyTwitchAPI quand le token est refreshé"""
         try:
-            token_file = Path(".tio.tokens.json")
-            if token_file.exists():
-                with open(token_file, 'r') as f:
-                    data = json.load(f)
-                
-                # Update token pour ce user_id
-                if bot_user_id in data:
-                    data[bot_user_id]["token"] = token
-                    data[bot_user_id]["refresh"] = refresh_token
+            if args.use_db:
+                # Save to database
+                user = db_manager.get_user_by_login(bot_name)
+                if user:
+                    # Store refreshed tokens with 4 hours expiry (will be updated on next validate)
+                    db_manager.store_tokens(
+                        user_id=user['id'],
+                        access_token=token,
+                        refresh_token=refresh_token,
+                        expires_in=14400,  # 4 hours
+                        scopes=None  # Keep existing scopes
+                    )
+                    LOGGER.info(f"✅ Token auto-refreshé et sauvegardé dans DB pour {bot_name}")
+            else:
+                # Save to .tio.tokens.json (legacy mode)
+                token_file = Path(".tio.tokens.json")
+                if token_file.exists():
+                    with open(token_file, 'r') as f:
+                        data = json.load(f)
                     
-                    with open(token_file, 'w') as f:
-                        json.dump(data, f, indent=2)
-                    
-                    LOGGER.info(f"✅ Token auto-refreshé et sauvegardé pour {bot_name}")
+                    # Update token pour ce user_id
+                    if bot_user_id in data:
+                        data[bot_user_id]["token"] = token
+                        data[bot_user_id]["refresh"] = refresh_token
+                        
+                        with open(token_file, 'w') as f:
+                            json.dump(data, f, indent=2)
+                        
+                        LOGGER.info(f"✅ Token auto-refreshé et sauvegardé pour {bot_name}")
         except Exception as e:
             LOGGER.error(f"❌ Erreur sauvegarde token refreshé: {e}")
     
     # Set user authentication avec callback de refresh natif
-    await twitch_bot.set_user_authentication(
-        token=bot_token.access_token,
-        scope=bot_token.scopes,
-        refresh_token=bot_token.refresh_token,
-        validate=True  # Active validation + auto-refresh si expiré
-    )
+    try:
+        if args.use_db and not bot_token.scopes:
+            # Mode DB sans scopes : utiliser les scopes standards pour un bot Twitch
+            # Convertir les strings en AuthScope enum
+            default_scopes = [
+                AuthScope.CHAT_EDIT,
+                AuthScope.CHAT_READ,
+                AuthScope.USER_BOT,
+                AuthScope.USER_READ_CHAT,
+                AuthScope.USER_READ_MODERATED_CHANNELS,
+                AuthScope.USER_WRITE_CHAT
+            ]
+            LOGGER.info(f"🔍 Using default bot scopes: {[s.value for s in default_scopes]}")
+            
+            await twitch_bot.set_user_authentication(
+                token=bot_token.access_token,
+                scope=default_scopes,
+                refresh_token=bot_token.refresh_token,
+                validate=True  # Active validation + auto-refresh si expiré
+            )
+            LOGGER.info(f"✅ User authentication set (DB mode, {len(default_scopes)} scopes)")
+        else:
+            # Mode YAML ou DB avec scopes
+            await twitch_bot.set_user_authentication(
+                token=bot_token.access_token,
+                scope=bot_token.scopes,
+                refresh_token=bot_token.refresh_token,
+                validate=True  # Active validation + auto-refresh si expiré
+            )
+            LOGGER.info(f"✅ User authentication set (scopes: {len(bot_token.scopes)})")
+    except Exception as e:
+        LOGGER.error(f"❌ Failed to set user authentication: {e}", exc_info=True)
+        await twitch_app.close()
+        await twitch_bot.close()
+        sys.exit(1)
+    except Exception as e:
+        LOGGER.error(f"❌ Failed to set user authentication: {e}", exc_info=True)
+        await twitch_app.close()
+        await twitch_bot.close()
+        sys.exit(1)
+    
+    # Debug: vérifier l'état de l'authentification
+    LOGGER.info(f"🔍 Debug: twitch_bot._user_auth_token = {twitch_bot._user_auth_token is not None}")
+    LOGGER.info(f"🔍 Debug: twitch_bot._user_auth_refresh_token = {twitch_bot._user_auth_refresh_token is not None}")
+
+
     
     # Activer le callback de refresh automatique (feature native pyTwitchAPI)
     twitch_bot.user_auth_refresh_callback = save_refreshed_token
@@ -410,6 +658,10 @@ async def main():
         await irc_client.stop()
         await twitch_bot.close()
         await twitch_app.close()
+        
+        # Remove PID file
+        remove_pid_file(pid_file)
+        
         LOGGER.info("Termine")
 
 

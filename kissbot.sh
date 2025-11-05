@@ -1,11 +1,21 @@
 #!/bin/bash
-# KissBot - Start/Stop/Restart Script
+# KissBot Supervisor - Start/Stop/Restart Script
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="$SCRIPT_DIR/kissbot-venv"
-PYTHON_SCRIPT="$SCRIPT_DIR/main.py"
-PID_FILE="$SCRIPT_DIR/.kissbot.pid"
-LOG_FILE="$SCRIPT_DIR/bot.log"
+SUPERVISOR_SCRIPT="$SCRIPT_DIR/supervisor_v1.py"
+CONFIG_FILE="$SCRIPT_DIR/config/config.yaml"
+DB_FILE="$SCRIPT_DIR/kissbot.db"
+PID_DIR="$SCRIPT_DIR/pids"
+LOG_DIR="$SCRIPT_DIR/logs"
+SUPERVISOR_PID_FILE="$PID_DIR/supervisor.pid"
+SUPERVISOR_LOG="$SCRIPT_DIR/supervisor.log"
+
+# Parse --use-db option
+USE_DB_FLAG=""
+if [ "$2" == "--use-db" ] || [ "$3" == "--use-db" ]; then
+    USE_DB_FLAG="--use-db --db $DB_FILE"
+fi
 
 # Colors
 GREEN='\033[0;32m'
@@ -13,101 +23,132 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Function to check if bot is running
+# Function to check if supervisor is running
 is_running() {
-    # Check PID file first
-    if [ -f "$PID_FILE" ]; then
-        PID=$(cat "$PID_FILE")
+    if [ -f "$SUPERVISOR_PID_FILE" ]; then
+        PID=$(cat "$SUPERVISOR_PID_FILE")
         if ps -p "$PID" > /dev/null 2>&1; then
             return 0
         else
-            rm -f "$PID_FILE"
+            rm -f "$SUPERVISOR_PID_FILE"
         fi
     fi
     
-    # Check for any main.py process (catches manual starts)
-    if pgrep -f "python3.*main\.py" > /dev/null 2>&1; then
+    # Check for supervisor_v1.py process
+    if pgrep -f "python.*supervisor_v1\.py" > /dev/null 2>&1; then
         return 0
     fi
     
     return 1
 }
 
-# Function to start the bot
+# Function to start the supervisor
 start() {
     if is_running; then
-        echo -e "${YELLOW}⚠️  KissBot is already running (PID: $(cat $PID_FILE))${NC}"
+        echo -e "${YELLOW}⚠️  KissBot Supervisor is already running (PID: $(cat $SUPERVISOR_PID_FILE 2>/dev/null || echo 'unknown'))${NC}"
         return 1
     fi
     
-    echo -e "${GREEN}🚀 Starting KissBot...${NC}"
+    echo -e "${GREEN}🚀 Starting KissBot Supervisor...${NC}"
     
-    # Activate venv and start bot in background
+    # Create directories
+    mkdir -p "$PID_DIR" "$LOG_DIR"
+    
+    # Activate venv and start supervisor in background (non-interactive mode)
     cd "$SCRIPT_DIR"
     source "$VENV_PATH/bin/activate"
-    nohup python3 "$PYTHON_SCRIPT" > "$LOG_FILE" 2>&1 &
+    nohup python "$SUPERVISOR_SCRIPT" --config "$CONFIG_FILE" --non-interactive $USE_DB_FLAG > "$SUPERVISOR_LOG" 2>&1 &
     
     # Save PID
-    echo $! > "$PID_FILE"
+    SUPERVISOR_PID=$!
+    echo $SUPERVISOR_PID > "$SUPERVISOR_PID_FILE"
     
     # Wait a bit and check if it's running
-    sleep 2
+    sleep 3
     if is_running; then
-        echo -e "${GREEN}✅ KissBot started successfully (PID: $(cat $PID_FILE))${NC}"
-        echo -e "${GREEN}📝 Logs: tail -f $LOG_FILE${NC}"
+        echo -e "${GREEN}✅ KissBot Supervisor started successfully (PID: $SUPERVISOR_PID)${NC}"
+        echo -e "${GREEN}📝 Supervisor log: tail -f $SUPERVISOR_LOG${NC}"
+        echo ""
+        
+        # Show started bots
+        sleep 2
+        BOT_COUNT=$(pgrep -f "main\.py --channel" | wc -l)
+        echo -e "${GREEN}🤖 Started $BOT_COUNT bot processes${NC}"
+        
+        # List bot processes
+        if [ "$BOT_COUNT" -gt 0 ]; then
+            echo -e "${GREEN}   Bot processes:${NC}"
+            ps aux | grep "main\.py --channel" | grep -v grep | awk '{print "   - PID " $2 ": " $13 " " $14}' || true
+        fi
     else
-        echo -e "${RED}❌ Failed to start KissBot. Check logs: $LOG_FILE${NC}"
-        rm -f "$PID_FILE"
+        echo -e "${RED}❌ Failed to start KissBot Supervisor. Check logs: $SUPERVISOR_LOG${NC}"
+        rm -f "$SUPERVISOR_PID_FILE"
         return 1
     fi
 }
 
-# Function to stop the bot
+# Function to stop the supervisor and all bots
 stop() {
     if ! is_running; then
-        echo -e "${YELLOW}⚠️  KissBot is not running${NC}"
+        echo -e "${YELLOW}⚠️  KissBot Supervisor is not running${NC}"
+        
+        # Check for orphaned bot processes
+        BOT_COUNT=$(pgrep -f "main\.py --channel" | wc -l)
+        if [ "$BOT_COUNT" -gt 0 ]; then
+            echo -e "${YELLOW}⚠️  Found $BOT_COUNT orphaned bot processes, cleaning up...${NC}"
+            pkill -f "main\.py --channel"
+            sleep 2
+            echo -e "${GREEN}✅ Orphaned bots stopped${NC}"
+        fi
         return 1
     fi
     
-    # Try to get PID from file first
-    if [ -f "$PID_FILE" ]; then
-        PID=$(cat "$PID_FILE")
+    if [ -f "$SUPERVISOR_PID_FILE" ]; then
+        PID=$(cat "$SUPERVISOR_PID_FILE")
     else
-        # Find PID by process name
-        PID=$(pgrep -f "python3.*main\.py" | head -n 1)
+        PID=$(pgrep -f "python.*supervisor_v1\.py" | head -n 1)
     fi
     
     if [ -z "$PID" ]; then
-        echo -e "${RED}❌ Could not find KissBot process${NC}"
+        echo -e "${RED}❌ Could not find KissBot Supervisor process${NC}"
         return 1
     fi
     
-    echo -e "${YELLOW}🛑 Stopping KissBot (PID: $PID)...${NC}"
+    echo -e "${YELLOW}🛑 Stopping KissBot Supervisor (PID: $PID)...${NC}"
     
-    # Kill all main.py processes (in case of duplicates)
-    pkill -f "python3.*main\.py"
+    # Send SIGTERM to supervisor (it will stop all bots gracefully)
+    kill -TERM "$PID" 2>/dev/null || true
     
-    # Wait for processes to stop (max 10 seconds)
-    for i in {1..10}; do
-        if ! pgrep -f "python3.*main\.py" > /dev/null 2>&1; then
+    # Wait for supervisor to stop (max 15 seconds)
+    for i in {1..15}; do
+        if ! ps -p "$PID" > /dev/null 2>&1; then
             break
         fi
         sleep 1
     done
     
-    # Force kill if still running
-    if pgrep -f "python3.*main\.py" > /dev/null 2>&1; then
-        echo -e "${RED}⚠️  Force killing...${NC}"
-        pkill -9 -f "python3.*main\.py"
+    # Force kill supervisor if still running
+    if ps -p "$PID" > /dev/null 2>&1; then
+        echo -e "${RED}⚠️  Force killing supervisor...${NC}"
+        kill -9 "$PID" 2>/dev/null || true
     fi
     
-    rm -f "$PID_FILE"
-    echo -e "${GREEN}✅ KissBot stopped (all instances)${NC}"
+    # Clean up any remaining bot processes
+    BOT_COUNT=$(pgrep -f "main\.py --channel" | wc -l)
+    if [ "$BOT_COUNT" -gt 0 ]; then
+        echo -e "${YELLOW}⚠️  Cleaning up $BOT_COUNT remaining bot processes...${NC}"
+        pkill -TERM -f "main\.py --channel" || true
+        sleep 2
+        pkill -9 -f "main\.py --channel" || true
+    fi
+    
+    rm -f "$SUPERVISOR_PID_FILE"
+    echo -e "${GREEN}✅ KissBot Supervisor stopped (all bots terminated)${NC}"
 }
 
-# Function to restart the bot
+# Function to restart the supervisor
 restart() {
-    echo -e "${YELLOW}🔄 Restarting KissBot...${NC}"
+    echo -e "${YELLOW}🔄 Restarting KissBot Supervisor...${NC}"
     stop
     sleep 2
     start
@@ -115,51 +156,108 @@ restart() {
 
 # Function to show status
 status() {
-    # Count all main.py processes
-    PROCESS_COUNT=$(pgrep -f "python3.*main\.py" | wc -l)
+    echo "========================================================================"
+    echo " KissBot Supervisor Status"
+    echo "========================================================================"
+    echo ""
     
-    if [ "$PROCESS_COUNT" -eq 0 ]; then
-        echo -e "${RED}❌ KissBot is not running${NC}"
-        return
-    fi
-    
-    if [ "$PROCESS_COUNT" -gt 1 ]; then
-        echo -e "${RED}⚠️  WARNING: Multiple instances detected ($PROCESS_COUNT)!${NC}"
-        echo -e "${YELLOW}   PIDs: $(pgrep -f 'python3.*main\.py' | tr '\n' ' ')${NC}"
-        echo -e "${YELLOW}   Run './kissbot.sh stop' to kill all instances${NC}"
-    fi
-    
-    # Show info for first/main process
-    if [ -f "$PID_FILE" ]; then
-        PID=$(cat "$PID_FILE")
+    # Check supervisor
+    if is_running; then
+        if [ -f "$SUPERVISOR_PID_FILE" ]; then
+            SUPER_PID=$(cat "$SUPERVISOR_PID_FILE")
+        else
+            SUPER_PID=$(pgrep -f "python.*supervisor_v1\.py" | head -n 1)
+        fi
+        
+        if [ -n "$SUPER_PID" ] && ps -p "$SUPER_PID" > /dev/null 2>&1; then
+            UPTIME=$(ps -p "$SUPER_PID" -o etime= | tr -d ' ')
+            MEM=$(ps -p "$SUPER_PID" -o rss= | awk '{printf "%.1f MB", $1/1024}')
+            echo -e "${GREEN}✅ Supervisor: RUNNING${NC}"
+            echo -e "   PID:    $SUPER_PID"
+            echo -e "   Uptime: $UPTIME"
+            echo -e "   Memory: $MEM"
+        else
+            echo -e "${RED}❌ Supervisor: NOT RUNNING${NC}"
+        fi
     else
-        PID=$(pgrep -f "python3.*main\.py" | head -n 1)
+        echo -e "${RED}❌ Supervisor: NOT RUNNING${NC}"
     fi
     
-    if ps -p "$PID" > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ KissBot is running (PID: $PID)${NC}"
+    echo ""
+    echo "Bot Processes:"
+    echo "----------------------------------------"
+    
+    # List bot processes
+    BOT_COUNT=$(pgrep -f "main\.py --channel" | wc -l)
+    
+    if [ "$BOT_COUNT" -eq 0 ]; then
+        echo -e "${RED}   No bot processes running${NC}"
+    else
+        echo -e "${GREEN}   $BOT_COUNT bot(s) running:${NC}"
+        echo ""
         
-        # Show uptime
-        UPTIME=$(ps -p "$PID" -o etime= | tr -d ' ')
-        echo -e "${GREEN}⏱️  Uptime: $UPTIME${NC}"
-        
-        # Show memory usage
-        MEM=$(ps -p "$PID" -o rss= | awk '{printf "%.1f MB", $1/1024}')
-        echo -e "${GREEN}💾 Memory: $MEM${NC}"
+        # Show each bot with details
+        ps aux | grep "main\.py --channel" | grep -v grep | while read -r line; do
+            PID=$(echo "$line" | awk '{print $2}')
+            CHANNEL=$(echo "$line" | grep -oP '(?<=--channel )\S+')
+            MEM=$(echo "$line" | awk '{printf "%.1f MB", $6/1024}')
+            CPU=$(echo "$line" | awk '{print $3}')
+            
+            if [ -n "$CHANNEL" ]; then
+                echo -e "   ${GREEN}📺 $CHANNEL${NC}"
+                echo "      PID: $PID | CPU: $CPU% | Memory: $MEM"
+                
+                # Show log file size if exists
+                if [ -f "$LOG_DIR/${CHANNEL}.log" ]; then
+                    LOG_SIZE=$(du -h "$LOG_DIR/${CHANNEL}.log" | awk '{print $1}')
+                    LOG_LINES=$(wc -l < "$LOG_DIR/${CHANNEL}.log")
+                    echo "      Log: $LOG_SIZE ($LOG_LINES lines)"
+                fi
+                echo ""
+            fi
+        done
     fi
+    
+    echo "========================================================================"
 }
 
 # Function to show logs
 logs() {
+    # Determine which log to show
+    CHANNEL="$2"
+    
+    if [ -z "$CHANNEL" ]; then
+        # No channel specified, show supervisor log
+        LOG_FILE="$SUPERVISOR_LOG"
+        LABEL="Supervisor"
+    else
+        # Channel specified, show that channel's log
+        LOG_FILE="$LOG_DIR/${CHANNEL}.log"
+        LABEL="$CHANNEL"
+    fi
+    
     if [ ! -f "$LOG_FILE" ]; then
         echo -e "${RED}❌ Log file not found: $LOG_FILE${NC}"
+        echo ""
+        echo "Available logs:"
+        echo "  - supervisor    : $SUPERVISOR_LOG"
+        if [ -d "$LOG_DIR" ]; then
+            for log in "$LOG_DIR"/*.log; do
+                if [ -f "$log" ]; then
+                    basename "$log" .log | while read channel; do
+                        echo "  - $channel"
+                    done
+                fi
+            done
+        fi
         return 1
     fi
     
-    if [ "$1" = "-f" ] || [ "$1" = "--follow" ]; then
-        echo -e "${GREEN}📝 Following logs (Ctrl+C to stop)...${NC}"
+    if [ "$3" = "-f" ] || [ "$3" = "--follow" ]; then
+        echo -e "${GREEN}📝 Following $LABEL logs (Ctrl+C to stop)...${NC}"
         tail -f "$LOG_FILE"
     else
+        echo -e "${GREEN}📝 Last 50 lines of $LABEL logs:${NC}"
         tail -n 50 "$LOG_FILE"
     fi
 }
@@ -179,18 +277,30 @@ case "$1" in
         status
         ;;
     logs)
-        logs "$2"
+        logs "$@"
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|logs [-f]}"
+        echo "Usage: $0 {start|stop|restart|status|logs [channel] [-f]} [--use-db]"
         echo ""
         echo "Commands:"
-        echo "  start    - Start KissBot"
-        echo "  stop     - Stop KissBot"
-        echo "  restart  - Restart KissBot"
-        echo "  status   - Show bot status"
-        echo "  logs     - Show last 50 log lines"
-        echo "  logs -f  - Follow logs in real-time"
+        echo "  start [--use-db]  - Start KissBot Supervisor and all bots"
+        echo "  stop              - Stop KissBot Supervisor and all bots"
+        echo "  restart [--use-db]- Restart KissBot Supervisor and all bots"
+        echo "  status            - Show supervisor and bot status"
+        echo "  logs              - Show last 50 supervisor log lines"
+        echo "  logs <channel>    - Show last 50 lines for a specific channel"
+        echo "  logs [channel] -f - Follow logs in real-time"
+        echo ""
+        echo "Options:"
+        echo "  --use-db          - Use database for OAuth tokens (default: YAML)"
+        echo ""
+        echo "Examples:"
+        echo "  $0 start                   # Start with YAML tokens"
+        echo "  $0 start --use-db          # Start with database tokens"
+        echo "  $0 status"
+        echo "  $0 logs"
+        echo "  $0 logs ekylybryum"
+        echo "  $0 logs pelerin_ -f"
         exit 1
         ;;
 esac

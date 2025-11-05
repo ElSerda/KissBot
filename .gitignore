@@ -94,6 +94,18 @@ config/credentials/*.json
 token_storage.json
 .tio.tokens.json
 
+# 🔐 Database & Encryption (⚠️ CRITICAL - Never commit these!)
+kissbot.db
+kissbot.db-wal
+kissbot.db-shm
+kissbot_test.db
+kissbot_test.db-wal
+kissbot_test.db-shm
+.kissbot.key
+.kissbot_test.key
+kissbot.db.backup_*
+backups/
+
 # 🔐 Patterns sensibles supplémentaires
 *.token
 *.key

@@ -14,7 +14,7 @@
 ![Coverage](https://raw.githubusercontent.com/ElSerda/KissBot/badges/coverage.svg)
 [![KISS](https://img.shields.io/badge/architecture-KISS-brightgreen)](#architecture)
 [![Neural V2](https://img.shields.io/badge/intelligence-Neural%20V2-purple)](#neural-v2)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 
 </div>
 
@@ -39,6 +39,104 @@
 - [📝 Commandes](docs/guides/COMMANDS.md) - Documentation des commandes
 - [🎮 TwitchIO 3.x](docs/twitchio/) - Intégration Twitch complète
 - [🚀 Production](docs/deployment/) - Déploiement sécurisé
+- [🔄 Multi-Process](docs/MULTI_PROCESS_ARCHITECTURE.md) - Architecture multi-process (NEW!)
+
+---
+
+## 🚀 Démarrage Rapide
+
+### Installation classique (mono-process)
+
+```bash
+# Clone et setup
+git clone https://github.com/ElSerda/KissBot-standalone.git
+cd KissBot-standalone
+python3 -m venv kissbot-venv
+source kissbot-venv/bin/activate
+pip install -r requirements.txt
+
+# Configuration
+cp config/config.yaml.example config/config.yaml
+# Éditer config.yaml avec vos tokens Twitch
+
+# Lancement
+python main.py
+```
+
+### 🆕 Mode Multi-Process (Recommandé pour production)
+
+Le nouveau système multi-process isole chaque channel dans son propre processus pour une meilleure stabilité :
+
+```bash
+# Démarrage de tous les bots (via supervisor)
+./kissbot.sh start
+
+# Status détaillé
+./kissbot.sh status
+
+# Logs d'un channel spécifique
+./kissbot.sh logs ekylybryum -f
+
+# Arrêt propre
+./kissbot.sh stop
+```
+
+**Avantages du mode multi-process :**
+- ✅ Isolation : crash d'un channel n'affecte pas les autres
+- ✅ Auto-restart : détection et relance automatique des bots crashés
+- ✅ Logs séparés : logs/{channel}.log pour chaque channel
+- ✅ Gestion simplifiée : commandes start/stop/restart/status
+- ✅ Monitoring : health check toutes les 30 secondes
+
+📚 **[Documentation complète](docs/MULTI_PROCESS_ARCHITECTURE.md)**
+
+### 🔐 Mode Database (OAuth Tokens Chiffrés)
+
+**NOUVEAU** : Stockage sécurisé des tokens OAuth en base de données SQLite avec chiffrement Fernet (AES-128-CBC + HMAC) !
+
+#### Installation et Migration
+
+```bash
+# 1. Initialiser la base de données
+python database/init_db.py --db kissbot.db
+
+# 2. Migrer les tokens depuis config.yaml
+python scripts/migrate_yaml_to_db.py
+
+# 3. Démarrer en mode database
+./kissbot.sh start --use-db
+```
+
+#### Avantages du mode Database
+
+- 🔐 **Sécurité** : Tokens chiffrés avec Fernet (AES-128-CBC + HMAC)
+- 💾 **Persistance** : SQLite avec mode WAL (Write-Ahead Logging)
+- 🔄 **Auto-refresh** : Mise à jour automatique des tokens en DB
+- 📊 **Audit** : Logs d'événements (création users, refresh tokens, crashes)
+- 🔧 **Gestion** : Scripts de migration et backup automatiques
+
+#### Structure de la Database
+
+```sql
+users              # Utilisateurs Twitch (bots et channels)
+oauth_tokens       # Tokens OAuth chiffrés avec Fernet
+instances          # Instances de bot actives (PID, status, crashes)
+audit_log          # Logs d'événements système
+config             # Configuration système (intervals, limites)
+```
+
+#### Compatibilité
+
+Les deux modes peuvent coexister :
+- **Mode YAML** (défaut) : `./kissbot.sh start` - tokens dans config.yaml
+- **Mode Database** : `./kissbot.sh start --use-db` - tokens chiffrés en DB
+
+**Fichiers clés :**
+- `kissbot.db` : Base de données SQLite (WAL mode)
+- `.kissbot.key` : Clé de chiffrement Fernet (⚠️ **À SAUVEGARDER !**)
+- `scripts/migrate_yaml_to_db.py` : Script de migration
+
+⚠️ **IMPORTANT** : La clé `.kissbot.key` est nécessaire pour déchiffrer les tokens. Sans elle, vous perdez l'accès aux tokens !
 
 ---
 
@@ -923,7 +1021,23 @@ Step 3: Response
 
 ## 📝 License
 
-MIT License - See [LICENSE](LICENSE)
+**KissBot License v1.0** - Licence propriétaire "Source-Disponible"
+
+| Type d'usage | Autorisé | Conditions |
+|--------------|----------|------------|
+| ✅ Usage personnel / expérimental | Oui | **Gratuit** |
+| ✅ Usage éducatif / recherche | Oui | **Gratuit** |
+| ⚠️ Usage commercial (SaaS, entreprise) | Oui | **Licence KissBot Pro requise** |
+| ❌ Fork public / redistribution | Non | Interdit |
+| ❌ Service concurrent | Non | Interdit |
+
+💰 **Licence commerciale :** Redevances de 5% sur le CA au-delà de 20 000 €/an
+
+📧 **Contact :** contact@elserda.dev
+
+📜 **Détails complets :**
+- [LICENSE](LICENSE) - Vue d'ensemble
+- [EULA_FR.md](EULA_FR.md) - Contrat complet en français
 
 ## 👥 Contributors
 

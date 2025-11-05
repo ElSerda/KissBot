@@ -7,6 +7,135 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.0.0] - 2025-11-05
+
+### 🚀 Major Release - Database Layer + Encrypted Tokens
+
+#### 🔐 New: Database Mode with Encrypted OAuth Tokens
+
+**Architecture complète de stockage sécurisé** des tokens OAuth :
+
+- **SQLite Database** : `kissbot.db` avec mode WAL (Write-Ahead Logging)
+- **Chiffrement Fernet** : Tokens chiffrés avec AES-128-CBC + HMAC-SHA256
+- **Migration automatique** : Script `migrate_yaml_to_db.py` depuis config.yaml
+- **Dual mode** : YAML (legacy) et Database coexistent
+
+**Nouveaux fichiers** :
+- `database/schema.sql` : Schéma complet (5 tables + triggers + indexes)
+- `database/crypto.py` : TokenEncryptor avec Fernet
+- `database/manager.py` : DatabaseManager (API CRUD complète)
+- `database/init_db.py` : Script d'initialisation
+- `scripts/migrate_yaml_to_db.py` : Migration YAML → DB
+
+**Tables créées** :
+- `users` : Utilisateurs Twitch (bots et channels)
+- `oauth_tokens` : Tokens OAuth chiffrés
+- `instances` : Instances de bot actives (PID, status, crashes)
+- `audit_log` : Logs d'événements système
+- `config` : Configuration système (intervals, limites)
+
+**Sécurité** :
+- ✅ Tokens chiffrés au repos (Fernet - AES-128-CBC + HMAC)
+- ✅ Clé `.kissbot.key` avec permissions 600 (owner only)
+- ✅ Backup automatique avant migration
+- ✅ Audit log complet (création users, refresh tokens, crashes)
+
+**Utilisation** :
+```bash
+# Initialiser la DB
+python database/init_db.py --db kissbot.db
+
+# Migrer depuis YAML
+python scripts/migrate_yaml_to_db.py
+
+# Démarrer en mode Database
+./kissbot.sh start --use-db
+```
+
+#### 🔧 Enhanced: Multi-Process Architecture - Database Support
+
+**Intégration complète du mode Database** dans l'architecture multi-process :
+
+- **main.py** : 
+  - Nouveaux arguments : `--use-db`, `--db`
+  - Fonction `load_token_from_db()` : Chargement tokens depuis DB
+  - Déchiffrement automatique des tokens
+  - Callback `save_refreshed_token()` : Sauvegarde dans DB après auto-refresh
+  - Support AuthScope enum pour pyTwitchAPI
+
+- **supervisor_v1.py** :
+  - Support `--use-db` propagé à tous les processus bot
+  - Affichage mode (YAML/DATABASE) dans les logs
+  - Arguments transmis aux commandes start/stop/restart
+
+- **kissbot.sh** :
+  - Nouveau flag `--use-db` : `./kissbot.sh start --use-db`
+  - Transmission automatique du flag au supervisor
+  - Compatible avec tous les canaux simultanément
+
+**Backward Compatibility** :
+- ✅ Mode YAML fonctionne toujours (défaut)
+- ✅ Mode Database optionnel (`--use-db`)
+- ✅ Pas de breaking changes pour utilisateurs existants
+
+#### 📚 Documentation
+
+**Nouveaux documents** :
+- `docs/DATABASE_ARCHITECTURE.md` : Guide complet Database (20+ pages)
+  - Installation et migration
+  - Architecture des tables
+  - Sécurité et chiffrement
+  - API DatabaseManager
+  - Maintenance et troubleshooting
+  - Checklist de migration
+
+- `README.md` : Section "Mode Database" ajoutée
+  - Quick start Database
+  - Avantages du chiffrement
+  - Comparaison YAML vs Database
+  - Commandes de base
+
+#### 🧪 Tests
+
+**Validation complète** :
+- ✅ Chiffrement/Déchiffrement : Roundtrip test passed
+- ✅ Database init : Tables créées avec index et triggers
+- ✅ Migration YAML → DB : 2 users, 2 tokens migrés
+- ✅ Token refresh : Auto-save dans DB après refresh
+- ✅ Single channel mode : Connexion IRC avec token DB ✅
+- ✅ Multi-process mode : 6 channels actifs en mode DB ✅
+- ✅ Backward compatibility : Mode YAML fonctionne toujours ✅
+
+**Résultats** :
+```
+✅ Connecté à #el_serda → VIP 👑 | Rate: 100 msg/30s
+✅ 6 bot(s) running (mode: DATABASE)
+✅ Tokens chiffrés/déchiffrés correctement
+```
+
+#### ⚠️ Breaking Changes
+
+**AUCUN** - Changements opt-in uniquement :
+- Mode YAML reste le comportement par défaut
+- Mode Database nécessite `--use-db` explicite
+- Utilisateurs existants non affectés
+
+#### 🔑 Security Notice
+
+**IMPORTANT** : La clé `.kissbot.key` est **CRITIQUE** :
+- Sans elle, impossible de déchiffrer les tokens
+- Permissions 600 (owner read/write only)
+- **À SAUVEGARDER** dans un endroit sûr
+- **NE JAMAIS** commit dans Git (déjà dans .gitignore)
+
+**Backup recommandé** :
+```bash
+cp .kissbot.key .kissbot.key.backup
+chmod 600 .kissbot.key.backup
+```
+
+---
+
 ## [3.5.2] - 2025-11-02
 
 ### 🐛 Bug Fixes - Mention Detection & Deduplication
