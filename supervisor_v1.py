@@ -531,7 +531,7 @@ class SimpleSupervisor:
         print("  restart-all         - Restart all processes")
         print("  hub-status          - Show Hub status + stats")
         print("  hub-restart         - Restart EventSub Hub")
-        print("  hub-resync          - Force Hub reconciliation (TODO)")
+        print("  hub-resync          - Force immediate Hub reconciliation")
         print("  quit / exit         - Stop all and exit")
         print("=" * 90 + "\n")
         
@@ -586,7 +586,12 @@ class SimpleSupervisor:
                         print("❌ EventSub Hub not enabled")
                 
                 elif cmd == "hub-resync":
-                    print("⚠️ Hub resync not yet implemented (TODO: IPC command)")
+                    if self.hub:
+                        print("🔄 Forcing immediate Hub reconciliation...")
+                        await self.hub._reconcile()
+                        print("✅ Hub reconciliation complete")
+                    else:
+                        print("❌ EventSub Hub not enabled")
                 
                 elif cmd.startswith("start "):
                     channel = cmd.split(" ", 1)[1]
