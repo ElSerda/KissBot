@@ -60,7 +60,8 @@ async def handle_gc(bot, cmd: ChatCommand):
 async def handle_gi(bot, cmd: ChatCommand):
     """
     !gi / !gameinfo <nom du jeu>
-    Recherche des infos sur un jeu spécifique.
+    Recherche des infos sur un jeu spécifique via cache quantique.
+    Retourne le meilleur résultat (collapsed ou 1ère superposition).
     """
     game_name = cmd.parameter.strip() if cmd.parameter else None
     
@@ -69,13 +70,46 @@ async def handle_gi(bot, cmd: ChatCommand):
         return
 
     try:
-        result = await bot.game_lookup.search_game(game_name)
-
-        if result:
-            response = bot.game_lookup.format_result(result)
-            await bot.send_message(cmd.room.name, response)
+        # Utiliser le cache quantique (comme !qgame) pour cohérence
+        if hasattr(bot, 'game_cache') and bot.game_cache:
+            # Recherche quantique
+            superpositions = await bot.game_cache.search_quantum_game(
+                query=game_name,
+                observer=cmd.user.name
+            )
+            
+            if superpositions:
+                # Prendre la 1ère superposition (meilleur score/collapsed)
+                best_result_data = superpositions[0].get("game")
+                
+                # Reconstruire GameResult pour utiliser format_result()
+                from backends.game_lookup import GameResult
+                result = GameResult(
+                    name=best_result_data.get("name", "Unknown"),
+                    year=best_result_data.get("year", "?"),
+                    rating_rawg=best_result_data.get("rating_rawg", 0.0),
+                    metacritic=best_result_data.get("metacritic"),
+                    platforms=best_result_data.get("platforms", []),
+                    genres=best_result_data.get("genres", []),
+                    developers=best_result_data.get("developers", []),
+                    publishers=best_result_data.get("publishers", []),
+                    summary=best_result_data.get("summary"),
+                    reliability_score=best_result_data.get("reliability_score", 0.0)
+                )
+                
+                response = bot.game_lookup.format_result(result)
+                await bot.send_message(cmd.room.name, response)
+            else:
+                await bot.send_message(cmd.room.name, f"❌ Jeu '{game_name}' non trouvé")
         else:
-            await bot.send_message(cmd.room.name, f"❌ Jeu '{game_name}' non trouvé")
+            # Fallback si pas de cache quantique
+            result = await bot.game_lookup.search_game(game_name)
+            
+            if result:
+                response = bot.game_lookup.format_result(result)
+                await bot.send_message(cmd.room.name, response)
+            else:
+                await bot.send_message(cmd.room.name, f"❌ Jeu '{game_name}' non trouvé")
 
     except Exception as e:
         LOGGER.error(f"❌ Erreur handle_gi: {e}")

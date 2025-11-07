@@ -20,7 +20,7 @@ import json
 import logging
 import os
 import sys
-from pathlib import Path
+import pathlib
 
 import yaml
 from twitchAPI.twitch import Twitch
@@ -91,7 +91,7 @@ def parse_args():
 def setup_logging(channel=None):
     """Setup logging with per-channel log files if channel specified"""
     # Create logs directory if needed
-    logs_dir = Path("logs")
+    logs_dir = pathlib.Path("logs")
     logs_dir.mkdir(exist_ok=True)
     
     # Determine log file
@@ -117,7 +117,7 @@ def setup_logging(channel=None):
 def write_pid_file(channel=None):
     """Write PID file for process tracking"""
     # Create pids directory if needed
-    pids_dir = Path("pids")
+    pids_dir = pathlib.Path("pids")
     pids_dir.mkdir(exist_ok=True)
     
     # Determine PID file
@@ -147,7 +147,7 @@ def remove_pid_file(pid_file):
 
 def load_config(config_path='config/config.yaml'):
     """Charge config.yaml"""
-    config_file = Path(config_path)
+    config_file = pathlib.Path(config_path)
     if not config_file.exists():
         LOGGER.error(f"Config file {config_path} not found")
         sys.exit(1)
@@ -223,6 +223,12 @@ async def main():
     
     # Write PID file for process tracking
     pid_file = write_pid_file(args.channel)
+    
+    # Signal: Process started (for restart-channel script)
+    if args.channel:
+        starting_flag = pathlib.Path(f"pids/{args.channel}.starting")
+        starting_flag.touch()
+        LOGGER.info(f"🚦 Starting flag created: {starting_flag}")
     
     print("=" * 70)
     print("KissBot V4 - Twitch Bot with IRC + Helix + Stream Monitoring")
@@ -346,7 +352,7 @@ async def main():
                     LOGGER.info(f"✅ Bot token auto-refreshed and saved to DB for {bot_name}")
             else:
                 # Save to .tio.tokens.json (legacy mode)
-                token_file = Path(".tio.tokens.json")
+                token_file = pathlib.Path(".tio.tokens.json")
                 if token_file.exists():
                     with open(token_file, 'r') as f:
                         data = json.load(f)
@@ -592,6 +598,12 @@ async def main():
     # Attendre que IRC soit connecté
     await asyncio.sleep(2)
     
+    # Signal: IRC connected
+    if args.channel:
+        irc_flag = pathlib.Path(f"pids/{args.channel}.irc")
+        irc_flag.touch()
+        LOGGER.info(f"🚦 IRC flag created: {irc_flag}")
+    
     # Start Stream Monitoring (EventSub or Polling)
     if eventsub_client:
         print('\n🔌 Démarrage EventSub WebSocket...')
@@ -599,6 +611,12 @@ async def main():
         try:
             await eventsub_client.start()
             LOGGER.info(f"✅ EventSub started for {len(irc_channels)} channels")
+            
+            # Signal: EventSub connected
+            if args.channel:
+                eventsub_flag = pathlib.Path(f"pids/{args.channel}.eventsub")
+                eventsub_flag.touch()
+                LOGGER.info(f"🚦 EventSub flag created: {eventsub_flag}")
             
             # Si EventSub démarre OK et method=auto, on n'a pas besoin de polling
             if monitoring_method == "auto":
@@ -695,6 +713,12 @@ async def main():
     print(f'\n💡 Ready to receive messages!')
     print(f'   Press CTRL+C to shutdown...\n')
     
+    # Signal readiness to supervisor (for restart-channel script)
+    if args.channel:
+        ready_file = pathlib.Path(f"pids/{args.channel}.ready")
+        ready_file.touch()
+        LOGGER.info(f"✅ Ready flag created: {ready_file}")
+    
     try:
         # Boucle infinie qui répond bien à KeyboardInterrupt
         while True:
@@ -703,6 +727,14 @@ async def main():
         LOGGER.info("CTRL+C détecté, arrêt en cours...")
     finally:
         LOGGER.info("Arret...")
+        
+        # Remove all status flags (signal shutdown)
+        if args.channel:
+            for flag_name in ["ready", "eventsub", "irc", "starting"]:
+                flag_file = pathlib.Path(f"pids/{args.channel}.{flag_name}")
+                if flag_file.exists():
+                    flag_file.unlink()
+                    LOGGER.debug(f"🧹 Flag removed: {flag_file}")
         
         # Stop monitoring (EventSub + Polling + System)
         if eventsub_client:

@@ -154,6 +154,80 @@ restart() {
     start
 }
 
+# Function to restart a single channel
+restart_channel() {
+    CHANNEL="$1"
+    
+    if [ -z "$CHANNEL" ]; then
+        echo -e "${RED}❌ Error: Channel name required${NC}"
+        echo "Usage: $0 restart-channel <channel_name>"
+        return 1
+    fi
+    
+    # Check if supervisor is running
+    if ! is_running; then
+        echo -e "${RED}❌ Supervisor is not running. Start it first with: $0 start${NC}"
+        return 1
+    fi
+    
+    echo -e "${YELLOW}🔄 Restarting bot for channel: $CHANNEL${NC}"
+    
+    # Get current PID
+    OLD_PID=$(pgrep -f "main\.py --channel $CHANNEL")
+    if [ -n "$OLD_PID" ]; then
+        echo "   Current PID: $OLD_PID"
+    else
+        echo "   ⚠️  Bot not currently running"
+    fi
+    
+    # Send restart command to supervisor
+    CMD_FILE="$SCRIPT_DIR/pids/supervisor.cmd"
+    RESULT_FILE="$SCRIPT_DIR/pids/supervisor.result"
+    
+    # Clean old result
+    rm -f "$RESULT_FILE"
+    
+    # Write command
+    echo "restart $CHANNEL" > "$CMD_FILE"
+    echo "   📨 Sending restart command to supervisor..."
+    
+    # Wait for supervisor to process command and write result
+    MAX_WAIT_MS=30000  # 30 seconds max
+    ELAPSED_MS=0
+    INTERVAL_MS=100   # Check every 100ms
+    
+    while [ $ELAPSED_MS -lt $MAX_WAIT_MS ]; do
+        if [ -f "$RESULT_FILE" ]; then
+            # Read result
+            RESULT=$(cat "$RESULT_FILE")
+            rm -f "$RESULT_FILE"
+            
+            # Parse result
+            if [[ "$RESULT" == SUCCESS:* ]]; then
+                echo -e "${GREEN}   ✅ $RESULT${NC}"
+                echo ""
+                echo -e "${GREEN}📝 View logs: $0 logs $CHANNEL -f${NC}"
+                return 0
+            else
+                echo -e "${RED}   ❌ $RESULT${NC}"
+                echo ""
+                echo "   Check supervisor logs: tail -f $SUPERVISOR_LOG"
+                return 1
+            fi
+        fi
+        
+        sleep 0.1
+        ELAPSED_MS=$((ELAPSED_MS + INTERVAL_MS))
+    done
+    
+    # Timeout
+    TIMEOUT_SEC=$(echo "scale=0; $MAX_WAIT_MS / 1000" | bc)
+    echo -e "${RED}   ❌ Timeout: No response from supervisor after ${TIMEOUT_SEC}s${NC}"
+    echo "   Check if supervisor is responsive: $0 status"
+    rm -f "$CMD_FILE"  # Clean up
+    return 1
+}
+
 # Function to show status
 status() {
     echo "========================================================================"
@@ -273,6 +347,9 @@ case "$1" in
     restart)
         restart
         ;;
+    restart-channel)
+        restart_channel "$2"
+        ;;
     status)
         status
         ;;
@@ -280,23 +357,25 @@ case "$1" in
         logs "$@"
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|logs [channel] [-f]} [--use-db]"
+        echo "Usage: $0 {start|stop|restart|restart-channel|status|logs [channel] [-f]} [--use-db]"
         echo ""
         echo "Commands:"
-        echo "  start [--use-db]  - Start KissBot Supervisor and all bots"
-        echo "  stop              - Stop KissBot Supervisor and all bots"
-        echo "  restart [--use-db]- Restart KissBot Supervisor and all bots"
-        echo "  status            - Show supervisor and bot status"
-        echo "  logs              - Show last 50 supervisor log lines"
-        echo "  logs <channel>    - Show last 50 lines for a specific channel"
-        echo "  logs [channel] -f - Follow logs in real-time"
+        echo "  start [--use-db]      - Start KissBot Supervisor and all bots"
+        echo "  stop                  - Stop KissBot Supervisor and all bots"
+        echo "  restart [--use-db]    - Restart KissBot Supervisor and all bots"
+        echo "  restart-channel <ch>  - Restart only one specific channel (supervisor keeps running)"
+        echo "  status                - Show supervisor and bot status"
+        echo "  logs                  - Show last 50 supervisor log lines"
+        echo "  logs <channel>        - Show last 50 lines for a specific channel"
+        echo "  logs [channel] -f     - Follow logs in real-time"
         echo ""
         echo "Options:"
-        echo "  --use-db          - Use database for OAuth tokens (default: YAML)"
+        echo "  --use-db              - Use database for OAuth tokens (default: YAML)"
         echo ""
         echo "Examples:"
         echo "  $0 start                   # Start with YAML tokens"
         echo "  $0 start --use-db          # Start with database tokens"
+        echo "  $0 restart-channel el_serda # Restart only el_serda bot"
         echo "  $0 status"
         echo "  $0 logs"
         echo "  $0 logs ekylybryum"

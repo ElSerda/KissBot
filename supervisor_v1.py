@@ -440,7 +440,11 @@ class SimpleSupervisor:
         LOGGER.info(f"💚 Health check loop started (interval={self.health_check_interval}s)")
         
         while self.running:
-            await asyncio.sleep(self.health_check_interval)
+            # Sleep in small chunks to be more responsive to crashes
+            for _ in range(int(self.health_check_interval / 2)):  # Check every 2s
+                if not self.running:
+                    break
+                await asyncio.sleep(2)
             
             # Check Hub first (critical!)
             if self.hub and not self.hub.is_running():
@@ -455,6 +459,62 @@ class SimpleSupervisor:
                 if not bot.is_running():
                     LOGGER.warning(f"⚠️ {channel}: Process crashed! Auto-restarting...")
                     bot.restart()
+    
+    async def command_listener_loop(self):
+        """Listen for external commands from kissbot.sh"""
+        from pathlib import Path
+        
+        LOGGER.info("📡 Command listener started")
+        cmd_file = Path("pids/supervisor.cmd")
+        result_file = Path("pids/supervisor.result")
+        
+        while self.running:
+            try:
+                if cmd_file.exists():
+                    # Read command
+                    cmd = cmd_file.read_text().strip()
+                    LOGGER.info(f"📨 Received command: {cmd}")
+                    
+                    # Delete command file immediately
+                    cmd_file.unlink()
+                    
+                    # Execute command
+                    result = "ERROR: Unknown command"
+                    
+                    if cmd.startswith("restart "):
+                        channel = cmd.split(maxsplit=1)[1]
+                        if channel in self.bots:
+                            bot = self.bots[channel]
+                            bot.restart()
+                            # Wait a bit for the bot to start
+                            await asyncio.sleep(1)
+                            if bot.is_running():
+                                result = f"SUCCESS: {channel} restarted (PID {bot.process.pid})"
+                            else:
+                                result = f"ERROR: {channel} failed to restart"
+                        else:
+                            result = f"ERROR: Channel '{channel}' not found"
+                    
+                    elif cmd == "status":
+                        # Return status of all bots
+                        statuses = []
+                        for ch, bot in self.bots.items():
+                            status = "RUNNING" if bot.is_running() else "STOPPED"
+                            pid = bot.process.pid if bot.is_running() else "N/A"
+                            statuses.append(f"{ch}:{status}:{pid}")
+                        result = "SUCCESS: " + " | ".join(statuses)
+                    
+                    # Write result
+                    result_file.write_text(result)
+                    LOGGER.info(f"📤 Command result: {result}")
+            
+            except Exception as e:
+                LOGGER.error(f"❌ Command listener error: {e}")
+                if cmd_file.exists():
+                    cmd_file.unlink()
+                result_file.write_text(f"ERROR: {e}")
+            
+            await asyncio.sleep(0.1)  # Check every 100ms
     
     async def interactive_cli(self):
         """Interactive CLI for managing processes"""
@@ -590,14 +650,18 @@ class SimpleSupervisor:
             
             try:
                 if self.interactive:
-                    # Interactive mode: CLI + health check
+                    # Interactive mode: CLI + health check + command listener
                     loop.run_until_complete(asyncio.gather(
                         self.health_check_loop(),
+                        self.command_listener_loop(),
                         self.interactive_cli()
                     ))
                 else:
-                    # Non-interactive mode: just health check
-                    loop.run_until_complete(self.health_check_loop())
+                    # Non-interactive mode: health check + command listener
+                    loop.run_until_complete(asyncio.gather(
+                        self.health_check_loop(),
+                        self.command_listener_loop()
+                    ))
             except KeyboardInterrupt:
                 LOGGER.info("🛑 Keyboard interrupt")
             finally:

@@ -348,8 +348,37 @@ class MessageHandler:
         try:
             LOGGER.info(f"🎮 Searching game: {game_name}")
             
-            # Timeout handling (config timeout déjà dans GameLookup)
-            game = await self.game_lookup.search_game(game_name)
+            # Utiliser le cache quantique pour cohérence avec !qgame
+            if self.game_cache:
+                # Recherche quantique (retourne liste de superpositions)
+                superpositions = await self.game_cache.search_quantum_game(
+                    query=game_name,
+                    observer=msg.user_login
+                )
+                
+                if superpositions:
+                    # Prendre la 1ère superposition (meilleur score/collapsed)
+                    best_result_data = superpositions[0].get("game")
+                    
+                    # Reconstruire GameResult pour utiliser format_result()
+                    from backends.game_lookup import GameResult
+                    game = GameResult(
+                        name=best_result_data.get("name", "Unknown"),
+                        year=best_result_data.get("year", "?"),
+                        rating_rawg=best_result_data.get("rating_rawg", 0.0),
+                        metacritic=best_result_data.get("metacritic"),
+                        platforms=best_result_data.get("platforms", []),
+                        genres=best_result_data.get("genres", []),
+                        developers=best_result_data.get("developers", []),
+                        publishers=best_result_data.get("publishers", []),
+                        summary=best_result_data.get("summary"),
+                        reliability_score=best_result_data.get("reliability_score", 0.0)
+                    )
+                else:
+                    game = None
+            else:
+                # Fallback si pas de cache quantique
+                game = await self.game_lookup.search_game(game_name)
             
             if not game:
                 response_text = f"@{msg.user_login} ❌ Game not found: {game_name}"
