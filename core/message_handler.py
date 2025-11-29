@@ -14,6 +14,7 @@ from core.registry import Registry
 from backends.game_lookup_rust import get_game_lookup
 from backends.music_cache import MusicCache
 from backends.llm_handler import LLMHandler
+from backends.translator import get_translator, get_dev_whitelist
 from intelligence.core import extract_mention_message
 
 from typing import TYPE_CHECKING
@@ -60,6 +61,14 @@ class MessageHandler:
         self._mention_last_time: Dict[str, float] = {}  # user_id -> timestamp
         self._mention_cooldown = config.get("commands", {}).get("cooldowns", {}).get("mention", 15.0)
         
+        # Rate limiting pour !ask (60s cooldown)
+        self._ask_last_time: Dict[str, float] = {}  # user_id -> timestamp
+        self._ask_cooldown = 60.0  # 1 minute
+        
+        # Rate limiting pour !trad (30s cooldown, sauf whitelistés)
+        self._trad_last_time: Dict[str, float] = {}  # user_id -> timestamp
+        self._trad_cooldown = 30.0  # 30 secondes
+        
         # Helix client (pour !gc)
         self.helix: Optional['HelixReadOnlyClient'] = None
         
@@ -94,6 +103,11 @@ class MessageHandler:
                 LOGGER.info("✅ LLMHandler initialisé")
             except Exception as e:
                 LOGGER.error(f"❌ LLMHandler init failed: {e}")
+        
+        # Translation Service
+        self.translator = get_translator()
+        self.dev_whitelist = get_dev_whitelist(db_manager=None)  # Will set DB later
+        LOGGER.info("🌍 TranslationService initialisé")
         
         # Subscribe aux messages entrants
         self.bus.subscribe("chat.inbound", self._handle_chat_message)
@@ -142,6 +156,10 @@ class MessageHandler:
         if msg.user_login.lower() in KNOWN_BOTS:
             LOGGER.debug(f"🤖 Ignoring bot message from {msg.user_login}")
             return
+        
+        # Auto-traduction pour devs whitelistés (avant deduplication)
+        if not msg.text.startswith("!"):
+            await self._handle_auto_translation(msg)
         
         # Deduplication - Créer ID unique basé sur user + text + timestamp (secondes)
         # Timestamp en secondes pour éviter duplicates dans la même seconde uniquement
@@ -203,6 +221,14 @@ class MessageHandler:
             await self._cmd_ask(msg, args)
         elif command == "!wiki":
             await self._cmd_wiki(msg, args)
+        elif command == "!trad":
+            await self._cmd_trad(msg, args)
+        elif command == "!adddev":
+            await self._cmd_adddev(msg, args)
+        elif command == "!rmdev":
+            await self._cmd_rmdev(msg, args)
+        elif command == "!listdevs":
+            await self._cmd_listdevs(msg)
         elif command == "!kissanniv":
             await self._cmd_kissanniv(msg, args)
         elif command == "!decoherence":
@@ -530,14 +556,14 @@ class MessageHandler:
     
     async def _cmd_perf(self, msg: ChatMessage, args: str) -> None:
         """
-        Commande !perf - Statistiques du cache de jeux (Mods/Broadcaster only)
+        Commande !perf - Statistiques du cache de jeux (Mods only)
         
         Affiche:
         - Hit rate du cache
         - Nombre d'entrées
         - Jeu le plus populaire
         """
-        # Vérifier permissions (mod ou broadcaster)
+        # Mod only
         if not (msg.is_mod or msg.is_broadcaster):
             return  # Silently ignore for non-mods
         
@@ -586,14 +612,14 @@ class MessageHandler:
     
     async def _cmd_perftrace(self, msg: ChatMessage, args: str) -> None:
         """
-        Commande !perftrace <game> - Trace performance détaillée (Broadcaster only)
+        Commande !perftrace <game> - Trace performance détaillée (Mods only)
         
         Effectue une recherche complète et sauvegarde un rapport microseconde
         détaillé dans logs/perftrace_<timestamp>.txt
         """
-        # Broadcaster only
-        if not msg.is_broadcaster:
-            return  # Silently ignore for non-broadcasters
+        # Mod only
+        if not (msg.is_mod or msg.is_broadcaster):
+            return  # Silently ignore for non-mods
         
         if not self.game_lookup:
             response_text = f"@{msg.user_login} ❌ Game lookup not available"
@@ -785,6 +811,25 @@ class MessageHandler:
             msg: Message entrant
             question: Question de l'utilisateur (args après !ask)
         """
+        # Rate limiting: 60s cooldown par utilisateur
+        current_time = time.time()
+        last_time = self._ask_last_time.get(msg.user_id, 0)
+        
+        if current_time - last_time < self._ask_cooldown:
+            cooldown_remaining = int(self._ask_cooldown - (current_time - last_time))
+            response_text = f"@{msg.user_login} ⏰ Cooldown: {cooldown_remaining}s restants"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            LOGGER.debug(f"🔇 !ask de {msg.user_login} en cooldown ({cooldown_remaining}s restants)")
+            return
+        
+        # Update cooldown
+        self._ask_last_time[msg.user_id] = current_time
+        
         if not self.llm_handler or not self.llm_handler.is_available():
             response_text = f"@{msg.user_login} ❌ Le système d'IA n'est pas disponible"
             await self.bus.publish("chat.outbound", OutboundMessage(
@@ -925,11 +970,17 @@ Réponds en te basant sur ces informations factuelles."""
             # Récupérer la langue depuis config
             wiki_lang = self.config.get("wikipedia", {}).get("lang", "en")
             
-            # Rechercher sur Wikipedia (retourne string formatée)
-            result = search_wikipedia(query, lang=wiki_lang, max_length=350)
+            # Rechercher sur Wikipedia (retourne dict ou None)
+            result = await search_wikipedia(query, lang=wiki_lang, max_length=350)
             
-            # Ajouter le @mention
-            response_text = f"@{msg.user_login} {result}"
+            # Formater la réponse
+            if result:
+                summary = result['summary']
+                if len(summary) > 350:
+                    summary = summary[:347] + "..."
+                response_text = f"@{msg.user_login} 📚 {result['title']}: {summary} {result['url']}"
+            else:
+                response_text = f"@{msg.user_login} ❌ Aucune page Wikipedia trouvée pour '{query}'"
             
             # Tronquer si trop long (limite Twitch 500 chars)
             if len(response_text) > 500:
@@ -1254,3 +1305,152 @@ Réponds en te basant sur ces informations factuelles."""
             "commands_processed": self.command_count,
             "uptime_seconds": int(time.time() - self.start_time)
         }
+    
+    async def _handle_auto_translation(self, msg: ChatMessage) -> None:
+        """
+        Auto-traduction pour les devs whitelistés
+        Détecte si le message est en français, sinon traduit
+        """
+        # Check whitelist
+        if not self.dev_whitelist.is_dev(msg.user_login):
+            return
+        
+        # Détect language
+        is_french = await self.translator.is_french(msg.text)
+        
+        if is_french:
+            return  # Déjà en français, rien à faire
+        
+        # Translate
+        result = await self.translator.translate(msg.text, target_lang='fr')
+        
+        if not result:
+            LOGGER.warning(f"⚠️ Auto-translation failed for {msg.user_login}")
+            return
+        
+        source_lang, translation = result
+        lang_name = self.translator.get_language_name(source_lang)
+        
+        # Reply with translation
+        response_text = f"🌍 [{lang_name.upper()}] {msg.user_login}: {translation}"
+        
+        await self.bus.publish("chat.outbound", OutboundMessage(
+            channel=msg.channel,
+            channel_id=msg.channel_id,
+            text=response_text,
+            prefer="irc"
+        ))
+        
+        LOGGER.info(f"✅ Auto-translated {msg.user_login}: {source_lang} → fr")
+    
+    async def _cmd_trad(self, msg: ChatMessage, args: str) -> None:
+        """Commande !trad <message> - Traduction manuelle"""
+        if not args:
+            response_text = f"@{msg.user_login} Usage: !trad <message>"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text
+            ))
+            return
+        
+        # Rate limiting: 30s cooldown SAUF pour whitelistés
+        is_whitelisted = self.dev_whitelist.is_dev(msg.user_login)
+        
+        if not is_whitelisted:
+            current_time = time.time()
+            last_time = self._trad_last_time.get(msg.user_id, 0)
+            
+            if current_time - last_time < self._trad_cooldown:
+                cooldown_remaining = int(self._trad_cooldown - (current_time - last_time))
+                response_text = f"@{msg.user_login} ⏰ Cooldown: {cooldown_remaining}s restants"
+                await self.bus.publish("chat.outbound", OutboundMessage(
+                    channel=msg.channel,
+                    channel_id=msg.channel_id,
+                    text=response_text
+                ))
+                LOGGER.debug(f"🔇 !trad de {msg.user_login} en cooldown ({cooldown_remaining}s restants)")
+                return
+            
+            # Update cooldown
+            self._trad_last_time[msg.user_id] = current_time
+        
+        result = await self.translator.translate(args, target_lang='fr')
+        
+        if not result:
+            response_text = f"@{msg.user_login} ❌ Translation failed"
+        else:
+            source_lang, translation = result
+            
+            if source_lang == 'fr':
+                response_text = f"@{msg.user_login} 🇫🇷 Already in French!"
+            else:
+                response_text = f"[TRAD] {msg.user_login} a dit: {translation}"
+        
+        await self.bus.publish("chat.outbound", OutboundMessage(
+            channel=msg.channel,
+            channel_id=msg.channel_id,
+            text=response_text
+        ))
+    
+    async def _cmd_adddev(self, msg: ChatMessage, args: str) -> None:
+        """Commande !adddev <username> - Ajoute dev à whitelist (mod only)"""
+        if not (msg.is_mod or msg.is_broadcaster):
+            return  # Silently ignore
+        
+        if not args:
+            response_text = f"@{msg.user_login} Usage: !adddev <username>"
+        else:
+            username = args.strip().lstrip('@')
+            added = self.dev_whitelist.add_dev(username)
+            
+            if added:
+                response_text = f"@{msg.user_login} ✅ {username} added to dev whitelist (auto-trad enabled)"
+                LOGGER.info(f"👥 {msg.user_login} added {username} to dev whitelist")
+            else:
+                response_text = f"@{msg.user_login} ℹ️ {username} already in dev whitelist"
+        
+        await self.bus.publish("chat.outbound", OutboundMessage(
+            channel=msg.channel,
+            channel_id=msg.channel_id,
+            text=response_text
+        ))
+    
+    async def _cmd_rmdev(self, msg: ChatMessage, args: str) -> None:
+        """Commande !rmdev <username> - Retire dev de whitelist (mod only)"""
+        if not (msg.is_mod or msg.is_broadcaster):
+            return  # Silently ignore
+        
+        if not args:
+            response_text = f"@{msg.user_login} Usage: !rmdev <username>"
+        else:
+            username = args.strip().lstrip('@')
+            removed = self.dev_whitelist.remove_dev(username)
+            
+            if removed:
+                response_text = f"@{msg.user_login} ✅ {username} removed from dev whitelist"
+                LOGGER.info(f"👥 {msg.user_login} removed {username} from dev whitelist")
+            else:
+                response_text = f"@{msg.user_login} ℹ️ {username} not in dev whitelist"
+        
+        await self.bus.publish("chat.outbound", OutboundMessage(
+            channel=msg.channel,
+            channel_id=msg.channel_id,
+            text=response_text
+        ))
+    
+    async def _cmd_listdevs(self, msg: ChatMessage) -> None:
+        """Commande !listdevs - Liste les devs whitelistés"""
+        devs = self.dev_whitelist.list_devs()
+        
+        if not devs:
+            response_text = f"@{msg.user_login} ℹ️ No devs in whitelist"
+        else:
+            dev_list = ", ".join(devs)
+            response_text = f"@{msg.user_login} 👥 Devs (auto-trad): {dev_list}"
+        
+        await self.bus.publish("chat.outbound", OutboundMessage(
+            channel=msg.channel,
+            channel_id=msg.channel_id,
+            text=response_text
+        ))

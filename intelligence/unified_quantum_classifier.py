@@ -42,32 +42,35 @@ class UnifiedQuantumClassifier:
         """
         self.logger = logging.getLogger(__name__)
 
-        # 🎯 RÈGLES DE CLASSIFICATION PAR INTENTION (3 CLASSES)
+        # 🎯 RÈGLES SIMPLIFIÉES - VERSION SOFT (Reflex minimal + GPT fallback)
         self.classification_rules = {
             "ping": {
-                "patterns": ["ping", "test", "alive", "salut", "coucou", "bonjour", "merci", "ok", "thx", "ty"],
-                "description": "Salutations, confirmations, réactions simples",
-                "target_response": "Court, amical, réactif (1-2 phrases)",
+                "patterns": [
+                    # Salutations uniquement
+                    "salut", "coucou", "bonjour", "bonsoir", "hello", "hey",
+                    # Tests de présence
+                    "ping", "test", "alive", "ici", "là",
+                    # Remerciements
+                    "merci", "thx", "ty", "thanks", "thank you"
+                ],
+                "description": "Messages triviaux → Reflex instantané (0ms)",
+                "target_response": "Réponse réflexe prédéfinie",
                 "priority": "social"
             },
-
+            
             "gen_short": {
                 "patterns": [
-                    # Salutations avec mention (ex: "bonsoir serda_bot")
-                    "bonsoir",
-                    # Questions courtes
-                    "comment", "pourquoi", "quand", "où", "aide", "help", "peux-tu", "peux tu", "comment faire", "comment ça",
-                    # Patterns factuels (ex-lookup fusionné)
-                    "qui est", "c'est quoi", "qu'est-ce que", "définition", "game info", "steam info", "qu'est ce que", "info sur"
+                    # Fallback pour TOUTES les autres mentions (questions, calculs, logique, etc.)
+                    # Pattern vide = catch-all si pas ping et pas !ask
                 ],
-                "description": "Questions courtes, demandes d'aide, recherches factuelles simples",
-                "target_response": "Réponse concise mais informative (2-4 phrases)",
+                "description": "Toutes mentions non-triviales → GPT concis",
+                "target_response": "Réponse concise et créative (1-3 phrases)",
                 "priority": "question_simple"
             },
 
             "gen_long": {
-                "patterns": ["!ask", "explique", "raconte", "développe", "détaille", "analyse", "parle moi de", "dis moi tout", "explique moi", "comment ça marche", "comment fonctionne"],
-                "description": "Questions complexes, analyses approfondies",
+                "patterns": ["!ask"],
+                "description": "Commande !ask → GPT détaillé",
                 "target_response": "Réponse détaillée et nuancée (5+ phrases)",
                 "priority": "complex_analysis"
             }
@@ -226,99 +229,32 @@ class UnifiedQuantumClassifier:
             "classification_method": "probabilistic"
         }
 
-        # 1. 🎯 CONTEXT OVERRIDE (priorité absolue)
-        if context == "ask":
-            # NOTE: Cette classification en gen_long est redondante car local_synapse.py (ligne 313)
-            # utilise directement context="ask" AVANT de vérifier stimulus_class.
-            # Gardé comme sécurité défensive si context="ask" n'est pas passé correctement.
+        # 1. 🎯 DÉTECTION !ASK (priorité absolue)
+        if "!ask" in stimulus_lower or context == "ask":
             class_scores["gen_long"] = 1.0
-            metadata["classification_reason"] = "context_override_ask_redundant"
+            metadata["classification_reason"] = "explicit_ask_command"
             return class_scores, metadata
 
-        # 2. 🎤 ANALYSE DES MENTIONS
-        if metadata["has_mention"]:
-            # Bonus pour mentions mais pas exclusif
-            class_scores["gen_short"] += 0.3
+        # 2. 🎤 DÉTECTION REFLEX (messages triviaux)
+        ping_matches = sum(1 for pattern in self.classification_rules["ping"]["patterns"] if pattern in stimulus_lower)
+        if ping_matches > 0:
+            class_scores["ping"] = 1.0
+            metadata["classification_reason"] = f"reflex_trivial_match_{ping_matches}"
+            return class_scores, metadata
 
-            # Analyse du contenu de la mention
-            for class_name, rule in self.classification_rules.items():
-                mention_matches = sum(1 for pattern in rule["patterns"] if pattern in stimulus_lower)
-                if mention_matches > 0:
-                    class_scores[class_name] += mention_matches * 0.4
-
-        # 3. 📋 SCORE PAR PATTERNS D'INTENTION
-        for class_name, rule in self.classification_rules.items():
-            pattern_matches = sum(1 for pattern in rule["patterns"] if pattern in stimulus_lower)
-            if pattern_matches > 0:
-                # Score basé sur nombre de patterns + priorité
-                base_score = pattern_matches * 0.5
-
-                # Bonus selon priorité de la classe
-                priority = str(rule.get("priority", ""))
-                priority_bonus = {
-                    "social": 0.1,           # ping
-                    "question_simple": 0.2, # gen_short
-                    "factual": 0.3,         # lookup
-                    "complex_analysis": 0.4  # gen_long
-                }.get(priority, 0.0)
-
-                class_scores[class_name] += base_score + priority_bonus
-
-        # 4. 🧠 ANALYSE DE COMPLEXITÉ LINGUISTIQUE
-        word_count = metadata.get("word_count", 0)
-        word_count_int = int(word_count) if isinstance(word_count, (int, float)) else 0
-        complex_words = metadata.get("complex_words", [])
-        complex_words_count = len(complex_words) if isinstance(complex_words, list) else 0
-        has_question = metadata.get("has_question", False)
-        has_question_bool = bool(has_question) if isinstance(has_question, bool) else False
-
-        # Ajustements basés sur la complexité
-        if word_count_int <= 3 and not has_question_bool and complex_words_count == 0:
-            class_scores["ping"] += 0.6  # Message très court
-        elif complex_words_count >= 2:
-            class_scores["gen_long"] += 0.7  # Plusieurs mots complexes
-        elif complex_words_count == 1 and word_count_int > 6:
-            class_scores["gen_long"] += 0.5  # Un mot complexe + message long
-        elif complex_words_count == 1:
-            class_scores["gen_long"] += 0.8  # Mot complexe isolé → analyse approfondie
-        elif word_count_int > 12:
-            class_scores["gen_long"] += 0.4  # Message très long
-
-        # Bonus questions courtes
-        if has_question_bool and word_count_int <= 8 and complex_words_count <= 1:
-            class_scores["gen_short"] += 0.3
-
-        # 5. 📊 NORMALISATION EN PROBABILITÉS
-        total_score = sum(class_scores.values())
-
-        if total_score > 0:
-            probabilities = {k: v / total_score for k, v in class_scores.items()}
-        else:
-            # Fallback uniforme si aucun pattern (3 classes: 33.3% chacune)
-            probabilities = {k: 1.0/3.0 for k in class_scores.keys()}
-
-        # 6. 🎯 SURCHARGE INTELLIGENTE
-        max_class = max(probabilities.items(), key=lambda x: x[1])[0]
-
-        # Surcharge gen_short → gen_long si 2+ mots complexes
-        if max_class == "gen_short" and complex_words_count >= 2:
-            # Redistribue la probabilité vers gen_long
-            boost = probabilities["gen_short"] * 0.6
-            probabilities["gen_long"] += boost
-            probabilities["gen_short"] -= boost
-            metadata["classification_reason"] = "probability_boost_complexity"
-        else:
-            metadata["classification_reason"] = f"probability_match_{max_class}"
-
-        # 7. 📈 MÉTADONNÉES ENRICHIES
+        # 3. 🌐 FALLBACK → gen_short (TOUT le reste = GPT)
+        # Si pas !ask et pas reflex, alors c'est une mention normale → GPT concis
+        class_scores["gen_short"] = 1.0
+        metadata["classification_reason"] = "fallback_gpt_short"
+        
+        # Métadonnées finales
         metadata.update({
             "raw_scores": class_scores.copy(),
-            "total_raw_score": total_score,
-            "max_probability": max(probabilities.values()),
-            "predicted_class": max(probabilities.items(), key=lambda x: x[1])[0]
+            "max_probability": 1.0,
+            "predicted_class": "gen_short"
         })
-
-        return probabilities, metadata
+        
+        return class_scores, metadata
 
     def _evaluate_quantum_confidence(self, probabilities: Dict[str, float], entropy_analysis: Dict) -> Dict:
         """

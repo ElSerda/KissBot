@@ -28,6 +28,39 @@ from twitchAPI.type import AuthScope
 
 from core.message_bus import MessageBus
 from core.registry import Registry
+
+
+def convert_scope_strings_to_enums(scope_strings: list[str]) -> list[AuthScope]:
+    """
+    Convertit une liste de scope strings (ex: "chat:edit") en AuthScope enum.
+    
+    Args:
+        scope_strings: Liste des scopes en format string
+        
+    Returns:
+        Liste des AuthScope enum correspondants
+    """
+    scope_map = {
+        'chat:edit': AuthScope.CHAT_EDIT,
+        'chat:read': AuthScope.CHAT_READ,
+        'user:bot': AuthScope.USER_BOT,
+        'user:read:chat': AuthScope.USER_READ_CHAT,
+        'user:read:moderated_channels': AuthScope.USER_READ_MODERATED_CHANNELS,
+        'user:write:chat': AuthScope.USER_WRITE_CHAT,
+        'moderator:manage:announcements': AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS,
+        'moderator:read:chatters': AuthScope.MODERATOR_READ_CHATTERS,
+        'channel:bot': AuthScope.CHANNEL_BOT,
+        'channel:moderate': AuthScope.CHANNEL_MODERATE,
+    }
+    
+    result = []
+    for scope_str in scope_strings:
+        if scope_str in scope_map:
+            result.append(scope_map[scope_str])
+        else:
+            LOGGER.warning(f"⚠️ Unknown scope string: {scope_str}")
+    
+    return result
 from core.rate_limiter import RateLimiter
 from core.analytics_handler import AnalyticsHandler
 from core.chat_logger import ChatLogger
@@ -220,7 +253,8 @@ def load_token_from_db(db_manager, twitch_login, token_type='bot'):
         scopes = []
         if tokens.get('scopes'):
             try:
-                scopes = json.loads(tokens['scopes'])
+                scope_strings = json.loads(tokens['scopes'])
+                scopes = convert_scope_strings_to_enums(scope_strings)
             except (json.JSONDecodeError, TypeError):
                 pass
         
@@ -420,6 +454,10 @@ async def main():
             LOGGER.info(f"✅ User authentication set (DB mode, {len(default_scopes)} scopes)")
         else:
             # Mode YAML ou DB avec scopes
+            LOGGER.info(f"🔍 Bot scopes loaded from DB: {bot_token.scopes}")
+            LOGGER.info(f"🔍 Scopes type: {type(bot_token.scopes)}, first scope type: {type(bot_token.scopes[0]) if bot_token.scopes else 'empty'}")
+            LOGGER.info(f"🔍 Scopes values: {[s.value if hasattr(s, 'value') else s for s in bot_token.scopes]}")
+            
             await twitch_bot.set_user_authentication(
                 token=bot_token.access_token,
                 scope=bot_token.scopes,
@@ -753,6 +791,54 @@ async def main():
         ready_file = pathlib.Path(f"pids/{args.channel}.ready")
         ready_file.touch()
         LOGGER.info(f"✅ Ready flag created: {ready_file}")
+    
+    # Broadcast listener task
+    async def broadcast_listener():
+        """Listen for broadcast requests from Supervisor"""
+        broadcast_file = pathlib.Path(f"pids/{args.channel}.broadcast_in")
+        
+        while True:
+            try:
+                if broadcast_file.exists():
+                    # Read broadcast request
+                    broadcast_data = broadcast_file.read_text().strip()
+                    
+                    # Delete file immediately
+                    broadcast_file.unlink()
+                    
+                    # Parse: source_channel|message
+                    parts = broadcast_data.split("|", 1)
+                    if len(parts) != 2:
+                        LOGGER.error(f"❌ Invalid broadcast format: {broadcast_data}")
+                        await asyncio.sleep(0.1)
+                        continue
+                    
+                    source_channel, message = parts
+                    
+                    # Format message with source
+                    formatted_msg = f"[📢 {source_channel}] {message}"
+                    
+                    LOGGER.info(
+                        f"📢 BROADCAST RECEIVED | source={source_channel} | "
+                        f"sending to #{args.channel}"
+                    )
+                    
+                    # Send message via IRC chat instance
+                    try:
+                        await irc_client.chat.send_message(args.channel, formatted_msg)
+                        LOGGER.info(f"✅ Broadcast sent to #{args.channel}")
+                    except Exception as e:
+                        LOGGER.error(f"❌ Failed to send broadcast: {e}")
+            
+            except Exception as e:
+                LOGGER.error(f"❌ Broadcast listener error: {e}")
+            
+            await asyncio.sleep(0.1)  # Check every 100ms
+    
+    # Start broadcast listener
+    if args.channel:
+        asyncio.create_task(broadcast_listener())
+        LOGGER.info("📡 Broadcast listener started")
     
     try:
         # Boucle infinie qui répond bien à KeyboardInterrupt

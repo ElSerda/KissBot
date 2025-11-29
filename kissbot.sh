@@ -4,12 +4,16 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="$SCRIPT_DIR/kissbot-venv"
 SUPERVISOR_SCRIPT="$SCRIPT_DIR/supervisor_v1.py"
+HUB_SCRIPT="$SCRIPT_DIR/eventsub_hub.py"
 CONFIG_FILE="$SCRIPT_DIR/config/config.yaml"
 DB_FILE="$SCRIPT_DIR/kissbot.db"
 PID_DIR="$SCRIPT_DIR/pids"
 LOG_DIR="$SCRIPT_DIR/logs"
 SUPERVISOR_PID_FILE="$PID_DIR/supervisor.pid"
+HUB_PID_FILE="$PID_DIR/eventsub_hub.pid"
 SUPERVISOR_LOG="$SCRIPT_DIR/supervisor.log"
+HUB_LOG="$SCRIPT_DIR/eventsub_hub.log"
+HUB_SOCKET="/tmp/kissbot_hub.sock"
 
 # Parse --use-db option
 USE_DB_FLAG=""
@@ -22,6 +26,93 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+# Function to check if Hub is running
+is_hub_running() {
+    if [ -f "$HUB_PID_FILE" ]; then
+        PID=$(cat "$HUB_PID_FILE")
+        if ps -p "$PID" > /dev/null 2>&1; then
+            return 0
+        else
+            rm -f "$HUB_PID_FILE"
+        fi
+    fi
+    
+    # Check for eventsub_hub.py process
+    if pgrep -f "python.*eventsub_hub\.py" > /dev/null 2>&1; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function to start EventSub Hub
+start_hub() {
+    if is_hub_running; then
+        echo -e "${YELLOW}⚠️  EventSub Hub already running (PID: $(cat $HUB_PID_FILE 2>/dev/null || echo 'unknown'))${NC}"
+        return 0
+    fi
+    
+    echo -e "${GREEN}🔌 Starting EventSub Hub...${NC}"
+    
+    # Create directories
+    mkdir -p "$PID_DIR" "$LOG_DIR"
+    
+    # Activate venv and start hub in background
+    cd "$SCRIPT_DIR"
+    source "$VENV_PATH/bin/activate"
+    nohup python "$HUB_SCRIPT" --config "$CONFIG_FILE" --db "$DB_FILE" > "$HUB_LOG" 2>&1 &
+    
+    # Save PID
+    HUB_PID=$!
+    echo $HUB_PID > "$HUB_PID_FILE"
+    
+    # Wait and check
+    sleep 2
+    if is_hub_running; then
+        echo -e "${GREEN}✅ EventSub Hub started successfully (PID: $HUB_PID)${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Failed to start EventSub Hub. Check logs: $HUB_LOG${NC}"
+        rm -f "$HUB_PID_FILE"
+        return 1
+    fi
+}
+
+# Function to stop EventSub Hub
+stop_hub() {
+    if ! is_hub_running; then
+        echo -e "${YELLOW}⚠️  EventSub Hub is not running${NC}"
+        return 1
+    fi
+    
+    if [ -f "$HUB_PID_FILE" ]; then
+        PID=$(cat "$HUB_PID_FILE")
+    else
+        PID=$(pgrep -f "python.*eventsub_hub\.py" | head -n 1)
+    fi
+    
+    if [ -z "$PID" ]; then
+        echo -e "${RED}❌ Could not find EventSub Hub process${NC}"
+        return 1
+    fi
+    
+    echo -e "${YELLOW}🛑 Stopping EventSub Hub (PID: $PID)...${NC}"
+    kill -TERM "$PID" 2>/dev/null || true
+    
+    # Wait for graceful shutdown
+    sleep 2
+    
+    # Force kill if still running
+    if ps -p "$PID" > /dev/null 2>&1; then
+        kill -9 "$PID" 2>/dev/null || true
+        sleep 1
+    fi
+    
+    rm -f "$HUB_PID_FILE"
+    rm -f "$HUB_SOCKET"
+    echo -e "${GREEN}✅ EventSub Hub stopped${NC}"
+}
 
 # Function to check if supervisor is running
 is_running() {
@@ -49,15 +140,22 @@ start() {
         return 1
     fi
     
+    # Start Hub first
+    start_hub
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ Failed to start EventSub Hub. Cannot start supervisor.${NC}"
+        return 1
+    fi
+    
     echo -e "${GREEN}🚀 Starting KissBot Supervisor...${NC}"
     
     # Create directories
     mkdir -p "$PID_DIR" "$LOG_DIR"
     
-    # Activate venv and start supervisor in background (non-interactive mode)
+    # Activate venv and start supervisor in background (non-interactive mode with hub)
     cd "$SCRIPT_DIR"
     source "$VENV_PATH/bin/activate"
-    nohup python "$SUPERVISOR_SCRIPT" --config "$CONFIG_FILE" --non-interactive $USE_DB_FLAG > "$SUPERVISOR_LOG" 2>&1 &
+    nohup python "$SUPERVISOR_SCRIPT" --config "$CONFIG_FILE" --non-interactive --enable-hub --hub-socket="$HUB_SOCKET" $USE_DB_FLAG > "$SUPERVISOR_LOG" 2>&1 &
     
     # Save PID
     SUPERVISOR_PID=$!
@@ -70,15 +168,34 @@ start() {
         echo -e "${GREEN}📝 Supervisor log: tail -f $SUPERVISOR_LOG${NC}"
         echo ""
         
-        # Show started bots
-        sleep 2
-        BOT_COUNT=$(pgrep -f "main\.py --channel" | wc -l)
+        # Wait for bots to be fully started (supervisor writes PID files)
+        echo -e "${YELLOW}⏳ Waiting for bots to start...${NC}"
+        sleep 5
+        
+        # Count bot PIDs from PID files (more reliable than pgrep)
+        BOT_COUNT=0
+        BOT_PIDS=""
+        for pidfile in "$PID_DIR"/*.pid; do
+            if [ -f "$pidfile" ]; then
+                filename=$(basename "$pidfile")
+                # Skip supervisor and hub PIDs
+                if [[ "$filename" != "supervisor.pid" ]] && [[ "$filename" != "eventsub_hub.pid" ]]; then
+                    pid=$(cat "$pidfile" 2>/dev/null)
+                    if [ -n "$pid" ] && ps -p "$pid" > /dev/null 2>&1; then
+                        channel=${filename%.pid}
+                        BOT_COUNT=$((BOT_COUNT + 1))
+                        BOT_PIDS="$BOT_PIDS\n   - PID $pid: --channel $channel"
+                    fi
+                fi
+            fi
+        done
+        
         echo -e "${GREEN}🤖 Started $BOT_COUNT bot processes${NC}"
         
         # List bot processes
         if [ "$BOT_COUNT" -gt 0 ]; then
             echo -e "${GREEN}   Bot processes:${NC}"
-            ps aux | grep "main\.py --channel" | grep -v grep | awk '{print "   - PID " $2 ": " $13 " " $14}' || true
+            echo -e "$BOT_PIDS"
         fi
     else
         echo -e "${RED}❌ Failed to start KissBot Supervisor. Check logs: $SUPERVISOR_LOG${NC}"
@@ -144,11 +261,14 @@ stop() {
     
     rm -f "$SUPERVISOR_PID_FILE"
     echo -e "${GREEN}✅ KissBot Supervisor stopped (all bots terminated)${NC}"
+    
+    # Stop Hub
+    stop_hub
 }
 
 # Function to restart the supervisor
 restart() {
-    echo -e "${YELLOW}🔄 Restarting KissBot Supervisor...${NC}"
+    echo -e "${YELLOW}🔄 Restarting KissBot Stack (Hub + Supervisor + Bots)...${NC}"
     stop
     sleep 2
     start
@@ -225,6 +345,122 @@ restart_channel() {
     echo -e "${RED}   ❌ Timeout: No response from supervisor after ${TIMEOUT_SEC}s${NC}"
     echo "   Check if supervisor is responsive: $0 status"
     rm -f "$CMD_FILE"  # Clean up
+    return 1
+}
+
+# Function to start a single channel
+start_channel() {
+    CHANNEL="$1"
+    
+    if [ -z "$CHANNEL" ]; then
+        echo -e "${RED}❌ Error: Channel name required${NC}"
+        echo "Usage: $0 start-channel <channel_name>"
+        return 1
+    fi
+    
+    # Check if supervisor is running
+    if ! is_running; then
+        echo -e "${RED}❌ Supervisor is not running. Start it first with: $0 start${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}🚀 Starting bot for channel: $CHANNEL${NC}"
+    
+    # Send start command to supervisor
+    CMD_FILE="$SCRIPT_DIR/pids/supervisor.cmd"
+    RESULT_FILE="$SCRIPT_DIR/pids/supervisor.result"
+    
+    # Clean old result
+    rm -f "$RESULT_FILE"
+    
+    # Write command
+    echo "start $CHANNEL" > "$CMD_FILE"
+    echo "   📨 Sending start command to supervisor..."
+    
+    # Wait for supervisor to process command
+    MAX_WAIT_MS=30000
+    ELAPSED_MS=0
+    INTERVAL_MS=100
+    
+    while [ $ELAPSED_MS -lt $MAX_WAIT_MS ]; do
+        if [ -f "$RESULT_FILE" ]; then
+            RESULT=$(cat "$RESULT_FILE")
+            rm -f "$RESULT_FILE"
+            
+            if [[ "$RESULT" == SUCCESS:* ]]; then
+                echo -e "${GREEN}   ✅ $RESULT${NC}"
+                echo ""
+                echo -e "${GREEN}📝 View logs: $0 logs $CHANNEL -f${NC}"
+                return 0
+            else
+                echo -e "${RED}   ❌ $RESULT${NC}"
+                return 1
+            fi
+        fi
+        
+        sleep 0.1
+        ELAPSED_MS=$((ELAPSED_MS + INTERVAL_MS))
+    done
+    
+    echo -e "${RED}   ❌ Timeout: No response from supervisor${NC}"
+    rm -f "$CMD_FILE"
+    return 1
+}
+
+# Function to stop a single channel
+stop_channel() {
+    CHANNEL="$1"
+    
+    if [ -z "$CHANNEL" ]; then
+        echo -e "${RED}❌ Error: Channel name required${NC}"
+        echo "Usage: $0 stop-channel <channel_name>"
+        return 1
+    fi
+    
+    # Check if supervisor is running
+    if ! is_running; then
+        echo -e "${RED}❌ Supervisor is not running${NC}"
+        return 1
+    fi
+    
+    echo -e "${YELLOW}🛑 Stopping bot for channel: $CHANNEL${NC}"
+    
+    # Send stop command to supervisor
+    CMD_FILE="$SCRIPT_DIR/pids/supervisor.cmd"
+    RESULT_FILE="$SCRIPT_DIR/pids/supervisor.result"
+    
+    # Clean old result
+    rm -f "$RESULT_FILE"
+    
+    # Write command
+    echo "stop $CHANNEL" > "$CMD_FILE"
+    echo "   📨 Sending stop command to supervisor..."
+    
+    # Wait for supervisor to process command
+    MAX_WAIT_MS=30000
+    ELAPSED_MS=0
+    INTERVAL_MS=100
+    
+    while [ $ELAPSED_MS -lt $MAX_WAIT_MS ]; do
+        if [ -f "$RESULT_FILE" ]; then
+            RESULT=$(cat "$RESULT_FILE")
+            rm -f "$RESULT_FILE"
+            
+            if [[ "$RESULT" == SUCCESS:* ]]; then
+                echo -e "${GREEN}   ✅ $RESULT${NC}"
+                return 0
+            else
+                echo -e "${RED}   ❌ $RESULT${NC}"
+                return 1
+            fi
+        fi
+        
+        sleep 0.1
+        ELAPSED_MS=$((ELAPSED_MS + INTERVAL_MS))
+    done
+    
+    echo -e "${RED}   ❌ Timeout: No response from supervisor${NC}"
+    rm -f "$CMD_FILE"
     return 1
 }
 
@@ -347,6 +583,12 @@ case "$1" in
     restart)
         restart
         ;;
+    start-channel)
+        start_channel "$2"
+        ;;
+    stop-channel)
+        stop_channel "$2"
+        ;;
     restart-channel)
         restart_channel "$2"
         ;;
@@ -357,13 +599,15 @@ case "$1" in
         logs "$@"
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|restart-channel|status|logs [channel] [-f]} [--use-db]"
+        echo "Usage: $0 {start|stop|restart|start-channel|stop-channel|restart-channel|status|logs [channel] [-f]} [--use-db]"
         echo ""
         echo "Commands:"
-        echo "  start [--use-db]      - Start KissBot Supervisor and all bots"
-        echo "  stop                  - Stop KissBot Supervisor and all bots"
-        echo "  restart [--use-db]    - Restart KissBot Supervisor and all bots"
-        echo "  restart-channel <ch>  - Restart only one specific channel (supervisor keeps running)"
+        echo "  start [--use-db]      - Start KissBot Stack (Hub + Supervisor + all bots)"
+        echo "  stop                  - Stop KissBot Stack (Hub + Supervisor + all bots)"
+        echo "  restart [--use-db]    - Restart KissBot Stack (Hub + Supervisor + all bots)"
+        echo "  start-channel <ch>    - Start only one specific bot (supervisor must be running)"
+        echo "  stop-channel <ch>     - Stop only one specific bot (supervisor keeps running)"
+        echo "  restart-channel <ch>  - Restart only one specific bot (supervisor keeps running)"
         echo "  status                - Show supervisor and bot status"
         echo "  logs                  - Show last 50 supervisor log lines"
         echo "  logs <channel>        - Show last 50 lines for a specific channel"
@@ -373,13 +617,12 @@ case "$1" in
         echo "  --use-db              - Use database for OAuth tokens (default: YAML)"
         echo ""
         echo "Examples:"
-        echo "  $0 start                   # Start with YAML tokens"
-        echo "  $0 start --use-db          # Start with database tokens"
+        echo "  $0 start --use-db          # Start full stack with DB tokens"
+        echo "  $0 start-channel el_serda  # Start only el_serda bot"
+        echo "  $0 stop-channel pelerin_   # Stop only pelerin_ bot"
         echo "  $0 restart-channel el_serda # Restart only el_serda bot"
         echo "  $0 status"
-        echo "  $0 logs"
-        echo "  $0 logs ekylybryum"
-        echo "  $0 logs pelerin_ -f"
+        echo "  $0 logs el_serda -f"
         exit 1
         ;;
 esac

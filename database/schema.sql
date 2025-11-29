@@ -264,3 +264,21 @@ AFTER UPDATE ON game_cache
 BEGIN
     UPDATE game_cache SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
+
+-- Table dev_whitelist pour auto-traduction
+CREATE TABLE IF NOT EXISTS dev_whitelist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,  -- Case-insensitive
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    added_by TEXT,  -- Qui a ajouté le dev
+    enabled BOOLEAN DEFAULT 1,
+    UNIQUE(username)
+);
+
+-- Index pour recherche rapide
+CREATE INDEX IF NOT EXISTS idx_dev_whitelist_username 
+    ON dev_whitelist(username);
+
+-- Index pour filtre enabled
+CREATE INDEX IF NOT EXISTS idx_dev_whitelist_enabled 
+    ON dev_whitelist(enabled);

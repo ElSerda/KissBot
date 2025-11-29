@@ -26,7 +26,7 @@ class EntropyCalculator:
         self.entropy_thresholds = {
             "high_confidence": 0.5,    # < 0.5 → Très confiant
             "moderate_confidence": 1.0, # 0.5-1.0 → Confiance modérée
-            "low_confidence": 1.5,     # > 1.5 → Incertitude → Fallback
+            "low_confidence": 1.9,     # > 1.9 → Incertitude → Fallback (augmenté pour plus de liberté)
             "max_entropy": 2.0         # log₂(4) pour 4 classes équiprobables
         }
 

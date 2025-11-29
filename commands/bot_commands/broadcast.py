@@ -4,6 +4,7 @@ Commandes permettant de broadcaster des messages sur tous les channels.
 """
 
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -87,45 +88,35 @@ async def cmd_kisscharity(msg: ChatMessage, args: list[str], bus: MessageBus, ir
         f"message={broadcast_msg[:100]}..."
     )
     
-    # 7. Broadcaster via IRC Client
+    # 7. Broadcaster via Supervisor (communication inter-bots)
     try:
-        success, total = await irc_client.broadcast_message(
-            message=broadcast_msg,
-            source_channel=msg.channel,  # Ajouter source pour afficher [Source: xxx]
-            exclude_channel=msg.channel  # Ne pas dupliquer sur le channel d'origine
-        )
+        # Écrire la commande de broadcast dans un fichier pour le Supervisor
+        broadcast_file = "pids/supervisor.broadcast"
+        
+        # Format: timestamp|source_channel|message
+        broadcast_data = f"{int(now.timestamp())}|{msg.channel}|{broadcast_msg}\n"
+        
+        # Écrire dans le fichier (append mode pour ne pas écraser)
+        os.makedirs("pids", exist_ok=True)
+        with open(broadcast_file, "w") as f:
+            f.write(broadcast_data)
         
         # 8. Update cooldown
         _last_broadcast_time = now
         
-        # 9. Log résultat
-        success_rate = (success / total * 100) if total > 0 else 0
+        # 9. Log broadcast request
         LOGGER.info(
-            f"✅ BROADCAST SENT | "
+            f"✅ BROADCAST REQUEST SENT TO SUPERVISOR | "
             f"user={msg.user_login} | "
-            f"sent={success}/{total} ({success_rate:.1f}%) | "
+            f"source={msg.channel} | "
             f"message={broadcast_msg[:50]}..."
         )
         
-        # 10. Analytics event (optionnel)
-        # TODO: Ajouter analytics.track("broadcast_sent", {...}) si système d'analytics existe
-        
-        # 11. Response
-        if success == total:
-            # Tous envoyés avec succès
-            return (
-                f"@{msg.user_login} 📢 Message diffusé avec succès sur {success} channels ! 🎉"
-            )
-        elif success > 0:
-            # Succès partiel
-            failed = total - success
-            return (
-                f"@{msg.user_login} 📢 Message diffusé sur {success}/{total} channels "
-                f"({failed} échecs)"
-            )
-        else:
-            # Tous échoués
-            return f"@{msg.user_login} ❌ Erreur : impossible de diffuser le message"
+        # 10. Response immédiate (le Supervisor s'occupe de la diffusion)
+        return (
+            f"@{msg.user_login} 📢 Broadcast en cours sur tous les channels... "
+            f"(traitement par Supervisor)"
+        )
             
     except Exception as e:
         LOGGER.error(f"❌ Erreur broadcast: {e}", exc_info=True)

@@ -253,68 +253,60 @@ class LocalSynapse:
         }
         lang_directive = language_map.get(self.language, "EN FRANÇAIS")
 
-        # PROMPT OPTIMISÉ VERSION 2 (recommandation Mistral AI)
-        # Format minimaliste pour éviter auto-présentation
+        # PROMPT OPTIMISÉ VERSION 3 - LIBÉRÉ
+        # Plus de contraintes strictes, focus sur l'authenticité
         if context == "ask":
             if use_personality_ask:
                 system_prompt = (
-                    f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme {bot_name} "
-                    f"({personality}). Max 200 caractères : {stimulus}"
+                    f"Tu es {bot_name}. {personality}\n"
+                    f"Réponds {lang_directive} avec TON opinion, sans te brider. "
+                    f"Vannes, clash, opinions tranchées = OK. Max 250 chars : {stimulus}"
                 )
             else:
                 system_prompt = (
-                    f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme un bot Twitch factuel. "
-                    f"Max 200 caractères : {stimulus}"
+                    f"Réponds {lang_directive} directement, avec ton expertise gaming. "
+                    f"Pas de langue de bois. Max 250 chars : {stimulus}"
                 )
         else:
             # Mentions : différencier gen_short vs gen_long
             if stimulus_class == "gen_long":
-                # 🎯 PROMPT ANTI-DÉRIVE (Recommandation Mistral AI)
-                # Contraintes strictes + format obligatoire + exemple de référence
+                # PROMPT LIBÉRÉ - Plus de créativité
                 if use_personality_mention:
                     system_prompt = (
                         f"Tu es {bot_name}. {personality}\n\n"
-                        f"RÈGLES STRICTES (NON NÉGOCIABLES):\n"
-                        f"1. **MAX 2 PHRASES** (pas de listes 1. 2. 3.)\n"
-                        f"2. **MAX 400 CARACTÈRES** (coupe-toi si tu dépasses)\n"
-                        f"3. **Réponds {lang_directive}, SANS TE PRÉSENTER**\n"
-                        f"4. **Termine par 🔚**\n\n"
-                        f"FORMAT OBLIGATOIRE:\n"
-                        f"\"Définition courte avec exemple concret 💡. Cas d'usage pratique 🎯. 🔚\"\n\n"
-                        f"EXEMPLE DE RÉFÉRENCE:\n"
-                        f"Q: C'est quoi la gravité?\n"
-                        f"R: La gravité attire les objets vers le centre de la Terre 💡. Exemple: une pomme tombe 🎯. 🔚\n\n"
-                        f"NOW YOUR TURN:\n"
-                        f"Q: {stimulus}\n"
-                        f"R:"
-                    )
-                else:
-                    system_prompt = (
-                        f"RÈGLES STRICTES:\n"
-                        f"1. **MAX 2 PHRASES** (≤400 caractères)\n"
-                        f"2. **Réponds {lang_directive}, SANS TE PRÉSENTER**\n"
-                        f"3. **Format: \"Définition 💡. Exemple 🎯. 🔚\"**\n\n"
-                        f"Q: {stimulus}\n"
-                        f"R:"
-                    )
-            else:
-                # Questions simples/salutations : réponses courtes
-                if use_personality_mention:
-                    system_prompt = (
-                        f"Tu es {bot_name}. {personality}\n"
-                        f"Règles:\n"
-                        f"1. Réponds en 1-2 phrases MAX {lang_directive}, SANS TE PRÉSENTER\n"
-                        f"2. Pour les questions personnelles (ça va?), utilise des réponses courtes et humoristiques\n"
-                        f"3. Évite les répétitions. Varie tes réponses\n"
-                        f"4. Utilise des emojis si ça ajoute du fun\n"
-                        f"5. Sois punchy et direct\n"
+                        f"Réponds {lang_directive} avec TON style unique:\n"
+                        f"- Sois drôle, authentique, prends position\n"
+                        f"- Vannes et clash sont OK si appropriés\n"
+                        f"- 2-3 phrases max (≤450 caractères)\n"
+                        f"- Utilise des emojis si ça ajoute du fun\n\n"
                         f"Question: {stimulus}\n"
                         f"Réponse:"
                     )
                 else:
                     system_prompt = (
-                        f"Réponds EN 1 PHRASE MAX {lang_directive}, SANS TE PRÉSENTER, comme un bot Twitch sympa. "
-                        f"Max 150 caractères : {stimulus}"
+                        f"Réponds {lang_directive} directement et sans filtre.\n"
+                        f"2-3 phrases max (≤450 chars). Sois concret et fun.\n\n"
+                        f"Q: {stimulus}\n"
+                        f"R:"
+                    )
+            else:
+                # Questions simples/salutations : réponses courtes PUNCHY
+                if use_personality_mention:
+                    system_prompt = (
+                        f"Tu es {bot_name}. {personality}\n"
+                        f"Réponds {lang_directive} MODE CASH:\n"
+                        f"- Punchline MORDANTE qui fait rire\n"
+                        f"- Sarcasme second degré assumé\n"
+                        f"- INTERDIT: gentillesse, politesse, générique\n"
+                        f"- Comparaisons osées et métaphores trash = OK\n"
+                        f"- 1-2 phrases qui MARQUENT (max 200 chars)\n"
+                        f"Question: {stimulus}\n"
+                        f"Réponse:"
+                    )
+                else:
+                    system_prompt = (
+                        f"Réponds {lang_directive} avec sarcasme MORDANT et vannes CASH. "
+                        f"Zéro filtre, humour noir OK. Max 200 chars : {stimulus}"
                     )
 
         # Format user-only avec prompt intégré (pas de séparation system/user)

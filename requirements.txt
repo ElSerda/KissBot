@@ -25,6 +25,9 @@ cryptography>=43.0.0
 # Smart Context - Fuzzy matching pour noms de jeux
 rapidfuzz>=3.0.0
 
+# Translation service (Google Translate API)
+deep-translator>=1.11.0
+
 # Monitoring système
 psutil>=5.9.0
 

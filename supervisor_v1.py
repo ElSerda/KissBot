@@ -460,6 +460,79 @@ class SimpleSupervisor:
                     LOGGER.warning(f"⚠️ {channel}: Process crashed! Auto-restarting...")
                     bot.restart()
     
+    async def broadcast_listener_loop(self):
+        """Listen for broadcast requests via file"""
+        from pathlib import Path
+        
+        LOGGER.info("📡 Broadcast listener started")
+        broadcast_file = Path("pids/supervisor.broadcast")
+        
+        while self.running:
+            try:
+                if broadcast_file.exists():
+                    # Read broadcast request
+                    broadcast_data = broadcast_file.read_text().strip()
+                    
+                    # Delete file immediately
+                    broadcast_file.unlink()
+                    
+                    # Parse: timestamp|source_channel|message
+                    parts = broadcast_data.split("|", 2)
+                    if len(parts) != 3:
+                        LOGGER.error(f"❌ Invalid broadcast format: {broadcast_data}")
+                        await asyncio.sleep(0.1)
+                        continue
+                    
+                    timestamp, source_channel, message = parts
+                    
+                    LOGGER.info(
+                        f"📢 BROADCAST REQUEST | source={source_channel} | "
+                        f"message={message[:50]}... | dispatching to {len(self.bots)} bots"
+                    )
+                    
+                    # Dispatch to all running bots EXCEPT source
+                    success_count = 0
+                    failed_channels = []
+                    
+                    for channel, bot in self.bots.items():
+                        # Skip source channel (no self-broadcast)
+                        if channel == source_channel:
+                            LOGGER.debug(f"⏭️ Skip {channel} (source channel)")
+                            continue
+                        
+                        if not bot.is_running():
+                            LOGGER.debug(f"⏭️ Skip {channel} (not running)")
+                            failed_channels.append(channel)
+                            continue
+                        
+                        try:
+                            # Write broadcast message to bot's special file
+                            # Format: source_channel|message
+                            bot_broadcast_file = Path(f"pids/{channel}.broadcast_in")
+                            bot_broadcast_file.write_text(f"{source_channel}|{message}\n")
+                            
+                            success_count += 1
+                            LOGGER.debug(f"✅ Broadcast dispatched to {channel}")
+                            
+                        except Exception as e:
+                            LOGGER.error(f"❌ Failed to dispatch to {channel}: {e}")
+                            failed_channels.append(channel)
+                    
+                    # Log results
+                    total_targets = len(self.bots) - 1  # Exclude source
+                    success_rate = (success_count / total_targets * 100) if total_targets > 0 else 0
+                    
+                    LOGGER.info(
+                        f"📊 BROADCAST DISPATCHED | "
+                        f"success={success_count}/{total_targets} ({success_rate:.1f}%) | "
+                        f"failed={failed_channels if failed_channels else 'none'}"
+                    )
+            
+            except Exception as e:
+                LOGGER.error(f"❌ Broadcast listener error: {e}")
+            
+            await asyncio.sleep(0.1)  # Check every 100ms
+    
     async def command_listener_loop(self):
         """Listen for external commands from kissbot.sh"""
         from pathlib import Path
@@ -481,7 +554,40 @@ class SimpleSupervisor:
                     # Execute command
                     result = "ERROR: Unknown command"
                     
-                    if cmd.startswith("restart "):
+                    if cmd.startswith("start "):
+                        channel = cmd.split(maxsplit=1)[1]
+                        if channel in self.bots:
+                            bot = self.bots[channel]
+                            if bot.is_running():
+                                result = f"ERROR: {channel} already running (PID {bot.process.pid})"
+                            else:
+                                bot.start()
+                                await asyncio.sleep(1)
+                                if bot.is_running():
+                                    result = f"SUCCESS: {channel} started (PID {bot.process.pid})"
+                                else:
+                                    result = f"ERROR: {channel} failed to start"
+                        else:
+                            result = f"ERROR: Channel '{channel}' not found"
+                    
+                    elif cmd.startswith("stop "):
+                        channel = cmd.split(maxsplit=1)[1]
+                        if channel in self.bots:
+                            bot = self.bots[channel]
+                            if not bot.is_running():
+                                result = f"ERROR: {channel} not running"
+                            else:
+                                old_pid = bot.process.pid if bot.process else "unknown"
+                                bot.stop()
+                                await asyncio.sleep(0.5)
+                                if not bot.is_running():
+                                    result = f"SUCCESS: {channel} stopped (was PID {old_pid})"
+                                else:
+                                    result = f"ERROR: {channel} failed to stop"
+                        else:
+                            result = f"ERROR: Channel '{channel}' not found"
+                    
+                    elif cmd.startswith("restart "):
                         channel = cmd.split(maxsplit=1)[1]
                         if channel in self.bots:
                             bot = self.bots[channel]
@@ -655,17 +761,19 @@ class SimpleSupervisor:
             
             try:
                 if self.interactive:
-                    # Interactive mode: CLI + health check + command listener
+                    # Interactive mode: CLI + health check + command listener + broadcast listener
                     loop.run_until_complete(asyncio.gather(
                         self.health_check_loop(),
                         self.command_listener_loop(),
+                        self.broadcast_listener_loop(),
                         self.interactive_cli()
                     ))
                 else:
-                    # Non-interactive mode: health check + command listener
+                    # Non-interactive mode: health check + command listener + broadcast listener
                     loop.run_until_complete(asyncio.gather(
                         self.health_check_loop(),
-                        self.command_listener_loop()
+                        self.command_listener_loop(),
+                        self.broadcast_listener_loop()
                     ))
             except KeyboardInterrupt:
                 LOGGER.info("🛑 Keyboard interrupt")

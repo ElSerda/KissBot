@@ -60,7 +60,7 @@ def get_cached(query: str, cache: dict) -> Optional[dict]:
 # Wikipedia Search
 # ═══════════════════════════════════════════════════════════════════════════
 
-def search_wikipedia(query: str, lang: str = "en", max_length: int = 400) -> str:
+async def search_wikipedia(query: str, lang: str = "en", max_length: int = 400) -> Optional[dict]:
     """
     Recherche basique sur Wikipedia avec fallback sur variations.
     
@@ -70,18 +70,14 @@ def search_wikipedia(query: str, lang: str = "en", max_length: int = 400) -> str
         max_length: Longueur max du résumé
     
     Returns:
-        String formatée prête pour IRC : "📚 Title: summary... URL" ou "❌ Not found"
+        Dict avec {title, summary, url} si trouvé, None sinon
     """
     # Check cache
     cache = load_cache()
     cached = get_cached(query, cache)
     if cached:
         LOGGER.debug(f"📦 Wikipedia cache hit: {query}")
-        # Format from cache (full summary, not just first sentence)
-        summary = cached['summary']
-        if len(summary) > max_length:
-            summary = summary[:max_length-3] + "..."
-        return f"📚 {cached['title']}: {summary} {cached['url']} 📦"
+        return cached
     
     # Initialize Wikipedia API with language
     wiki = wikipediaapi.Wikipedia(
@@ -110,16 +106,11 @@ def search_wikipedia(query: str, lang: str = "en", max_length: int = 400) -> str
             save_cache(cache)
             
             LOGGER.info(f"✅ Wikipedia found: {page.title}")
-            
-            # Format and return (truncate for display)
-            summary = page.summary
-            if len(summary) > max_length:
-                summary = summary[:max_length-3] + "..."
-            return f"📚 {page.title}: {summary} {page.fullurl}"
+            return result
     
     # No match found
     LOGGER.info(f"❌ No Wikipedia page found for: {query}")
-    return f"❌ No Wikipedia page found for '{query}'"
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -161,6 +161,8 @@ delta-s3/
 # EventSub Hub runtime files
 logs/hub.out
 logs/supervisor_test.log
+logs/
+pids/
 pids/*.pid
 
 # Test files

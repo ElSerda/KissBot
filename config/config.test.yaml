@@ -1,7 +1,13 @@
 apis:
-  openai_key: sk-proj-FAKE_KEY_FOR_TESTING_ONLY_REPLACE_WITH_REAL_KEY
-  rawg_key: 2be95642f3334633998bad840316f6fa
+  openai_key: sk-proj-FAKE_KEY_FOR_TESTING_ONLY_REPLACE_WITH_REAL_KEY  # safe: mock key for testing
+  rawg_key: 2be95642f3334633998bad840316f6fa  # safe: test API key
   timeout: 10.0  # Timeout général pour APIs externes (RAWG, OpenAI, etc.)
+
+# 🐉 DRAKON - Ultra-fast fuzzy search (Rust Δₛ³ V3)
+drakon:
+  enabled: true  # Enable DRAKON fast-path for game lookup
+  url: http://127.0.0.1:8080  # DRAKON HTTP API endpoint
+  timeout: 5.0  # Request timeout
 
 # ⏱️ Timeouts pour les transports (Phase 2.6)
 timeouts:
@@ -45,6 +51,11 @@ commands:
 # 📚 Wikipedia configuration
 wikipedia:
   lang: fr  # Langue par défaut (fr, en, es, etc.)
+
+# 🎮 Game Lookup configuration
+game_lookup:
+  min_confidence: 0.7  # Minimum confidence for fuzzy matches (0.0-1.0)
+  max_results: 5       # Maximum results to return
 
 # 📢 Phase 3.3 - Stream Announcements (online/offline)
 announcements:
