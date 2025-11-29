@@ -165,3 +165,31 @@ pids/*.pid
 
 # Test files
 test_supervisor_hub.log
+
+# Algorithme propriétaire DRAKON
+DRAKON/
+
+# Binaires et builds Rust
+kissbot-game-engine/target/
+rust-supervisor/target/
+delta-s3-rust/target/
+
+# Bases de données
+*.db
+*.db-shm
+*.db-wal
+
+# Logs et metrics
+metrics.jsonl
+logs/*.log
+
+# Virtual env
+kissbot-venv/
+backends/steam-guard.me
+
+# Test configs (user-specific)
+config/config.test.yaml
+config/config.test-supervisor.yaml
+
+# Archive legacy (local only)
+archive/

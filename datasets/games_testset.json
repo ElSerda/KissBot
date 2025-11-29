@@ -1,0 +1,1019 @@
+[
+  {
+    "id": 1,
+    "category": "special-chars",
+    "query": "The Legend of Zelda: Breath of the Wild",
+    "expected": "The Legend of Zelda: Breath of the Wild",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Deux-points, long titre"
+  },
+  {
+    "id": 2,
+    "category": "special-chars",
+    "query": "Marvel's Spider-Man",
+    "expected": "Marvel's Spider-Man",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Apostrophe typographique"
+  },
+  {
+    "id": 3,
+    "category": "articles",
+    "query": "The Last of Us",
+    "expected": "The Last of Us",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Article \"The\" à conserver"
+  },
+  {
+    "id": 4,
+    "category": "articles",
+    "query": "A Plague Tale",
+    "expected": "A Plague Tale: Innocence",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Compléter le sous-titre"
+  },
+  {
+    "id": 5,
+    "category": "sequels/remakes",
+    "query": "Final Fantasy VII Remake",
+    "expected": "Final Fantasy VII Remake",
+    "kind": "remake",
+    "locale": "en",
+    "notes": "Ne pas confondre avec FF7 (1997)"
+  },
+  {
+    "id": 6,
+    "category": "sequels/remakes",
+    "query": "Resident Evil 4 (2023)",
+    "expected": "Resident Evil 4",
+    "kind": "remake",
+    "locale": "en",
+    "notes": "Année indicative, titre canonique sans (2023)"
+  },
+  {
+    "id": 7,
+    "category": "asian",
+    "query": "ゼルダの伝説 ブレス オブ ザ ワイルド",
+    "expected": "The Legend of Zelda: Breath of the Wild",
+    "kind": "base",
+    "locale": "ja",
+    "notes": "Nom japonais officiel"
+  },
+  {
+    "id": 8,
+    "category": "asian",
+    "query": "原神",
+    "expected": "Genshin Impact",
+    "kind": "base",
+    "locale": "zh",
+    "notes": "Nom chinois"
+  },
+  {
+    "id": 9,
+    "category": "asian",
+    "query": "ペルソナ５",
+    "expected": "Persona 5",
+    "kind": "base",
+    "locale": "ja",
+    "notes": "Chiffre japonais → 5"
+  },
+  {
+    "id": 10,
+    "category": "asian",
+    "query": "龍が如く７ 光と闇の行方",
+    "expected": "Yakuza: Like a Dragon",
+    "kind": "base",
+    "locale": "ja",
+    "notes": "Alias \"Ryu ga Gotoku 7\""
+  },
+  {
+    "id": 11,
+    "category": "asian",
+    "query": "괴물사냥꾼: 월드",
+    "expected": "Monster Hunter: World",
+    "kind": "base",
+    "locale": "ko",
+    "notes": "Nom coréen (approx.)"
+  },
+  {
+    "id": 12,
+    "category": "indie-vs-aaa",
+    "query": "Hades",
+    "expected": "Hades",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Indie connu"
+  },
+  {
+    "id": 13,
+    "category": "indie-vs-aaa",
+    "query": "Celeste",
+    "expected": "Celeste",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Indie plateforme"
+  },
+  {
+    "id": 14,
+    "category": "indie-vs-aaa",
+    "query": "Hollow Knight",
+    "expected": "Hollow Knight",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Indie metroidvania"
+  },
+  {
+    "id": 15,
+    "category": "indie-vs-aaa",
+    "query": "Elden Ring",
+    "expected": "Elden Ring",
+    "kind": "base",
+    "locale": "en",
+    "notes": "AAA FromSoftware"
+  },
+  {
+    "id": 16,
+    "category": "indie-vs-aaa",
+    "query": "God of War",
+    "expected": "God of War (2018)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Si tu distingues 2005 vs 2018, renvoyer le 2018"
+  },
+  {
+    "id": 17,
+    "category": "retro",
+    "query": "DOOM (1993)",
+    "expected": "Doom (1993)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Normaliser majuscules"
+  },
+  {
+    "id": 18,
+    "category": "retro",
+    "query": "Baldur's Gate",
+    "expected": "Baldur's Gate (1998)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Apostrophe courbe"
+  },
+  {
+    "id": 19,
+    "category": "retro",
+    "query": "Prince of Persia (1989)",
+    "expected": "Prince of Persia (1989)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Ancienne itération"
+  },
+  {
+    "id": 20,
+    "category": "retro",
+    "query": "Another World",
+    "expected": "Another World",
+    "kind": "base",
+    "locale": "en",
+    "notes": "\"Out of this World\" alias US"
+  },
+  {
+    "id": 21,
+    "category": "retro",
+    "query": "System Shock (1994)",
+    "expected": "System Shock (1994)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Distinguer du remake 2023"
+  },
+  {
+    "id": 22,
+    "category": "early-access",
+    "query": "Hades II",
+    "expected": "Hades II",
+    "kind": "ea",
+    "locale": "en",
+    "notes": "Statut EA souvent"
+  },
+  {
+    "id": 23,
+    "category": "early-access",
+    "query": "Satisfactory",
+    "expected": "Satisfactory",
+    "kind": "ea",
+    "locale": "en",
+    "notes": "Longue EA"
+  },
+  {
+    "id": 24,
+    "category": "early-access",
+    "query": "Baldur's Gate 3 (EA)",
+    "expected": "Baldur's Gate 3",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Était EA, maintenant complet"
+  },
+  {
+    "id": 25,
+    "category": "early-access",
+    "query": "Factorio (early)",
+    "expected": "Factorio",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Ancien EA"
+  },
+  {
+    "id": 26,
+    "category": "dlc-vs-base",
+    "query": "The Witcher 3: Blood and Wine",
+    "expected": "The Witcher 3: Wild Hunt — Blood and Wine",
+    "kind": "dlc",
+    "locale": "en",
+    "notes": "DLC, ne pas renvoyer le jeu de base"
+  },
+  {
+    "id": 27,
+    "category": "dlc-vs-base",
+    "query": "Dark Souls III - The Ringed City",
+    "expected": "Dark Souls III: The Ringed City",
+    "kind": "dlc",
+    "locale": "en",
+    "notes": "DLC"
+  },
+  {
+    "id": 28,
+    "category": "dlc-vs-base",
+    "query": "Cyberpunk 2077: Phantom Liberty",
+    "expected": "Cyberpunk 2077 — Phantom Liberty",
+    "kind": "dlc",
+    "locale": "en",
+    "notes": "DLC récent"
+  },
+  {
+    "id": 29,
+    "category": "dlc-vs-base",
+    "query": "ELDEN RING Shadow of the Erdtree",
+    "expected": "Elden Ring: Shadow of the Erdtree",
+    "kind": "dlc",
+    "locale": "en",
+    "notes": "DLC"
+  },
+  {
+    "id": 30,
+    "category": "dlc-vs-base",
+    "query": "Destiny 2: Forsaken",
+    "expected": "Destiny 2: Forsaken",
+    "kind": "dlc",
+    "locale": "en",
+    "notes": "Extension majeure"
+  },
+  {
+    "id": 31,
+    "category": "homonyms",
+    "query": "Rust",
+    "expected": "Rust",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Jeu Facepunch, pas le langage"
+  },
+  {
+    "id": 32,
+    "category": "homonyms",
+    "query": "Prey",
+    "expected": "Prey (2017)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Distinguer 2006 vs 2017"
+  },
+  {
+    "id": 33,
+    "category": "homonyms",
+    "query": "Thief",
+    "expected": "Thief (2014)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Éviter la série classique si intention 2014"
+  },
+  {
+    "id": 34,
+    "category": "homonyms",
+    "query": "Call of Duty",
+    "expected": "Call of Duty (2003)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Si pas de sous-titre, viser la série/entry canonique"
+  },
+  {
+    "id": 35,
+    "category": "typos",
+    "query": "Mincraft",
+    "expected": "Minecraft",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Correction typographique"
+  },
+  {
+    "id": 36,
+    "category": "typos",
+    "query": "Fortnight",
+    "expected": "Fortnite",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Correction typographique"
+  },
+  {
+    "id": 37,
+    "category": "typos",
+    "query": "Genshin Imapct",
+    "expected": "Genshin Impact",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Lettres inversées"
+  },
+  {
+    "id": 38,
+    "category": "typos",
+    "query": "Leauge of Legens",
+    "expected": "League of Legends",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Double typo"
+  },
+  {
+    "id": 39,
+    "category": "articles",
+    "query": "The Witcher 3",
+    "expected": "The Witcher 3: Wild Hunt",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Compléter le sous-titre"
+  },
+  {
+    "id": 40,
+    "category": "special-chars",
+    "query": "Assassin's Creed Odyssey",
+    "expected": "Assassin's Creed Odyssey",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Apostrophe courbe"
+  },
+  {
+    "id": 41,
+    "category": "sequels/remakes",
+    "query": "Demon's Souls (PS5)",
+    "expected": "Demon's Souls (2020)",
+    "kind": "remake",
+    "locale": "en",
+    "notes": "PS3 vs PS5"
+  },
+  {
+    "id": 42,
+    "category": "sequels/remakes",
+    "query": "The Last of Us Part I",
+    "expected": "The Last of Us Part I",
+    "kind": "remake",
+    "locale": "en",
+    "notes": "Ne pas confondre avec Part II"
+  },
+  {
+    "id": 43,
+    "category": "sequels/remakes",
+    "query": "Metroid Prime Remastered",
+    "expected": "Metroid Prime Remastered",
+    "kind": "remaster",
+    "locale": "en",
+    "notes": "Remaster, pas Remake"
+  },
+  {
+    "id": 44,
+    "category": "asian",
+    "query": "怪物猎人：世界",
+    "expected": "Monster Hunter: World",
+    "kind": "base",
+    "locale": "zh",
+    "notes": "Chinois simplifié"
+  },
+  {
+    "id": 45,
+    "category": "asian",
+    "query": "只狼：影逝二度",
+    "expected": "Sekiro: Shadows Die Twice",
+    "kind": "base",
+    "locale": "zh",
+    "notes": "Nom chinois"
+  },
+  {
+    "id": 46,
+    "category": "indie-vs-aaa",
+    "query": "Stardew Valley",
+    "expected": "Stardew Valley",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Indie farm"
+  },
+  {
+    "id": 47,
+    "category": "indie-vs-aaa",
+    "query": "No Man's Sky",
+    "expected": "No Man's Sky",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Indé/AA particulier"
+  },
+  {
+    "id": 48,
+    "category": "retro",
+    "query": "Half-Life",
+    "expected": "Half-Life (1998)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Classique PC"
+  },
+  {
+    "id": 49,
+    "category": "retro",
+    "query": "Quake",
+    "expected": "Quake (1996)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Classique id"
+  },
+  {
+    "id": 50,
+    "category": "dlc-vs-base",
+    "query": "XCOM 2: War of the Chosen",
+    "expected": "XCOM 2: War of the Chosen",
+    "kind": "dlc",
+    "locale": "en",
+    "notes": "Grosse extension"
+  },
+  {
+    "id": 51,
+    "category": "special-chars",
+    "query": "Tom Clancy's Rainbow Six Siege",
+    "expected": "Tom Clancy's Rainbow Six Siege",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Apostrophe + nom d'auteur"
+  },
+  {
+    "id": 52,
+    "category": "articles",
+    "query": "The Legend of Zelda: Tears of the Kingdom",
+    "expected": "The Legend of Zelda: Tears of the Kingdom",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Article \"The\" + sous-série"
+  },
+  {
+    "id": 53,
+    "category": "sequels/remakes",
+    "query": "Final Fantasy XIV: A Realm Reborn",
+    "expected": "Final Fantasy XIV: A Realm Reborn",
+    "kind": "relaunch",
+    "locale": "en",
+    "notes": "Relauch/version 2.0"
+  },
+  {
+    "id": 54,
+    "category": "homonyms",
+    "query": "Need for Speed",
+    "expected": "Need for Speed (2015)",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Épisode sans sous-titre"
+  },
+  {
+    "id": 55,
+    "category": "typos",
+    "query": "Counter Strke",
+    "expected": "Counter-Strike",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Tiret"
+  },
+  {
+    "id": 56,
+    "category": "typos",
+    "query": "Animal Crosing",
+    "expected": "Animal Crossing",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Double consonne"
+  },
+  {
+    "id": 57,
+    "category": "early-access",
+    "query": "RimWorld (EA)",
+    "expected": "RimWorld",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Ancien EA"
+  },
+  {
+    "id": 58,
+    "category": "asian",
+    "query": "붕괴: 스타레일",
+    "expected": "Honkai: Star Rail",
+    "kind": "base",
+    "locale": "ko",
+    "notes": "Coréen"
+  },
+  {
+    "id": 59,
+    "category": "special-chars",
+    "query": "NieR:Automata",
+    "expected": "NieR:Automata",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Deux-points collé"
+  },
+  {
+    "id": 60,
+    "category": "sequels/remakes",
+    "query": "Mafia: Definitive Edition",
+    "expected": "Mafia: Definitive Edition",
+    "kind": "remake",
+    "locale": "en",
+    "notes": "Remake total"
+  },
+  {
+    "id": 61,
+    "category": "dlc-vs-base",
+    "query": "The Elder Scrolls V: Skyrim – Dragonborn",
+    "expected": "The Elder Scrolls V: Skyrim — Dragonborn",
+    "kind": "dlc",
+    "locale": "en",
+    "notes": "Tiret long"
+  },
+  {
+    "id": 62,
+    "category": "articles",
+    "query": "A Plague Tale: Requiem",
+    "expected": "A Plague Tale: Requiem",
+    "kind": "sequel",
+    "locale": "en",
+    "notes": "Suite officielle"
+  },
+  {
+    "id": 63,
+    "category": "homonyms",
+    "query": "Battlefield",
+    "expected": "Battlefield 2042",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Si série générique → dernier opus connu"
+  },
+  {
+    "id": 64,
+    "category": "indie-vs-aaa",
+    "query": "Terraria",
+    "expected": "Terraria",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Indie sandbox"
+  },
+  {
+    "id": 65,
+    "category": "special-chars",
+    "query": "Ori and the Will of the Wisps",
+    "expected": "Ori and the Will of the Wisps",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Titre à rallonge"
+  },
+  {
+    "id": 66,
+    "category": "retro",
+    "query": "Chrono Trigger",
+    "expected": "Chrono Trigger",
+    "kind": "base",
+    "locale": "en",
+    "notes": "JRPG SNES"
+  },
+  {
+    "id": 67,
+    "category": "asian",
+    "query": "ドラゴンクエストXI",
+    "expected": "Dragon Quest XI",
+    "kind": "base",
+    "locale": "ja",
+    "notes": "Translit. \"XI\" romain"
+  },
+  {
+    "id": 68,
+    "category": "typos",
+    "query": "Red Ded Redemption 2",
+    "expected": "Red Dead Redemption 2",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Typos multiples"
+  },
+  {
+    "id": 69,
+    "category": "typos",
+    "query": "Gran Turismoo 7",
+    "expected": "Gran Turismo 7",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Double o"
+  },
+  {
+    "id": 70,
+    "category": "homonyms",
+    "query": "Rust game",
+    "expected": "Rust",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Signal \"game\" explicite"
+  },
+  {
+    "id": 71,
+    "category": "dlc-vs-base",
+    "query": "Borderlands 2: Tiny Tina's Assault on Dragon Keep",
+    "expected": "Borderlands 2: Tiny Tina's Assault on Dragon Keep",
+    "kind": "dlc",
+    "locale": "en",
+    "notes": "Plus tard standalone — rester DLC"
+  },
+  {
+    "id": 72,
+    "category": "dlc-vs-base",
+    "query": "Monster Hunter: World – Iceborne",
+    "expected": "Monster Hunter: World — Iceborne",
+    "kind": "dlc",
+    "locale": "en",
+    "notes": "DLC majeur"
+  },
+  {
+    "id": 73,
+    "category": "articles",
+    "query": "The Division 2",
+    "expected": "Tom Clancy's The Division 2",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Préfixe \"Tom Clancy's\""
+  },
+  {
+    "id": 74,
+    "category": "sequels/remakes",
+    "query": "Resident Evil 2 (2019)",
+    "expected": "Resident Evil 2",
+    "kind": "remake",
+    "locale": "en",
+    "notes": "Remake"
+  },
+  {
+    "id": 75,
+    "category": "indie-vs-aaa",
+    "query": "Death's Door",
+    "expected": "Death's Door",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Apostrophe courbe"
+  },
+  {
+    "id": 76,
+    "category": "asian",
+    "query": "真・女神転生V",
+    "expected": "Shin Megami Tensei V",
+    "kind": "base",
+    "locale": "ja",
+    "notes": "Kanji + chiffre romain"
+  },
+  {
+    "id": 77,
+    "category": "retro",
+    "query": "Ultima VII",
+    "expected": "Ultima VII",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Chiffre romain"
+  },
+  {
+    "id": 78,
+    "category": "typos",
+    "query": "The Witcherr 3",
+    "expected": "The Witcher 3: Wild Hunt",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Double r"
+  },
+  {
+    "id": 79,
+    "category": "early-access",
+    "query": "Deep Rock Galactic (EA)",
+    "expected": "Deep Rock Galactic",
+    "kind": "base",
+    "locale": "en",
+    "notes": "EA à l'époque"
+  },
+  {
+    "id": 80,
+    "category": "dlc-vs-base",
+    "query": "Civilization VI: Gathering Storm",
+    "expected": "Sid Meier's Civilization VI: Gathering Storm",
+    "kind": "dlc",
+    "locale": "en",
+    "notes": "Préfixe auteur + DLC"
+  },
+  {
+    "id": 81,
+    "category": "steam-validation",
+    "query": "half-life",
+    "expected": "Half-Life",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Valve classic - mainline game"
+  },
+  {
+    "id": 82,
+    "category": "steam-validation",
+    "query": "half-life 2",
+    "expected": "Half-Life 2",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Valve sequel"
+  },
+  {
+    "id": 83,
+    "category": "steam-validation",
+    "query": "portal",
+    "expected": "Portal",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Not Portal 2 - mainline first"
+  },
+  {
+    "id": 84,
+    "category": "steam-validation",
+    "query": "portal 2",
+    "expected": "Portal 2",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Valve sequel"
+  },
+  {
+    "id": 85,
+    "category": "steam-validation",
+    "query": "counter-strike",
+    "expected": "Counter-Strike",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Original CS"
+  },
+  {
+    "id": 86,
+    "category": "steam-validation",
+    "query": "team fortress 2",
+    "expected": "Team Fortress 2",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Valve multiplayer"
+  },
+  {
+    "id": 87,
+    "category": "steam-validation",
+    "query": "left 4 dead",
+    "expected": "Left 4 Dead",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Not L4D2 - mainline first"
+  },
+  {
+    "id": 88,
+    "category": "steam-validation",
+    "query": "dota 2",
+    "expected": "Dota 2",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Valve MOBA"
+  },
+  {
+    "id": 89,
+    "category": "steam-validation",
+    "query": "cyberpunk 2077",
+    "expected": "Cyberpunk 2077",
+    "kind": "base",
+    "locale": "en",
+    "notes": "CD Projekt Red"
+  },
+  {
+    "id": 90,
+    "category": "steam-validation",
+    "query": "the witcher 3",
+    "expected": "The Witcher 3: Wild Hunt",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Not REDkit tool"
+  },
+  {
+    "id": 91,
+    "category": "steam-validation",
+    "query": "dark souls",
+    "expected": "Dark Souls",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Mainline first - not DS2/DS3"
+  },
+  {
+    "id": 92,
+    "category": "steam-validation",
+    "query": "elden ring",
+    "expected": "ELDEN RING",
+    "kind": "base",
+    "locale": "en",
+    "notes": "FromSoftware - not NIGHTREIGN DLC"
+  },
+  {
+    "id": 93,
+    "category": "steam-validation",
+    "query": "skyrim",
+    "expected": "The Elder Scrolls V: Skyrim",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Not VR/SE - mainline preferred"
+  },
+  {
+    "id": 94,
+    "category": "steam-validation",
+    "query": "fallout 4",
+    "expected": "Fallout 4",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Bethesda RPG"
+  },
+  {
+    "id": 95,
+    "category": "steam-validation",
+    "query": "red dead redemption 2",
+    "expected": "Red Dead Redemption 2",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Rockstar open-world"
+  },
+  {
+    "id": 96,
+    "category": "steam-validation",
+    "query": "hollow knight",
+    "expected": "Hollow Knight",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Not Silksong - mainline first"
+  },
+  {
+    "id": 97,
+    "category": "steam-validation",
+    "query": "stardew valley",
+    "expected": "Stardew Valley",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Indie farming sim"
+  },
+  {
+    "id": 98,
+    "category": "steam-validation",
+    "query": "terraria",
+    "expected": "Terraria",
+    "kind": "base",
+    "locale": "en",
+    "notes": "2D sandbox"
+  },
+  {
+    "id": 99,
+    "category": "steam-validation",
+    "query": "undertale",
+    "expected": "Undertale",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Toby Fox RPG"
+  },
+  {
+    "id": 100,
+    "category": "steam-validation",
+    "query": "celeste",
+    "expected": "Celeste",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Platformer indie"
+  },
+  {
+    "id": 101,
+    "category": "steam-validation",
+    "query": "hades",
+    "expected": "Hades",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Not Hades II - mainline first"
+  },
+  {
+    "id": 102,
+    "category": "steam-validation",
+    "query": "apex legends",
+    "expected": "Apex Legends",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Respawn battle royale"
+  },
+  {
+    "id": 103,
+    "category": "steam-validation",
+    "query": "rust",
+    "expected": "Rust",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Survival multiplayer"
+  },
+  {
+    "id": 104,
+    "category": "steam-validation",
+    "query": "valheim",
+    "expected": "Valheim",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Viking survival"
+  },
+  {
+    "id": 105,
+    "category": "steam-validation",
+    "query": "among us",
+    "expected": "Among Us",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Social deduction"
+  },
+  {
+    "id": 106,
+    "category": "steam-validation",
+    "query": "doom",
+    "expected": "DOOM",
+    "kind": "base",
+    "locale": "en",
+    "notes": "id Software - DOOM 2016 preferred"
+  },
+  {
+    "id": 107,
+    "category": "steam-validation",
+    "query": "quake",
+    "expected": "Quake",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Not Quake III/Live - mainline first"
+  },
+  {
+    "id": 108,
+    "category": "steam-validation",
+    "query": "minecraft",
+    "expected": "Minecraft",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Not on Steam - expect from RAWG"
+  },
+  {
+    "id": 109,
+    "category": "steam-validation",
+    "query": "zelda",
+    "expected": "The Legend of Zelda",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Nintendo exclusive - not on Steam"
+  },
+  {
+    "id": 110,
+    "category": "steam-validation",
+    "query": "mario",
+    "expected": "Super Mario",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Nintendo exclusive - not on Steam"
+  },
+  {
+    "id": 111,
+    "category": "steam-validation",
+    "query": "tears of metal",
+    "expected": "Tears of Metal",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Indie obscure game"
+  },
+  {
+    "id": 112,
+    "category": "steam-validation",
+    "query": "megabonk",
+    "expected": "Megabonk",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Indie obscure game"
+  },
+  {
+    "id": 113,
+    "category": "steam-validation",
+    "query": "grand theft auto v",
+    "expected": "Grand Theft Auto V",
+    "kind": "base",
+    "locale": "en",
+    "notes": "Full name required - not 'gta v'"
+  }
+]

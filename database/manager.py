@@ -11,6 +11,7 @@ License: Voir LICENSE et EULA_FR.md
 import sqlite3
 import json
 import logging
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, List, Any
@@ -62,6 +63,64 @@ class DatabaseManager:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.execute("PRAGMA busy_timeout = 5000")
             conn.execute("PRAGMA synchronous = NORMAL")
+    
+    def _calculate_dynamic_ttl(self, game_data: Dict) -> int:
+        """
+        Calcule TTL dynamique basé sur l'année du jeu.
+        
+        Stratégie:
+        - Jeux récents (<1 an): 7 jours (données changeantes)
+        - Jeux mid (1-5 ans): 30 jours (méta stabilisée)
+        - Classics (>5 ans): 180 jours (données figées)
+        
+        Args:
+            game_data: Dict avec 'year' ou 'release_date'
+        
+        Returns:
+            TTL en jours (7, 30, ou 180)
+        """
+        current_year = datetime.now().year
+        
+        # Extraire l'année du jeu
+        game_year = None
+        if isinstance(game_data, dict):
+            # Priorité 1: 'year' directement
+            if 'year' in game_data and game_data['year']:
+                try:
+                    game_year = int(game_data['year'])
+                except (ValueError, TypeError):
+                    pass
+            
+            # Priorité 2: 'release_date' (format YYYY-MM-DD ou YYYY)
+            if not game_year and 'release_date' in game_data and game_data['release_date']:
+                try:
+                    release_str = str(game_data['release_date'])
+                    # Extraire les 4 premiers chiffres = année
+                    year_part = release_str[:4]
+                    game_year = int(year_part)
+                except (ValueError, TypeError):
+                    pass
+        
+        # Si pas d'année détectée, fallback conservatif (mid-tier)
+        if not game_year or game_year < 1970 or game_year > current_year + 2:
+            logger.debug(f"TTL: Année invalide ou manquante ({game_year}), fallback 30 jours")
+            return 30
+        
+        # Calculer l'âge
+        age = current_year - game_year
+        
+        if age < 1:
+            # Jeu récent: courte durée pour suivre les updates/DLC
+            logger.debug(f"TTL: Jeu récent {game_year} → 7 jours")
+            return 7
+        elif age < 5:
+            # Mid-tier: cache moyen
+            logger.debug(f"TTL: Jeu mid {game_year} (âge {age}) → 30 jours")
+            return 30
+        else:
+            # Classic: long cache
+            logger.debug(f"TTL: Classic {game_year} (âge {age}) → 180 jours")
+            return 180
     
     @contextmanager
     def _get_connection(self):
@@ -784,6 +843,307 @@ class DatabaseManager:
             stats['db_size_bytes'] = cursor.fetchone()[0]
             
             return stats
+    
+    # ==================== GAME CACHE ====================
+    
+    def get_cached_game(self, query: str) -> Optional[Dict[str, Any]]:
+        """
+        Récupère un jeu du cache avec métadonnées de confiance.
+        
+        Args:
+            query: Query de recherche (sera normalisée en lowercase)
+        
+        Returns:
+            Dict avec game_data (JSON), confidence, result_type, etc. ou None
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM game_cache WHERE query = ?",
+                (query.lower(),)
+            )
+            row = cursor.fetchone()
+            
+            if row:
+                data = dict(row)
+                # Désérialiser JSON
+                try:
+                    data['game_data'] = json.loads(data['game_data'])
+                    if data.get('alternatives'):
+                        data['alternatives'] = json.loads(data['alternatives'])
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.error(f"Failed to deserialize game cache data for '{query}': {e}")
+                    return None
+                return data
+            return None
+    
+    def cache_game(self, query: str, game_data: Dict, confidence: float,
+                  result_type: str, alternatives: Optional[List[Dict]] = None,
+                  canonical_query: Optional[str] = None, ttl_days: Optional[int] = None) -> int:
+        """
+        Cache un résultat de jeu avec métadonnées de confiance.
+        
+        Args:
+            query: Query de recherche (sera normalisée en lowercase)
+            game_data: Données du jeu (GameResult.__dict__ ou dict)
+            confidence: Score de confiance 0.0 - 1.0
+            result_type: Type de résultat (SUCCESS, MULTIPLE_RESULTS, etc.)
+            alternatives: Liste de jeux alternatifs (si MULTIPLE_RESULTS)
+            canonical_query: Lien vers query plus précise/officielle
+            ttl_days: Durée de vie en jours (None = calcul auto basé sur année, 0 = never expires)
+        
+        Returns:
+            ID de l'entrée cachée
+        """
+        # Sérialiser JSON
+        game_data_json = json.dumps(game_data)
+        alternatives_json = json.dumps(alternatives) if alternatives else None
+        
+        # Timestamps
+        cached_at = int(time.time())
+        last_hit = cached_at
+        expires_at = None
+        
+        # TTL dynamique basé sur l'année du jeu (si ttl_days non spécifié)
+        if ttl_days is None:
+            ttl_days = self._calculate_dynamic_ttl(game_data)
+        
+        if ttl_days and ttl_days > 0:
+            expires_at = cached_at + (ttl_days * 86400)
+        
+        with self._get_connection() as conn:
+            # Vérifier si déjà en cache
+            cursor = conn.execute(
+                "SELECT id FROM game_cache WHERE query = ?",
+                (query.lower(),)
+            )
+            existing = cursor.fetchone()
+            
+            if existing:
+                # UPDATE: Améliorer le cache existant si meilleur
+                conn.execute(
+                    """
+                    UPDATE game_cache
+                    SET game_data = ?,
+                        confidence = ?,
+                        result_type = ?,
+                        alternatives = ?,
+                        canonical_query = ?,
+                        cached_at = ?,
+                        expires_at = ?
+                    WHERE query = ?
+                    """,
+                    (
+                        game_data_json,
+                        confidence,
+                        result_type,
+                        alternatives_json,
+                        canonical_query.lower() if canonical_query else None,
+                        cached_at,
+                        expires_at,
+                        query.lower()
+                    )
+                )
+                cache_id = existing[0]
+                action = "updated"
+            else:
+                # INSERT: Nouveau cache
+                cursor = conn.execute(
+                    """
+                    INSERT INTO game_cache (
+                        query, game_data, confidence, result_type,
+                        alternatives, canonical_query, hit_count, last_hit,
+                        cached_at, expires_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                    """,
+                    (
+                        query.lower(),
+                        game_data_json,
+                        confidence,
+                        result_type,
+                        alternatives_json,
+                        canonical_query.lower() if canonical_query else None,
+                        last_hit,
+                        cached_at,
+                        expires_at
+                    )
+                )
+                cache_id = cursor.lastrowid
+                action = "cached"
+            
+            logger.info(
+                f"Game {action}: '{query}' → confidence={confidence:.2f}, "
+                f"type={result_type}"
+            )
+            return cache_id
+    
+    def increment_cache_hit(self, query: str) -> bool:
+        """
+        Incrémente le compteur de hits pour un jeu en cache.
+        
+        Args:
+            query: Query de recherche
+        
+        Returns:
+            True si incrémenté, False si not found
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE game_cache
+                SET hit_count = hit_count + 1, last_hit = ?
+                WHERE query = ?
+                """,
+                (int(time.time()), query.lower())
+            )
+            return cursor.rowcount > 0
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """
+        Récupère les statistiques du cache de jeux.
+        
+        Returns:
+            Dict avec count, total_hits, top_game, top_hits, hit_rate
+        """
+        with self._get_connection() as conn:
+            # Total entries
+            cursor = conn.execute("SELECT COUNT(*) FROM game_cache")
+            count = cursor.fetchone()[0]
+            
+            # Total hits
+            cursor = conn.execute("SELECT SUM(hit_count) FROM game_cache")
+            total_hits = cursor.fetchone()[0] or 0
+            
+            # Top game (most hits)
+            cursor = conn.execute(
+                """
+                SELECT query, hit_count, game_data 
+                FROM game_cache 
+                ORDER BY hit_count DESC 
+                LIMIT 1
+                """
+            )
+            top_row = cursor.fetchone()
+            
+            if top_row:
+                try:
+                    game_data = json.loads(top_row[2])
+                    top_game = game_data.get('name', top_row[0])
+                except (json.JSONDecodeError, KeyError):
+                    top_game = top_row[0]
+                top_hits = top_row[1]
+            else:
+                top_game = 'N/A'
+                top_hits = 0
+            
+            # Hit rate (approximation: hits / (hits + count))
+            # Chaque query cachée = au moins 1 miss initial
+            total_requests = total_hits + count
+            hit_rate = (total_hits / total_requests * 100) if total_requests > 0 else 0.0
+            
+            return {
+                'count': count,
+                'total_hits': total_hits,
+                'top_game': top_game,
+                'top_hits': top_hits,
+                'hit_rate': hit_rate,
+                'total_requests': total_requests
+            }
+    
+    def link_canonical_query(self, alias: str, canonical: str) -> bool:
+        """
+        Crée un lien d'une query vers sa version canonique.
+        
+        Args:
+            alias: Query alias (moins précise)
+            canonical: Query canonique (plus précise/officielle)
+        
+        Returns:
+            True si lien créé
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE game_cache SET canonical_query = ? WHERE query = ?",
+                (canonical.lower(), alias.lower())
+            )
+            
+            if cursor.rowcount > 0:
+                logger.info(f"Canonical link: '{alias}' → '{canonical}'")
+                return True
+            return False
+    
+    def get_cache_quality_stats(self) -> Dict[str, Any]:
+        """
+        Récupère des statistiques de qualité sur le cache de jeux.
+        
+        Returns:
+            Dict avec total_entries, avg_confidence, total_hits, etc.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT 
+                    COUNT(*) as total_entries,
+                    AVG(confidence) as avg_confidence,
+                    SUM(hit_count) as total_hits,
+                    SUM(CASE WHEN confidence >= 0.95 THEN 1 ELSE 0 END) as high_quality,
+                    SUM(CASE WHEN confidence < 0.90 THEN 1 ELSE 0 END) as low_quality,
+                    SUM(CASE WHEN result_type = 'MULTIPLE_RESULTS' THEN 1 ELSE 0 END) as ambiguous,
+                    SUM(CASE WHEN canonical_query IS NOT NULL THEN 1 ELSE 0 END) as has_canonical
+                FROM game_cache
+                """
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else {}
+    
+    def cleanup_old_cache(self, min_hits: int = 5, days: int = 30) -> int:
+        """
+        Nettoie les entrées de cache peu utilisées et anciennes.
+        
+        Args:
+            min_hits: Nombre minimum de hits pour conserver
+            days: Âge maximum en jours
+        
+        Returns:
+            Nombre d'entrées supprimées
+        """
+        threshold = int(time.time()) - (days * 86400)
+        
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM game_cache
+                WHERE hit_count < ? AND last_hit < ?
+                """,
+                (min_hits, threshold)
+            )
+            deleted = cursor.rowcount
+            
+            if deleted > 0:
+                logger.info(f"Cleaned up {deleted} old game cache entries (< {min_hits} hits, >{days} days)")
+            
+            return deleted
+    
+    def get_top_games(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Récupère les jeux les plus recherchés.
+        
+        Args:
+            limit: Nombre de résultats
+        
+        Returns:
+            Liste de dicts avec query, hit_count, confidence, etc.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT query, hit_count, confidence, result_type, last_hit
+                FROM game_cache
+                ORDER BY hit_count DESC
+                LIMIT ?
+                """,
+                (limit,)
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
 
 if __name__ == "__main__":

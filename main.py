@@ -89,18 +89,41 @@ def parse_args():
 
 
 def setup_logging(channel=None):
-    """Setup logging with per-channel log files if channel specified"""
-    # Create logs directory if needed
-    logs_dir = pathlib.Path("logs")
-    logs_dir.mkdir(exist_ok=True)
+    """
+    Setup hierarchical logging structure per channel
     
-    # Determine log file
+    Structure:
+        logs/broadcast/{channel}/
+        ├── instance.log     (main bot logs, startup, errors)
+        ├── chat.log         (all chat messages in/out)
+        ├── commands.log     (command executions)
+        └── system.log       (CPU, RAM, performance metrics)
+    """
+    # Base logs directory
+    logs_base = pathlib.Path("logs")
+    
     if channel:
-        log_file = logs_dir / f"{channel}.log"
+        # Hierarchical structure per channel
+        channel_dir = logs_base / "broadcast" / channel
+        channel_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Main log file for this instance
+        log_file = channel_dir / "instance.log"
+        
+        # Store paths for specialized loggers (used by components)
+        log_paths = {
+            'instance': channel_dir / "instance.log",
+            'chat': channel_dir / "chat.log",
+            'commands': channel_dir / "commands.log",
+            'system': channel_dir / "system.log"
+        }
     else:
-        log_file = "kissbot_production.log"
+        # Legacy: single file for non-channel mode
+        logs_base.mkdir(exist_ok=True)
+        log_file = logs_base / "kissbot_production.log"
+        log_paths = {'instance': log_file}
     
-    # Configure logging
+    # Configure root logger
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
@@ -111,7 +134,7 @@ def setup_logging(channel=None):
         force=True  # Override any existing config
     )
     
-    return log_file
+    return log_file, log_paths
 
 
 def write_pid_file(channel=None):
@@ -219,7 +242,7 @@ async def main():
     args = parse_args()
     
     # Setup logging (per-channel if --channel specified)
-    log_file = setup_logging(args.channel)
+    log_file, log_paths = setup_logging(args.channel)
     
     # Write PID file for process tracking
     pid_file = write_pid_file(args.channel)
@@ -243,6 +266,10 @@ async def main():
     print("=" * 70)
     
     config = load_config(args.config)
+    
+    # Inject log paths into config for components
+    config['_log_paths'] = log_paths
+    
     twitch_config = config.get("twitch", {})
     bot_config = config.get("bot", {})
     
@@ -442,10 +469,18 @@ async def main():
     analytics = AnalyticsHandler(bus)
     
     # Chat Logger (log IRC messages)
-    chat_logger = ChatLogger(bus)
+    chat_logger = ChatLogger(bus, config)
+    
+    # Command Logger (log command executions)
+    from core.command_logger import CommandLogger
+    command_logger = CommandLogger(bus, config)
     
     # Message Handler (with config for GameLookup, LLM, etc.)
     message_handler = MessageHandler(bus, config)
+    
+    # Configure MessageBus pour game_lookup_rust (métriques)
+    from backends.game_lookup_rust import set_message_bus
+    set_message_bus(bus)
     
     # Outbound Logger (DISABLED - real IRC send enabled)
     # outbound_logger = OutboundLogger(bus)
@@ -673,13 +708,13 @@ async def main():
     
     # System Monitoring (CPU/RAM metrics)
     system_monitor = SystemMonitor(
+        config=config,
         interval=60,  # Log toutes les 60s
-        log_file="metrics.jsonl",
         cpu_threshold=50.0,  # Alerte si CPU > 50%
         ram_threshold_mb=500  # Alerte si RAM > 500MB
     )
     asyncio.create_task(system_monitor.start())
-    LOGGER.info("📊 System monitoring started (metrics.jsonl)")
+    LOGGER.info("📊 System monitoring started (dedicated system.log)")
     
     # Inject SystemMonitor into MessageHandler (for !stats command)
     message_handler.set_system_monitor(system_monitor)

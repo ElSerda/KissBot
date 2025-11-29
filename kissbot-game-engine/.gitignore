@@ -1,0 +1,14 @@
+.idea/
+.vscode/
+target/
+Cargo.lock
+*.db
+*.db-*
+*.pyc
+__pycache__/
+*.so
+*.pyd
+dist/
+build/
+*.egg-info/
+.pytest_cache/

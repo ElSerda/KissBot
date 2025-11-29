@@ -60,8 +60,12 @@ async def handle_gc(bot, cmd: ChatCommand):
 async def handle_gi(bot, cmd: ChatCommand):
     """
     !gi / !gameinfo <nom du jeu>
-    Recherche des infos sur un jeu spécifique via cache quantique.
-    Retourne le meilleur résultat (collapsed ou 1ère superposition).
+    Recherche des infos sur un jeu spécifique avec réponses intelligentes.
+    
+    Réponses:
+    1. Aucun résultat dans les APIs → "❌ Aucun jeu trouvé pour '{query}' dans les bases de données"
+    2. Match unique trouvé → "🎮 {game_info}"
+    3. Plusieurs résultats proches → "🔍 Plusieurs jeux trouvés : 1. {game1} 2. {game2} ... (typo ?)"
     """
     game_name = cmd.parameter.strip() if cmd.parameter else None
     
@@ -70,46 +74,68 @@ async def handle_gi(bot, cmd: ChatCommand):
         return
 
     try:
-        # Utiliser le cache quantique (comme !qgame) pour cohérence
-        if hasattr(bot, 'game_cache') and bot.game_cache:
-            # Recherche quantique
-            superpositions = await bot.game_cache.search_quantum_game(
-                query=game_name,
-                observer=cmd.user.name
-            )
-            
-            if superpositions:
-                # Prendre la 1ère superposition (meilleur score/collapsed)
-                best_result_data = superpositions[0].get("game")
-                
-                # Reconstruire GameResult pour utiliser format_result()
-                from backends.game_lookup import GameResult
-                result = GameResult(
-                    name=best_result_data.get("name", "Unknown"),
-                    year=best_result_data.get("year", "?"),
-                    rating_rawg=best_result_data.get("rating_rawg", 0.0),
-                    metacritic=best_result_data.get("metacritic"),
-                    platforms=best_result_data.get("platforms", []),
-                    genres=best_result_data.get("genres", []),
-                    developers=best_result_data.get("developers", []),
-                    publishers=best_result_data.get("publishers", []),
-                    summary=best_result_data.get("summary"),
-                    reliability_score=best_result_data.get("reliability_score", 0.0)
-                )
-                
-                response = bot.game_lookup.format_result(result)
-                await bot.send_message(cmd.room.name, response)
-            else:
-                await bot.send_message(cmd.room.name, f"❌ Jeu '{game_name}' non trouvé")
+        # Import SearchResultType
+        from backends.game_lookup import SearchResultType
+        
+        # Utiliser la nouvelle API v2
+        if hasattr(bot.game_lookup, 'search_game_v2'):
+            response = await bot.game_lookup.search_game_v2(game_name)
         else:
-            # Fallback si pas de cache quantique
+            # Fallback vers l'ancienne API
             result = await bot.game_lookup.search_game(game_name)
-            
             if result:
-                response = bot.game_lookup.format_result(result)
-                await bot.send_message(cmd.room.name, response)
+                formatted = bot.game_lookup.format_result(result)
+                await bot.send_message(cmd.room.name, formatted)
             else:
                 await bot.send_message(cmd.room.name, f"❌ Jeu '{game_name}' non trouvé")
+            return
+        
+        if not response:
+            await bot.send_message(cmd.room.name, f"❌ Erreur de recherche pour '{game_name}'")
+            return
+        
+        # Cas 1: Aucun résultat dans les APIs
+        if response.result_type == SearchResultType.NO_API_RESULTS:
+            await bot.send_message(
+                cmd.room.name,
+                f"❌ Aucun jeu trouvé pour '{game_name}' dans les bases de données (Steam, RAWG, IGDB)"
+            )
+            return
+        
+        # Cas 2: Match unique trouvé
+        if response.result_type == SearchResultType.SUCCESS and response.best_match:
+            formatted = bot.game_lookup.format_result(response.best_match)
+            await bot.send_message(cmd.room.name, formatted)
+            return
+        
+        # Cas 3: Plusieurs résultats proches (possible typo)
+        if response.result_type == SearchResultType.MULTIPLE_RESULTS and response.best_match:
+            # Format: "🔍 Plusieurs jeux trouvés : 1. Game A (2020) | 2. Game B (2019) ... (typo ?)"
+            results_text = f"1. {response.best_match.name}"
+            if response.best_match.year != "?":
+                results_text += f" ({response.best_match.year})"
+            
+            for i, alt in enumerate(response.alternatives[:2], 2):  # Max 2 alternatives
+                results_text += f" | {i}. {alt.name}"
+                if alt.year != "?":
+                    results_text += f" ({alt.year})"
+            
+            await bot.send_message(
+                cmd.room.name,
+                f"🔍 Plusieurs jeux trouvés pour '{game_name}': {results_text} ... (typo ?)"
+            )
+            return
+        
+        # Cas 4: Pas de match après ranking (APIs ont retourné des résultats mais aucun bon match)
+        if response.result_type == SearchResultType.NO_MATCH:
+            await bot.send_message(
+                cmd.room.name,
+                f"❌ Aucun jeu correspondant à '{game_name}' trouvé ({response.total_candidates} candidats analysés)"
+            )
+            return
+        
+        # Fallback
+        await bot.send_message(cmd.room.name, f"❌ Jeu '{game_name}' non trouvé")
 
     except Exception as e:
         LOGGER.error(f"❌ Erreur handle_gi: {e}")

@@ -74,27 +74,27 @@ LOGGER = logging.getLogger(__name__)
 
 class SystemMonitor:
     """
-    Monitor CPU/RAM/Threads du bot et log dans JSONL file.
+    Monitor CPU/RAM/Threads du bot et log dans dedicated system.log file.
     
     Architecture KISS:
-        - 1 ligne JSON par sample (JSONL format)
-        - tail -f friendly (newline-delimited JSON)
+        - 1 ligne par sample (human-readable format)
+        - tail -f friendly
         - Configurable interval
         - Alertes automatiques si seuils dépassés
     
     Usage:
-        monitor = SystemMonitor(interval=60, log_file="metrics.jsonl")
+        monitor = SystemMonitor(config, interval=60)
         asyncio.create_task(monitor.start())
     
     Lecture externe:
-        tail -f metrics.jsonl
-        cat metrics.jsonl | jq -c 'select(.cpu_percent > 50)'  # Filtrer high CPU
+        tail -f logs/broadcast/channel/system.log
+        grep "HIGH_CPU" logs/broadcast/channel/system.log
     """
     
     def __init__(
         self,
+        config: dict,
         interval: int = 60,
-        log_file: str = "metrics.jsonl",
         cpu_threshold: float = 50.0,
         ram_threshold_mb: int = 500
     ):
@@ -102,13 +102,12 @@ class SystemMonitor:
         Initialize system monitor.
         
         Args:
+            config: Config dict with _log_paths
             interval: Seconds between samples (default: 60s, use 5-10 for dev)
-            log_file: JSONL log file path (default: metrics.jsonl)
             cpu_threshold: CPU % warning threshold (default: 50%)
             ram_threshold_mb: RAM MB warning threshold (default: 500MB)
         """
         self.interval = interval
-        self.log_file = Path(log_file)
         self.cpu_threshold = cpu_threshold
         self.ram_threshold_mb = ram_threshold_mb
         
@@ -121,10 +120,28 @@ class SystemMonitor:
         # Phase 3.5.1: PerfMeter pour mesure CPU non-bloquante
         self._perf_meter: Optional[PerfMeter] = None
         
+        # Setup dedicated system logger
+        log_paths = config.get('_log_paths', {})
+        system_log_file = log_paths.get('system')
+        
+        if system_log_file:
+            self.system_file_logger = logging.getLogger('system_metrics')
+            self.system_file_logger.setLevel(logging.INFO)
+            self.system_file_logger.propagate = False
+            
+            handler = logging.FileHandler(system_log_file)
+            handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
+            self.system_file_logger.addHandler(handler)
+            
+            LOGGER.info(f"📊 System metrics logging to: {system_log_file}")
+        else:
+            self.system_file_logger = None
+            LOGGER.info("📊 System metrics logging to main log (no dedicated file)")
+        
         if not psutil:
             LOGGER.warning("⚠️ psutil not installed, SystemMonitor disabled")
         else:
-            LOGGER.info(f"📊 SystemMonitor init: interval={interval}s, log={log_file}")
+            LOGGER.info(f"📊 SystemMonitor init: interval={interval}s")
     
     async def start(self):
         """Start monitoring loop."""
@@ -144,9 +161,6 @@ class SystemMonitor:
         # Premier sample pour initialiser (on jette le résultat)
         await asyncio.sleep(0.1)  # Petit délai pour stabiliser
         self._perf_meter.sample()
-        
-        # Créer le fichier avec header info
-        self._write_header()
         
         # Loop de monitoring
         try:
@@ -173,25 +187,8 @@ class SystemMonitor:
             except asyncio.CancelledError:
                 pass
     
-    def _write_header(self):
-        """Write initial header/metadata to log file."""
-        header = {
-            "type": "header",
-            "timestamp": time.time(),
-            "interval": self.interval,
-            "thresholds": {
-                "cpu_percent": self.cpu_threshold,
-                "ram_mb": self.ram_threshold_mb
-            }
-        }
-        
-        # Créer ou reset le fichier
-        with open(self.log_file, 'w') as f:
-            json.dump(header, f)
-            f.write('\n')
-    
     async def _sample_and_log(self):
-        """Sample system metrics and log to JSON."""
+        """Sample system metrics and log to system.log file."""
         try:
             # Phase 3.5.1: Utiliser PerfMeter (non-bloquant)
             metrics = self._perf_meter.sample()
@@ -199,16 +196,14 @@ class SystemMonitor:
             ram_mb = metrics["mem_mb"]
             threads = metrics["threads"]
             
-            # Prepare JSON entry
-            entry = {
-                "type": "sample",
-                "timestamp": time.time(),
+            # Cache sample pour !stats command
+            self._last_sample = {
                 "cpu_percent": round(cpu_percent, 1),
                 "ram_mb": round(ram_mb, 1),
                 "threads": threads,
             }
             
-            # Check thresholds et ajouter alerts
+            # Check thresholds
             alerts = []
             if cpu_percent > self.cpu_threshold:
                 alerts.append(f"HIGH_CPU={cpu_percent:.1f}%")
@@ -216,23 +211,20 @@ class SystemMonitor:
                 alerts.append(f"HIGH_RAM={ram_mb:.0f}MB")
             
             if alerts:
-                entry["alerts"] = alerts
+                self._last_sample["alerts"] = alerts
             
-            # Cache last sample pour !stats command
-            self._last_sample = entry
-            
-            # Write to JSON log (newline-delimited)
-            with open(self.log_file, 'a') as f:
-                json.dump(entry, f)
-                f.write('\n')
-            
-            # Log to stdout (console)
-            log_msg = f"📊 CPU={cpu_percent:.1f}% RAM={ram_mb:.0f}MB Threads={threads}"
+            # Log to dedicated system.log file
+            log_msg = f"CPU={cpu_percent:.1f}% RAM={ram_mb:.0f}MB Threads={threads}"
             
             if alerts:
-                LOGGER.warning(f"⚠️ {log_msg} | {' '.join(alerts)}")
+                alert_str = ' | '.join(alerts)
+                if self.system_file_logger:
+                    self.system_file_logger.warning(f"⚠️ {log_msg} | {alert_str}")
+                LOGGER.warning(f"⚠️ {log_msg} | {alert_str}")
             else:
-                LOGGER.info(log_msg)
+                if self.system_file_logger:
+                    self.system_file_logger.info(f"📊 {log_msg}")
+                LOGGER.info(f"📊 {log_msg}")
         
         except Exception as e:
             LOGGER.error(f"❌ Failed to sample metrics: {e}")

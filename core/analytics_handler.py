@@ -23,8 +23,15 @@ class AnalyticsHandler:
         self.bus = bus
         self.event_count = 0
         
+        # Game Engine Performance Metrics
+        self.game_search_count = 0
+        self.game_cache_hits = 0
+        self.game_cache_misses = 0
+        self.game_total_latency_ms = 0.0
+        
         # Subscribe à tous les topics système
         self.bus.subscribe("system.event", self._handle_system_event)
+        self.bus.subscribe("game.search", self._handle_game_search)
         
         LOGGER.info("AnalyticsHandler initialisé")
     
@@ -91,8 +98,43 @@ class AnalyticsHandler:
         for i, game in enumerate(games[:3], 1):
             LOGGER.debug(f"   {i}. {game.get('name', '?')}")
     
-    def get_stats(self) -> dict[str, int]:
+    async def _handle_game_search(self, payload: dict[str, Any]) -> None:
+        """Traite les métriques de recherche de jeux"""
+        self.game_search_count += 1
+        
+        from_cache = payload.get('from_cache', False)
+        latency_ms = payload.get('latency_ms', 0.0)
+        score = payload.get('score', 0.0)
+        query = payload.get('query', '?')
+        game_name = payload.get('game_name', '?')
+        
+        if from_cache:
+            self.game_cache_hits += 1
+        else:
+            self.game_cache_misses += 1
+        
+        self.game_total_latency_ms += latency_ms
+        
+        cache_indicator = "💾" if from_cache else "🌐"
+        LOGGER.info(
+            f"🎮 {cache_indicator} '{query}' → '{game_name}' "
+            f"({score:.1f}%, {latency_ms:.2f}ms)"
+        )
+    
+    def get_stats(self) -> dict[str, Any]:
         """Retourne les stats d'événements traités"""
+        avg_latency = 0.0
+        cache_hit_rate = 0.0
+        
+        if self.game_search_count > 0:
+            avg_latency = self.game_total_latency_ms / self.game_search_count
+            cache_hit_rate = (self.game_cache_hits / self.game_search_count) * 100
+        
         return {
-            "total_events": self.event_count
+            "total_events": self.event_count,
+            "game_searches": self.game_search_count,
+            "game_cache_hits": self.game_cache_hits,
+            "game_cache_misses": self.game_cache_misses,
+            "game_cache_hit_rate": f"{cache_hit_rate:.1f}%",
+            "game_avg_latency_ms": f"{avg_latency:.2f}ms",
         }

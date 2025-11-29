@@ -1,0 +1,3108 @@
+{
+  "version": "1.0",
+  "count": 177,
+  "items": [
+    {
+      "canonical": "Grand Theft Auto I",
+      "year": null,
+      "tags": [
+        "action",
+        "open-world",
+        "rockstar",
+        "series"
+      ],
+      "acronyms": [
+        "gta",
+        "gta1",
+        "gtaI",
+        "gtai"
+      ],
+      "aliases": [
+        "GTA",
+        "Grand Theft Auto 1",
+        "Grand Theft Auto I",
+        "Grand Theft Auto i"
+      ],
+      "subtitles": [],
+      "notes": "Include GTA 1..5; GTA V common."
+    },
+    {
+      "canonical": "Grand Theft Auto II",
+      "year": null,
+      "tags": [
+        "action",
+        "open-world",
+        "rockstar",
+        "series"
+      ],
+      "acronyms": [
+        "gta",
+        "gta2",
+        "gtaII",
+        "gtaii"
+      ],
+      "aliases": [
+        "GTA",
+        "Grand Theft Auto 2",
+        "Grand Theft Auto II",
+        "Grand Theft Auto ii"
+      ],
+      "subtitles": [],
+      "notes": "Include GTA 1..5; GTA V common."
+    },
+    {
+      "canonical": "Grand Theft Auto III",
+      "year": null,
+      "tags": [
+        "action",
+        "open-world",
+        "rockstar",
+        "series"
+      ],
+      "acronyms": [
+        "gta",
+        "gta3",
+        "gtaIII",
+        "gtaiii"
+      ],
+      "aliases": [
+        "GTA",
+        "Grand Theft Auto 3",
+        "Grand Theft Auto III",
+        "Grand Theft Auto iii"
+      ],
+      "subtitles": [],
+      "notes": "Include GTA 1..5; GTA V common."
+    },
+    {
+      "canonical": "Grand Theft Auto IV",
+      "year": null,
+      "tags": [
+        "action",
+        "open-world",
+        "rockstar",
+        "series"
+      ],
+      "acronyms": [
+        "gta",
+        "gta4",
+        "gtaIV",
+        "gtaiv"
+      ],
+      "aliases": [
+        "GTA",
+        "Grand Theft Auto 4",
+        "Grand Theft Auto IV",
+        "Grand Theft Auto iv"
+      ],
+      "subtitles": [],
+      "notes": "Include GTA 1..5; GTA V common."
+    },
+    {
+      "canonical": "Grand Theft Auto V",
+      "year": null,
+      "tags": [
+        "action",
+        "open-world",
+        "rockstar",
+        "series"
+      ],
+      "acronyms": [
+        "gta",
+        "gta5",
+        "gtaV",
+        "gtav"
+      ],
+      "aliases": [
+        "GTA",
+        "Grand Theft Auto 5",
+        "Grand Theft Auto V",
+        "Grand Theft Auto v"
+      ],
+      "subtitles": [],
+      "notes": "Include GTA 1..5; GTA V common."
+    },
+    {
+      "canonical": "Grand Theft Auto V",
+      "year": null,
+      "tags": [
+        "action",
+        "open-world",
+        "rockstar"
+      ],
+      "acronyms": [
+        "gta",
+        "gta5",
+        "gtav"
+      ],
+      "aliases": [
+        "GTA V",
+        "GTA5"
+      ],
+      "subtitles": [],
+      "notes": "Explicit GTAV entry"
+    },
+    {
+      "canonical": "Call of Duty Call of Duty",
+      "year": null,
+      "tags": [
+        "fps",
+        "activision",
+        "series"
+      ],
+      "acronyms": [
+        "cod",
+        "cod1",
+        "codI",
+        "codi"
+      ],
+      "aliases": [
+        "Call of Duty 1",
+        "Call of Duty I",
+        "Call of Duty i",
+        "CoD"
+      ],
+      "subtitles": [
+        "Call of Duty"
+      ],
+      "notes": "Early numbered CoD entries"
+    },
+    {
+      "canonical": "Call of Duty Call of Duty 2",
+      "year": null,
+      "tags": [
+        "fps",
+        "activision",
+        "series"
+      ],
+      "acronyms": [
+        "cod",
+        "cod2",
+        "codII",
+        "codii"
+      ],
+      "aliases": [
+        "Call of Duty 2",
+        "Call of Duty II",
+        "Call of Duty ii",
+        "CoD"
+      ],
+      "subtitles": [
+        "Call of Duty 2"
+      ],
+      "notes": "Early numbered CoD entries"
+    },
+    {
+      "canonical": "Call of Duty Call of Duty 3",
+      "year": null,
+      "tags": [
+        "fps",
+        "activision",
+        "series"
+      ],
+      "acronyms": [
+        "cod",
+        "cod3",
+        "codIII",
+        "codiii"
+      ],
+      "aliases": [
+        "Call of Duty 3",
+        "Call of Duty III",
+        "Call of Duty iii",
+        "CoD"
+      ],
+      "subtitles": [
+        "Call of Duty 3"
+      ],
+      "notes": "Early numbered CoD entries"
+    },
+    {
+      "canonical": "Call of Duty: Modern Warfare I",
+      "year": 2007,
+      "tags": [
+        "fps",
+        "activision",
+        "modern-warfare"
+      ],
+      "acronyms": [
+        "cod",
+        "codmw1",
+        "mw",
+        "mw1"
+      ],
+      "aliases": [
+        "CoD MW1",
+        "MW1",
+        "Modern Warfare 1",
+        "Modern Warfare I"
+      ],
+      "subtitles": [
+        "Modern Warfare"
+      ],
+      "notes": "Infinity Ward era"
+    },
+    {
+      "canonical": "Call of Duty: Modern Warfare II",
+      "year": 2009,
+      "tags": [
+        "fps",
+        "activision",
+        "modern-warfare"
+      ],
+      "acronyms": [
+        "cod",
+        "codmw2",
+        "mw",
+        "mw2"
+      ],
+      "aliases": [
+        "CoD MW2",
+        "MW2",
+        "Modern Warfare 2",
+        "Modern Warfare II"
+      ],
+      "subtitles": [
+        "Modern Warfare"
+      ],
+      "notes": "Infinity Ward era"
+    },
+    {
+      "canonical": "Call of Duty: Modern Warfare III",
+      "year": 2011,
+      "tags": [
+        "fps",
+        "activision",
+        "modern-warfare"
+      ],
+      "acronyms": [
+        "cod",
+        "codmw3",
+        "mw",
+        "mw3"
+      ],
+      "aliases": [
+        "CoD MW3",
+        "MW3",
+        "Modern Warfare 3",
+        "Modern Warfare III"
+      ],
+      "subtitles": [
+        "Modern Warfare"
+      ],
+      "notes": "Infinity Ward era"
+    },
+    {
+      "canonical": "Call of Duty: Modern Warfare",
+      "year": 2019,
+      "tags": [
+        "fps",
+        "reboot"
+      ],
+      "acronyms": [
+        "cod",
+        "mw"
+      ],
+      "aliases": [
+        "MW 2019",
+        "Modern Warfare 2019"
+      ],
+      "subtitles": [
+        "Modern Warfare"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Call of Duty: Modern Warfare II",
+      "year": 2022,
+      "tags": [
+        "fps",
+        "reboot"
+      ],
+      "acronyms": [
+        "cod",
+        "codmw2",
+        "mw",
+        "mw2",
+        "mwii"
+      ],
+      "aliases": [
+        "MW2 2022",
+        "MWII",
+        "Modern Warfare 2 (2022)"
+      ],
+      "subtitles": [
+        "Modern Warfare"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Call of Duty: Black Ops ",
+      "year": 2010,
+      "tags": [
+        "fps",
+        "treyarch",
+        "black-ops"
+      ],
+      "acronyms": [
+        "bo",
+        "bo1",
+        "cod"
+      ],
+      "aliases": [
+        "BO",
+        "Black Ops"
+      ],
+      "subtitles": [
+        "Black Ops"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Call of Duty: Black Ops II",
+      "year": 2012,
+      "tags": [
+        "fps",
+        "treyarch",
+        "black-ops"
+      ],
+      "acronyms": [
+        "bo",
+        "bo2",
+        "cod"
+      ],
+      "aliases": [
+        "BO2",
+        "Black Ops 2"
+      ],
+      "subtitles": [
+        "Black Ops"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Call of Duty: Black Ops III",
+      "year": 2015,
+      "tags": [
+        "fps",
+        "treyarch",
+        "black-ops"
+      ],
+      "acronyms": [
+        "bo",
+        "bo3",
+        "cod"
+      ],
+      "aliases": [
+        "BO3",
+        "Black Ops 3"
+      ],
+      "subtitles": [
+        "Black Ops"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Call of Duty: Black Ops IV",
+      "year": 2018,
+      "tags": [
+        "fps",
+        "treyarch",
+        "black-ops"
+      ],
+      "acronyms": [
+        "bo",
+        "bo4",
+        "cod"
+      ],
+      "aliases": [
+        "BO4",
+        "Black Ops 4"
+      ],
+      "subtitles": [
+        "Black Ops"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Counter-Strike",
+      "year": null,
+      "tags": [
+        "fps",
+        "valve"
+      ],
+      "acronyms": [
+        "cs"
+      ],
+      "aliases": [
+        "CS 1.5",
+        "CS 1.6",
+        "Counter Strike"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Counter-Strike: Source",
+      "year": null,
+      "tags": [
+        "fps",
+        "valve"
+      ],
+      "acronyms": [
+        "cs",
+        "css"
+      ],
+      "aliases": [
+        "CS:S",
+        "Counter Strike Source"
+      ],
+      "subtitles": [
+        "Source"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Counter-Strike: Global Offensive",
+      "year": null,
+      "tags": [
+        "fps",
+        "valve"
+      ],
+      "acronyms": [
+        "cs",
+        "cs go",
+        "cs:go",
+        "csgo",
+        "go"
+      ],
+      "aliases": [
+        "CS:GO"
+      ],
+      "subtitles": [
+        "Global Offensive"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Counter-Strike 2",
+      "year": 2023,
+      "tags": [
+        "fps",
+        "valve"
+      ],
+      "acronyms": [
+        "cs",
+        "cs2"
+      ],
+      "aliases": [
+        "CS2"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Battlefield 1",
+      "year": 2016,
+      "tags": [
+        "fps",
+        "ea",
+        "dice"
+      ],
+      "acronyms": [
+        "bf",
+        "bf1"
+      ],
+      "aliases": [
+        "BF 1",
+        "Battlefield I"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Battlefield 3",
+      "year": 2011,
+      "tags": [
+        "fps",
+        "ea",
+        "dice"
+      ],
+      "acronyms": [
+        "bf",
+        "bf3"
+      ],
+      "aliases": [
+        "BF 3",
+        "Battlefield III"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Battlefield 4",
+      "year": 2013,
+      "tags": [
+        "fps",
+        "ea",
+        "dice"
+      ],
+      "acronyms": [
+        "bf",
+        "bf4"
+      ],
+      "aliases": [
+        "BF 4",
+        "Battlefield IV"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Battlefield V",
+      "year": 2018,
+      "tags": [
+        "fps",
+        "ea",
+        "dice"
+      ],
+      "acronyms": [
+        "bf",
+        "bf5",
+        "bfv"
+      ],
+      "aliases": [
+        "BF V",
+        "BF5",
+        "Battlefield 5"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Battlefield 2042",
+      "year": 2021,
+      "tags": [
+        "fps",
+        "ea",
+        "dice"
+      ],
+      "acronyms": [
+        "bf",
+        "bf2042"
+      ],
+      "aliases": [
+        "BF 2042"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed",
+      "year": 2007,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac"
+      ],
+      "aliases": [
+        "AC"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed II",
+      "year": 2009,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac",
+        "ac2"
+      ],
+      "aliases": [
+        "AC2",
+        "Assassin's Creed 2"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed: Brotherhood",
+      "year": 2010,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac",
+        "acb"
+      ],
+      "aliases": [
+        "AC Brotherhood"
+      ],
+      "subtitles": [
+        "Brotherhood"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed: Revelations",
+      "year": 2011,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac",
+        "acr"
+      ],
+      "aliases": [
+        "AC Revelations"
+      ],
+      "subtitles": [
+        "Revelations"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed III",
+      "year": 2012,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac",
+        "ac3"
+      ],
+      "aliases": [
+        "AC3",
+        "Assassin's Creed 3"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed IV: Black Flag",
+      "year": 2013,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac",
+        "ac4",
+        "acbf"
+      ],
+      "aliases": [
+        "AC Black Flag",
+        "AC4"
+      ],
+      "subtitles": [
+        "Black Flag"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed: Unity",
+      "year": 2014,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac",
+        "acu"
+      ],
+      "aliases": [
+        "AC Unity"
+      ],
+      "subtitles": [
+        "Unity"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed: Syndicate",
+      "year": 2015,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac",
+        "acs"
+      ],
+      "aliases": [
+        "AC Syndicate"
+      ],
+      "subtitles": [
+        "Syndicate"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed: Origins",
+      "year": 2017,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac",
+        "aco"
+      ],
+      "aliases": [
+        "AC Origins"
+      ],
+      "subtitles": [
+        "Origins"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed: Odyssey",
+      "year": 2018,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac",
+        "aco",
+        "acod"
+      ],
+      "aliases": [
+        "AC Odyssey"
+      ],
+      "subtitles": [
+        "Odyssey"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Assassin's Creed: Valhalla",
+      "year": 2020,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "ac",
+        "acv"
+      ],
+      "aliases": [
+        "AC Valhalla"
+      ],
+      "subtitles": [
+        "Valhalla"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "The Witcher",
+      "year": null,
+      "tags": [
+        "rpg",
+        "cdpr"
+      ],
+      "acronyms": [
+        "tw",
+        "tw1"
+      ],
+      "aliases": [
+        "Witcher 1"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "The Witcher 2: Assassins of Kings",
+      "year": null,
+      "tags": [
+        "rpg",
+        "cdpr"
+      ],
+      "acronyms": [
+        "tw2"
+      ],
+      "aliases": [
+        "Witcher 2"
+      ],
+      "subtitles": [
+        "Assassins of Kings"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "The Witcher 3: Wild Hunt",
+      "year": null,
+      "tags": [
+        "rpg",
+        "cdpr"
+      ],
+      "acronyms": [
+        "tw3",
+        "wh"
+      ],
+      "aliases": [
+        "TW3 Wild Hunt",
+        "Witcher 3"
+      ],
+      "subtitles": [
+        "Wild Hunt"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "The Legend of Zelda: Breath of the Wild",
+      "year": null,
+      "tags": [
+        "adventure",
+        "nintendo"
+      ],
+      "acronyms": [
+        "botw",
+        "zelda"
+      ],
+      "aliases": [
+        "Zelda BOTW"
+      ],
+      "subtitles": [
+        "Breath of the Wild"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "The Legend of Zelda: Tears of the Kingdom",
+      "year": null,
+      "tags": [
+        "adventure",
+        "nintendo"
+      ],
+      "acronyms": [
+        "totk",
+        "zelda"
+      ],
+      "aliases": [
+        "Zelda TOTK"
+      ],
+      "subtitles": [
+        "Tears of the Kingdom"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Mario Kart 8 Deluxe",
+      "year": null,
+      "tags": [
+        "racing",
+        "nintendo"
+      ],
+      "acronyms": [
+        "mk8",
+        "mk8d"
+      ],
+      "aliases": [
+        "MK8 Deluxe"
+      ],
+      "subtitles": [
+        "Deluxe"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Dark Souls",
+      "year": null,
+      "tags": [
+        "rpg",
+        "fromsoftware"
+      ],
+      "acronyms": [
+        "ds",
+        "ds1"
+      ],
+      "aliases": [
+        "Dark Souls 1"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Dark Souls II",
+      "year": null,
+      "tags": [
+        "rpg",
+        "fromsoftware"
+      ],
+      "acronyms": [
+        "ds2"
+      ],
+      "aliases": [
+        "Dark Souls 2"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Dark Souls III",
+      "year": null,
+      "tags": [
+        "rpg",
+        "fromsoftware"
+      ],
+      "acronyms": [
+        "ds3"
+      ],
+      "aliases": [
+        "Dark Souls 3"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Demon's Souls",
+      "year": null,
+      "tags": [
+        "rpg",
+        "fromsoftware"
+      ],
+      "acronyms": [
+        "des",
+        "ds"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Elden Ring",
+      "year": null,
+      "tags": [
+        "rpg",
+        "fromsoftware"
+      ],
+      "acronyms": [
+        "er"
+      ],
+      "aliases": [
+        "ER"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Bloodborne",
+      "year": null,
+      "tags": [
+        "rpg",
+        "fromsoftware"
+      ],
+      "acronyms": [
+        "bb"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "The Elder Scrolls V: Skyrim",
+      "year": null,
+      "tags": [
+        "rpg",
+        "bethesda"
+      ],
+      "acronyms": [
+        "skyrim",
+        "tes5",
+        "tesv"
+      ],
+      "aliases": [
+        "Skyrim",
+        "TES V",
+        "TES5"
+      ],
+      "subtitles": [
+        "Skyrim"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Fallout 3",
+      "year": null,
+      "tags": [
+        "rpg",
+        "bethesda"
+      ],
+      "acronyms": [
+        "fo",
+        "fo3"
+      ],
+      "aliases": [
+        "Fallout III"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Fallout: New Vegas",
+      "year": null,
+      "tags": [
+        "rpg",
+        "obsidian"
+      ],
+      "acronyms": [
+        "fnv",
+        "fonv"
+      ],
+      "aliases": [
+        "Fallout NV",
+        "New Vegas"
+      ],
+      "subtitles": [
+        "New Vegas"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Fallout 4",
+      "year": null,
+      "tags": [
+        "rpg",
+        "bethesda"
+      ],
+      "acronyms": [
+        "fo4"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Fallout 76",
+      "year": null,
+      "tags": [
+        "rpg",
+        "bethesda",
+        "online"
+      ],
+      "acronyms": [
+        "f76",
+        "fo76"
+      ],
+      "aliases": [
+        "Fallout Online 76"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Starfield",
+      "year": null,
+      "tags": [
+        "rpg",
+        "bethesda"
+      ],
+      "acronyms": [
+        "sf"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Red Dead Redemption",
+      "year": null,
+      "tags": [
+        "action",
+        "rockstar"
+      ],
+      "acronyms": [
+        "rdr"
+      ],
+      "aliases": [
+        "RDR"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Red Dead Redemption 2",
+      "year": null,
+      "tags": [
+        "action",
+        "rockstar"
+      ],
+      "acronyms": [
+        "rdr2"
+      ],
+      "aliases": [
+        "RDR2"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "L.A. Noire",
+      "year": null,
+      "tags": [
+        "adventure",
+        "rockstar"
+      ],
+      "acronyms": [
+        "lan"
+      ],
+      "aliases": [
+        "LA Noire"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "The Last of Us",
+      "year": null,
+      "tags": [
+        "action",
+        "sony"
+      ],
+      "acronyms": [
+        "tlou"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "The Last of Us Part II",
+      "year": null,
+      "tags": [
+        "action",
+        "sony"
+      ],
+      "acronyms": [
+        "tlou2",
+        "tlouii"
+      ],
+      "aliases": [
+        "TLOU 2",
+        "TLOU II"
+      ],
+      "subtitles": [
+        "Part II"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Uncharted 1",
+      "year": null,
+      "tags": [
+        "action",
+        "sony"
+      ],
+      "acronyms": [
+        "uc",
+        "uc1"
+      ],
+      "aliases": [
+        "UC1",
+        "Uncharted {roman_caps(n)}"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Uncharted 2",
+      "year": null,
+      "tags": [
+        "action",
+        "sony"
+      ],
+      "acronyms": [
+        "uc",
+        "uc2"
+      ],
+      "aliases": [
+        "UC2",
+        "Uncharted {roman_caps(n)}"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Uncharted 3",
+      "year": null,
+      "tags": [
+        "action",
+        "sony"
+      ],
+      "acronyms": [
+        "uc",
+        "uc3"
+      ],
+      "aliases": [
+        "UC3",
+        "Uncharted {roman_caps(n)}"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Uncharted 4",
+      "year": null,
+      "tags": [
+        "action",
+        "sony"
+      ],
+      "acronyms": [
+        "uc",
+        "uc4"
+      ],
+      "aliases": [
+        "UC4",
+        "Uncharted {roman_caps(n)}"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Halo: Combat Evolved",
+      "year": null,
+      "tags": [
+        "fps",
+        "xbox"
+      ],
+      "acronyms": [
+        "ce",
+        "halo",
+        "hce"
+      ],
+      "aliases": [
+        "Halo CE"
+      ],
+      "subtitles": [
+        "Combat Evolved"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Halo 2",
+      "year": null,
+      "tags": [
+        "fps",
+        "xbox"
+      ],
+      "acronyms": [
+        "h2",
+        "halo2"
+      ],
+      "aliases": [
+        "Halo II"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Halo 3",
+      "year": null,
+      "tags": [
+        "fps",
+        "xbox"
+      ],
+      "acronyms": [
+        "h3",
+        "halo3"
+      ],
+      "aliases": [
+        "Halo III"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Halo: Reach",
+      "year": null,
+      "tags": [
+        "fps",
+        "xbox"
+      ],
+      "acronyms": [
+        "reach"
+      ],
+      "aliases": [
+        "Halo Reach"
+      ],
+      "subtitles": [
+        "Reach"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Halo Infinite",
+      "year": null,
+      "tags": [
+        "fps",
+        "xbox"
+      ],
+      "acronyms": [
+        "hi"
+      ],
+      "aliases": [],
+      "subtitles": [
+        "Infinite"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Gears of War",
+      "year": null,
+      "tags": [
+        "action",
+        "xbox"
+      ],
+      "acronyms": [
+        "gow"
+      ],
+      "aliases": [
+        "Gears 1"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Gears of War 2",
+      "year": null,
+      "tags": [
+        "action",
+        "xbox"
+      ],
+      "acronyms": [
+        "gow2"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Gears 5",
+      "year": null,
+      "tags": [
+        "action",
+        "xbox"
+      ],
+      "acronyms": [
+        "g5",
+        "gears5"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "God of War (2005)",
+      "year": null,
+      "tags": [
+        "action",
+        "sony"
+      ],
+      "acronyms": [
+        "gow"
+      ],
+      "aliases": [
+        "God of War PS2 2005"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "God of War (2018)",
+      "year": null,
+      "tags": [
+        "action",
+        "sony"
+      ],
+      "acronyms": [
+        "gow",
+        "gow2018"
+      ],
+      "aliases": [
+        "GoW 2018",
+        "God of War 4"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "God of War Ragnarök",
+      "year": null,
+      "tags": [
+        "action",
+        "sony"
+      ],
+      "acronyms": [
+        "gowr"
+      ],
+      "aliases": [
+        "Ragnarok"
+      ],
+      "subtitles": [
+        "Ragnarök"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re",
+        "re1"
+      ],
+      "aliases": [
+        "Biohazard"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil 2",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re",
+        "re2"
+      ],
+      "aliases": [
+        "Resident Evil II"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil 3",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re",
+        "re3"
+      ],
+      "aliases": [
+        "Resident Evil III"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil 4",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re",
+        "re4"
+      ],
+      "aliases": [
+        "Resident Evil IV"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil 5",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re",
+        "re5"
+      ],
+      "aliases": [
+        "Resident Evil V"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil 6",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re",
+        "re6"
+      ],
+      "aliases": [
+        "Resident Evil VI"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil 7",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re",
+        "re7"
+      ],
+      "aliases": [
+        "Resident Evil VII"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil 8",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re",
+        "re8"
+      ],
+      "aliases": [
+        "Resident Evil VIII"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil 2 (Remake)",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re2",
+        "re2r"
+      ],
+      "aliases": [
+        "RE2 Remake"
+      ],
+      "subtitles": [
+        "Remake"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil 3 (Remake)",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re3",
+        "re3r"
+      ],
+      "aliases": [
+        "RE3 Remake"
+      ],
+      "subtitles": [
+        "Remake"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Resident Evil 4 (Remake)",
+      "year": null,
+      "tags": [
+        "horror",
+        "capcom"
+      ],
+      "acronyms": [
+        "re4",
+        "re4r"
+      ],
+      "aliases": [
+        "RE4 Remake"
+      ],
+      "subtitles": [
+        "Remake"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Street Fighter 2",
+      "year": null,
+      "tags": [
+        "fighting",
+        "capcom"
+      ],
+      "acronyms": [
+        "sf",
+        "sf2"
+      ],
+      "aliases": [
+        "SF 2",
+        "Street Fighter II"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Street Fighter 4",
+      "year": null,
+      "tags": [
+        "fighting",
+        "capcom"
+      ],
+      "acronyms": [
+        "sf",
+        "sf4"
+      ],
+      "aliases": [
+        "SF 4",
+        "Street Fighter IV"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Street Fighter 5",
+      "year": null,
+      "tags": [
+        "fighting",
+        "capcom"
+      ],
+      "acronyms": [
+        "sf",
+        "sf5"
+      ],
+      "aliases": [
+        "SF 5",
+        "Street Fighter V"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Street Fighter 6",
+      "year": null,
+      "tags": [
+        "fighting",
+        "capcom"
+      ],
+      "acronyms": [
+        "sf",
+        "sf6"
+      ],
+      "aliases": [
+        "SF 6",
+        "Street Fighter VI"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Street Fighter 6",
+      "year": null,
+      "tags": [
+        "fighting",
+        "capcom"
+      ],
+      "acronyms": [
+        "sf",
+        "sf6"
+      ],
+      "aliases": [
+        "SF6"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Monster Hunter: World",
+      "year": null,
+      "tags": [
+        "rpg",
+        "capcom"
+      ],
+      "acronyms": [
+        "mh",
+        "mhw"
+      ],
+      "aliases": [
+        "MH World"
+      ],
+      "subtitles": [
+        "World"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Monster Hunter Rise",
+      "year": null,
+      "tags": [
+        "rpg",
+        "capcom"
+      ],
+      "acronyms": [
+        "mh",
+        "mhr"
+      ],
+      "aliases": [
+        "MH Rise"
+      ],
+      "subtitles": [
+        "Rise"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Diablo II",
+      "year": null,
+      "tags": [
+        "rpg",
+        "blizzard"
+      ],
+      "acronyms": [
+        "d2",
+        "diablo2"
+      ],
+      "aliases": [
+        "Diablo 2"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Diablo III",
+      "year": null,
+      "tags": [
+        "rpg",
+        "blizzard"
+      ],
+      "acronyms": [
+        "d3",
+        "diablo3"
+      ],
+      "aliases": [
+        "Diablo 3"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Diablo IV",
+      "year": null,
+      "tags": [
+        "rpg",
+        "blizzard"
+      ],
+      "acronyms": [
+        "d4",
+        "diablo4"
+      ],
+      "aliases": [
+        "Diablo 4"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "StarCraft",
+      "year": null,
+      "tags": [
+        "rts",
+        "blizzard"
+      ],
+      "acronyms": [
+        "sc",
+        "sc1"
+      ],
+      "aliases": [
+        "SC"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "StarCraft II",
+      "year": null,
+      "tags": [
+        "rts",
+        "blizzard"
+      ],
+      "acronyms": [
+        "sc2"
+      ],
+      "aliases": [
+        "SC2",
+        "StarCraft 2"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Warcraft III",
+      "year": null,
+      "tags": [
+        "rts",
+        "blizzard"
+      ],
+      "acronyms": [
+        "wc3"
+      ],
+      "aliases": [
+        "Warcraft 3"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "World of Warcraft",
+      "year": null,
+      "tags": [
+        "mmorpg",
+        "blizzard"
+      ],
+      "acronyms": [
+        "wow"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Overwatch",
+      "year": null,
+      "tags": [
+        "fps",
+        "blizzard"
+      ],
+      "acronyms": [
+        "ow"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Overwatch 2",
+      "year": null,
+      "tags": [
+        "fps",
+        "blizzard"
+      ],
+      "acronyms": [
+        "ow2"
+      ],
+      "aliases": [
+        "OW2"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "FIFA 23",
+      "year": null,
+      "tags": [
+        "sports",
+        "ea"
+      ],
+      "acronyms": [
+        "fifa",
+        "fifa23"
+      ],
+      "aliases": [
+        "EA Sports FC (legacy)"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "EA Sports FC 24",
+      "year": null,
+      "tags": [
+        "sports",
+        "ea"
+      ],
+      "acronyms": [
+        "fc",
+        "fc24"
+      ],
+      "aliases": [
+        "FIFA 24"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "EA Sports FC 25",
+      "year": null,
+      "tags": [
+        "sports",
+        "ea"
+      ],
+      "acronyms": [
+        "fc",
+        "fc25"
+      ],
+      "aliases": [
+        "FIFA 25"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Need for Speed: Heat",
+      "year": null,
+      "tags": [
+        "racing",
+        "ea"
+      ],
+      "acronyms": [
+        "nfs",
+        "nfsheat"
+      ],
+      "aliases": [
+        "NFS Heat"
+      ],
+      "subtitles": [
+        "Heat"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Need for Speed: Unbound",
+      "year": null,
+      "tags": [
+        "racing",
+        "ea"
+      ],
+      "acronyms": [
+        "nfs",
+        "nfsu"
+      ],
+      "aliases": [
+        "NFS Unbound"
+      ],
+      "subtitles": [
+        "Unbound"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Forza Horizon 4",
+      "year": null,
+      "tags": [
+        "racing",
+        "xbox"
+      ],
+      "acronyms": [
+        "fh",
+        "fh4"
+      ],
+      "aliases": [],
+      "subtitles": [
+        "Horizon"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Forza Horizon 5",
+      "year": null,
+      "tags": [
+        "racing",
+        "xbox"
+      ],
+      "acronyms": [
+        "fh",
+        "fh5"
+      ],
+      "aliases": [],
+      "subtitles": [
+        "Horizon"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Forza Motorsport",
+      "year": null,
+      "tags": [
+        "racing",
+        "xbox"
+      ],
+      "acronyms": [
+        "fm"
+      ],
+      "aliases": [
+        "Forza"
+      ],
+      "subtitles": [
+        "Motorsport"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Gran Turismo 7",
+      "year": null,
+      "tags": [
+        "racing",
+        "sony"
+      ],
+      "acronyms": [
+        "gt",
+        "gt7"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Dota 2",
+      "year": null,
+      "tags": [
+        "moba",
+        "valve"
+      ],
+      "acronyms": [
+        "d2",
+        "dota",
+        "dota2"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Team Fortress 2",
+      "year": null,
+      "tags": [
+        "fps",
+        "valve"
+      ],
+      "acronyms": [
+        "tf",
+        "tf2"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Left 4 Dead 2",
+      "year": null,
+      "tags": [
+        "fps",
+        "valve"
+      ],
+      "acronyms": [
+        "l4d",
+        "l4d2"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Portal 2",
+      "year": null,
+      "tags": [
+        "puzzle",
+        "valve"
+      ],
+      "acronyms": [
+        "p2",
+        "portal2"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Half-Life 2",
+      "year": null,
+      "tags": [
+        "fps",
+        "valve"
+      ],
+      "acronyms": [
+        "hl",
+        "hl2"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Apex Legends",
+      "year": null,
+      "tags": [
+        "battle-royale",
+        "ea"
+      ],
+      "acronyms": [
+        "apex"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Fortnite",
+      "year": null,
+      "tags": [
+        "battle-royale",
+        "epic"
+      ],
+      "acronyms": [
+        "fn"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "PUBG: Battlegrounds",
+      "year": null,
+      "tags": [
+        "battle-royale",
+        "krafton"
+      ],
+      "acronyms": [
+        "pubg"
+      ],
+      "aliases": [
+        "PlayerUnknown's Battlegrounds"
+      ],
+      "subtitles": [
+        "Battlegrounds"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Valorant",
+      "year": null,
+      "tags": [
+        "fps",
+        "riot"
+      ],
+      "acronyms": [
+        "val"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Rainbow Six Siege",
+      "year": null,
+      "tags": [
+        "fps",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "r6",
+        "r6s"
+      ],
+      "aliases": [
+        "Tom Clancy's Rainbow Six Siege"
+      ],
+      "subtitles": [
+        "Siege"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Rocket League",
+      "year": null,
+      "tags": [
+        "sports",
+        "psyonix"
+      ],
+      "acronyms": [
+        "rl"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Hades",
+      "year": null,
+      "tags": [
+        "roguelike",
+        "supergiant"
+      ],
+      "acronyms": [
+        "hades"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Hades II",
+      "year": null,
+      "tags": [
+        "roguelike",
+        "supergiant"
+      ],
+      "acronyms": [
+        "hades2",
+        "hadesii"
+      ],
+      "aliases": [
+        "Hades 2"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Vampire Survivors",
+      "year": null,
+      "tags": [
+        "indie",
+        "bullet-hell"
+      ],
+      "acronyms": [
+        "vs"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Dead Cells",
+      "year": null,
+      "tags": [
+        "indie",
+        "roguelike"
+      ],
+      "acronyms": [
+        "dc"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Celeste",
+      "year": null,
+      "tags": [
+        "indie",
+        "platformer"
+      ],
+      "acronyms": [],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Hollow Knight",
+      "year": null,
+      "tags": [
+        "indie",
+        "metroidvania"
+      ],
+      "acronyms": [
+        "hk"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Stardew Valley",
+      "year": null,
+      "tags": [
+        "indie",
+        "sim"
+      ],
+      "acronyms": [
+        "sdv"
+      ],
+      "aliases": [
+        "Stardew"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Terraria",
+      "year": null,
+      "tags": [
+        "indie",
+        "sandbox"
+      ],
+      "acronyms": [],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Factorio",
+      "year": null,
+      "tags": [
+        "indie",
+        "automation"
+      ],
+      "acronyms": [],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Satisfactory",
+      "year": null,
+      "tags": [
+        "indie",
+        "automation"
+      ],
+      "acronyms": [],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Cities: Skylines",
+      "year": null,
+      "tags": [
+        "sim",
+        "paradox"
+      ],
+      "acronyms": [
+        "cs",
+        "csl"
+      ],
+      "aliases": [
+        "C:S",
+        "CSL",
+        "Cities Skylines"
+      ],
+      "subtitles": [
+        "Skylines"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Animal Crossing: New Horizons",
+      "year": null,
+      "tags": [
+        "sim",
+        "nintendo"
+      ],
+      "acronyms": [
+        "ac",
+        "acnh"
+      ],
+      "aliases": [
+        "Animal Crossing NH"
+      ],
+      "subtitles": [
+        "New Horizons"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Splatoon 3",
+      "year": null,
+      "tags": [
+        "shooter",
+        "nintendo"
+      ],
+      "acronyms": [
+        "spl",
+        "spl3"
+      ],
+      "aliases": [
+        "Splatoon III"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Metroid Prime",
+      "year": null,
+      "tags": [
+        "adventure",
+        "nintendo"
+      ],
+      "acronyms": [
+        "mp"
+      ],
+      "aliases": [],
+      "subtitles": [
+        "Prime"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Super Smash Bros. Ultimate",
+      "year": null,
+      "tags": [
+        "fighting",
+        "nintendo"
+      ],
+      "acronyms": [
+        "smash",
+        "ssbu"
+      ],
+      "aliases": [
+        "Smash Ultimate"
+      ],
+      "subtitles": [
+        "Ultimate"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Final Fantasy VII",
+      "year": null,
+      "tags": [
+        "jrpg",
+        "square"
+      ],
+      "acronyms": [
+        "ff7",
+        "ffvii"
+      ],
+      "aliases": [
+        "Final Fantasy 7"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Final Fantasy XIV",
+      "year": null,
+      "tags": [
+        "mmorpg",
+        "square"
+      ],
+      "acronyms": [
+        "ff14",
+        "ffxiv"
+      ],
+      "aliases": [
+        "FFXIV"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Persona 5 Royal",
+      "year": null,
+      "tags": [
+        "jrpg",
+        "atlas"
+      ],
+      "acronyms": [
+        "p5",
+        "p5r"
+      ],
+      "aliases": [
+        "Persona 5 R"
+      ],
+      "subtitles": [
+        "Royal"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Yakuza: Like a Dragon",
+      "year": null,
+      "tags": [
+        "rpg",
+        "sega"
+      ],
+      "acronyms": [
+        "lad",
+        "yakuza"
+      ],
+      "aliases": [
+        "Like a Dragon"
+      ],
+      "subtitles": [
+        "Like a Dragon"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "BioShock Infinite",
+      "year": null,
+      "tags": [
+        "fps",
+        "2k"
+      ],
+      "acronyms": [
+        "bioshock",
+        "bsi"
+      ],
+      "aliases": [
+        "BSI"
+      ],
+      "subtitles": [
+        "Infinite"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Borderlands 3",
+      "year": null,
+      "tags": [
+        "fps",
+        "2k"
+      ],
+      "acronyms": [
+        "bl",
+        "bl3"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "XCOM 2",
+      "year": null,
+      "tags": [
+        "strategy",
+        "2k"
+      ],
+      "acronyms": [
+        "xcom2"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Tom Clancy's Ghost Recon Wildlands",
+      "year": null,
+      "tags": [
+        "tactical",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "grw"
+      ],
+      "aliases": [
+        "Ghost Recon Wildlands",
+        "Wildlands"
+      ],
+      "subtitles": [
+        "Wildlands"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Tom Clancy's The Division 2",
+      "year": null,
+      "tags": [
+        "looter",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "div2",
+        "td2"
+      ],
+      "aliases": [
+        "The Division 2"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Watch Dogs 2",
+      "year": null,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "wd2"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Far Cry 5",
+      "year": null,
+      "tags": [
+        "action",
+        "ubisoft"
+      ],
+      "acronyms": [
+        "fc5"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Cyberpunk 2077",
+      "year": null,
+      "tags": [
+        "rpg",
+        "cdpr"
+      ],
+      "acronyms": [
+        "cp",
+        "cp2077"
+      ],
+      "aliases": [
+        "Cyberpunk"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Baldur's Gate 3",
+      "year": null,
+      "tags": [
+        "rpg",
+        "larian"
+      ],
+      "acronyms": [
+        "bg",
+        "bg3"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Hogwarts Legacy",
+      "year": null,
+      "tags": [
+        "rpg",
+        "wb"
+      ],
+      "acronyms": [
+        "hl"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Mortal Kombat 11",
+      "year": null,
+      "tags": [
+        "fighting",
+        "nrs"
+      ],
+      "acronyms": [
+        "mk",
+        "mk11"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Mortal Kombat 1 (2023)",
+      "year": null,
+      "tags": [
+        "fighting",
+        "nrs"
+      ],
+      "acronyms": [
+        "mk",
+        "mk1"
+      ],
+      "aliases": [
+        "MK 1"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Tekken 7",
+      "year": null,
+      "tags": [
+        "fighting",
+        "bandai"
+      ],
+      "acronyms": [
+        "t7",
+        "tekken7"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Tekken 8",
+      "year": null,
+      "tags": [
+        "fighting",
+        "bandai"
+      ],
+      "acronyms": [
+        "t8",
+        "tekken8"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "EA Sports UFC 5",
+      "year": null,
+      "tags": [
+        "sports",
+        "ea"
+      ],
+      "acronyms": [
+        "ufc",
+        "ufc5"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "NBA 2K24",
+      "year": null,
+      "tags": [
+        "sports",
+        "2k"
+      ],
+      "acronyms": [
+        "2k24",
+        "nba2k24"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Ori and the Blind Forest",
+      "year": null,
+      "tags": [
+        "platformer"
+      ],
+      "acronyms": [
+        "obf",
+        "ori"
+      ],
+      "aliases": [],
+      "subtitles": [
+        "The Blind Forest"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Ori and the Will of the Wisps",
+      "year": null,
+      "tags": [
+        "platformer"
+      ],
+      "acronyms": [
+        "ori",
+        "oww"
+      ],
+      "aliases": [
+        "Ori Will of the Wisps"
+      ],
+      "subtitles": [
+        "Will of the Wisps"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Super Mario Odyssey",
+      "year": null,
+      "tags": [
+        "platformer",
+        "nintendo"
+      ],
+      "acronyms": [
+        "smo"
+      ],
+      "aliases": [],
+      "subtitles": [
+        "Odyssey"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Age of Empires II",
+      "year": null,
+      "tags": [
+        "rts",
+        "microsoft"
+      ],
+      "acronyms": [
+        "aoe2",
+        "aoeii"
+      ],
+      "aliases": [
+        "Age 2",
+        "Age II"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Company of Heroes 2",
+      "year": null,
+      "tags": [
+        "rts",
+        "sega"
+      ],
+      "acronyms": [
+        "coh2"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Crusader Kings III",
+      "year": null,
+      "tags": [
+        "grand-strategy",
+        "paradox"
+      ],
+      "acronyms": [
+        "ck3"
+      ],
+      "aliases": [
+        "Crusader Kings 3"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Europa Universalis IV",
+      "year": null,
+      "tags": [
+        "grand-strategy",
+        "paradox"
+      ],
+      "acronyms": [
+        "eu4"
+      ],
+      "aliases": [
+        "EU IV",
+        "Europa 4"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Hearts of Iron IV",
+      "year": null,
+      "tags": [
+        "grand-strategy",
+        "paradox"
+      ],
+      "acronyms": [
+        "hoi4"
+      ],
+      "aliases": [
+        "HOI4"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Total War: Warhammer III",
+      "year": null,
+      "tags": [
+        "strategy",
+        "sega"
+      ],
+      "acronyms": [
+        "tww",
+        "tww3"
+      ],
+      "aliases": [
+        "TW Warhammer 3"
+      ],
+      "subtitles": [
+        "Warhammer III"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Minecraft",
+      "year": null,
+      "tags": [
+        "sandbox",
+        "mojang"
+      ],
+      "acronyms": [
+        "mc"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Roblox",
+      "year": null,
+      "tags": [
+        "sandbox",
+        "roblox"
+      ],
+      "acronyms": [],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "No Man's Sky",
+      "year": null,
+      "tags": [
+        "space",
+        "hello-games"
+      ],
+      "acronyms": [
+        "nms"
+      ],
+      "aliases": [
+        "NMS"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Kerbal Space Program",
+      "year": null,
+      "tags": [
+        "sim",
+        "squad"
+      ],
+      "acronyms": [
+        "ksp"
+      ],
+      "aliases": [
+        "KSP"
+      ],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Dead Space",
+      "year": null,
+      "tags": [
+        "horror",
+        "ea"
+      ],
+      "acronyms": [
+        "ds"
+      ],
+      "aliases": [],
+      "subtitles": [],
+      "notes": ""
+    },
+    {
+      "canonical": "Dead Space (Remake)",
+      "year": null,
+      "tags": [
+        "horror",
+        "ea"
+      ],
+      "acronyms": [
+        "dsr"
+      ],
+      "aliases": [
+        "Dead Space Remake"
+      ],
+      "subtitles": [
+        "Remake"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Alien: Isolation",
+      "year": null,
+      "tags": [
+        "horror",
+        "sega"
+      ],
+      "acronyms": [
+        "ai"
+      ],
+      "aliases": [],
+      "subtitles": [
+        "Isolation"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Metro Exodus",
+      "year": null,
+      "tags": [
+        "fps",
+        "4a"
+      ],
+      "acronyms": [
+        "me",
+        "metro"
+      ],
+      "aliases": [],
+      "subtitles": [
+        "Exodus"
+      ],
+      "notes": ""
+    },
+    {
+      "canonical": "Cities: Skylines II",
+      "year": null,
+      "tags": [
+        "sim",
+        "paradox"
+      ],
+      "acronyms": [
+        "cs2",
+        "csl2"
+      ],
+      "aliases": [
+        "CSL2",
+        "Cities Skylines 2"
+      ],
+      "subtitles": [
+        "Skylines II"
+      ],
+      "notes": "CS2 also maps to Counter-Strike 2—use tags/domain to disambiguate."
+    },
+    {
+      "canonical": "God of War II (PS2)",
+      "year": null,
+      "tags": [
+        "action",
+        "sony"
+      ],
+      "acronyms": [
+        "gow2"
+      ],
+      "aliases": [
+        "God of War 2"
+      ],
+      "subtitles": [],
+      "notes": "Disambiguate from Gears of War 2 by platform tags."
+    }
+  ]
+}

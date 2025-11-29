@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "kissbot-game-engine"
+version = "0.1.0"
+description = "High-performance game search engine for KissBot"
+authors = [{name = "KissBot Team"}]
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "httpx>=0.24"]
+
+[tool.maturin]
+features = ["python"]
+python-source = "python"
+module-name = "kissbot_game_engine"

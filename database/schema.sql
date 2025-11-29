@@ -209,3 +209,58 @@ AFTER UPDATE ON config
 BEGIN
     UPDATE config SET updated_at = CURRENT_TIMESTAMP WHERE key = NEW.key;
 END;
+
+-- ============================================================================
+-- Game Domain Tables (v5.1)
+-- Cache intelligent avec confidence tracking et linking canonique
+-- ============================================================================
+
+-- Table du cache de jeux avec métadonnées de confiance
+CREATE TABLE IF NOT EXISTS game_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    
+    -- Query de recherche (normalisée en lowercase)
+    query TEXT NOT NULL UNIQUE,
+    
+    -- Résultat du jeu (JSON sérialisé: GameResult.__dict__)
+    game_data TEXT NOT NULL,
+    
+    -- Métadonnées de confiance (pour décisions intelligentes)
+    confidence REAL NOT NULL,              -- Score 0.0 - 1.0 (DRAKON ranking)
+    result_type TEXT NOT NULL,             -- SUCCESS, MULTIPLE_RESULTS, NO_MATCH, etc.
+    alternatives TEXT,                     -- JSON array de GameResult (si MULTIPLE_RESULTS)
+    canonical_query TEXT,                  -- Lien vers query plus précise/officielle
+    
+    -- Métadonnées d'usage
+    hit_count INTEGER DEFAULT 0,           -- Nombre de fois utilisé
+    last_hit INTEGER,                      -- Timestamp UNIX du dernier accès
+    
+    -- Timestamps
+    cached_at INTEGER NOT NULL,            -- Timestamp UNIX de création du cache
+    expires_at INTEGER,                    -- Timestamp UNIX d'expiration (NULL = never)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index pour recherche rapide par query
+CREATE INDEX IF NOT EXISTS idx_game_cache_query 
+    ON game_cache(query);
+
+-- Index pour recherche par canonical_query (linking)
+CREATE INDEX IF NOT EXISTS idx_game_cache_canonical 
+    ON game_cache(canonical_query);
+
+-- Index pour analyse de qualité du cache
+CREATE INDEX IF NOT EXISTS idx_game_cache_confidence 
+    ON game_cache(confidence);
+
+-- Index pour cleanup des entrées peu utilisées
+CREATE INDEX IF NOT EXISTS idx_game_cache_usage 
+    ON game_cache(hit_count, last_hit);
+
+-- Trigger auto-update du timestamp
+CREATE TRIGGER IF NOT EXISTS update_game_cache_timestamp 
+AFTER UPDATE ON game_cache
+BEGIN
+    UPDATE game_cache SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;

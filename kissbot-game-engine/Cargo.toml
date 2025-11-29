@@ -1,0 +1,84 @@
+[package]
+name = "kissbot-game-engine"
+version = "0.1.0"
+edition = "2021"
+authors = ["KissBot Team"]
+description = "High-performance game search engine with multi-provider support and fuzzy matching"
+license = "MIT"
+
+[lib]
+name = "kissbot_game_engine"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "game-engine-server"
+path = "src/bin/server.rs"
+required-features = ["server"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database
+rusqlite = { version = "0.30", features = ["bundled"] }
+
+# Async trait support
+async-trait = "0.1"
+
+# HTTP client (for providers API calls)
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+
+# URL encoding
+urlencoding = "2.1"
+
+# Fuzzy matching fallback
+rapidfuzz = "0.5"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP server (optional)
+axum = { version = "0.7", optional = true }
+tower-http = { version = "0.5", features = ["cors"], optional = true }
+
+# Python bindings (optional)
+pyo3 = { version = "0.20", features = ["extension-module"], optional = true }
+
+# CLI (optional)
+clap = { version = "4.4", features = ["derive"], optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+tokio-test = "0.4"
+
+[features]
+default = ["python"]
+server = ["axum", "tower-http"]
+python = ["pyo3"]
+cli = ["clap"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[[bench]]
+name = "cache_benchmark"
+harness = false
+
+[[bench]]
+name = "ranking_benchmark"
+harness = false

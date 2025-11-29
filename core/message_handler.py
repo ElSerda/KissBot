@@ -11,8 +11,7 @@ from typing import Any, Dict, Optional
 from core.message_bus import MessageBus
 from core.message_types import ChatMessage, OutboundMessage
 from core.registry import Registry
-from backends.game_lookup import GameLookup
-from backends.game_cache import GameCache
+from backends.game_lookup_rust import get_game_lookup
 from backends.music_cache import MusicCache
 from backends.llm_handler import LLMHandler
 from intelligence.core import extract_mention_message
@@ -34,13 +33,11 @@ class MessageHandler:
     - !uptime: Temps de fonctionnement
     - !stats: Statistiques système (CPU/RAM/Threads)
     - !help: Liste des commandes
-    - !gi <game>: Info sur un jeu
+    - !gi <game>: Info sur un jeu (multi-API avec fusion intelligente)
+    - !gs <game>: Summary rapide (cache-only, ultra rapide)
     - !gc: Jeu en cours du streamer
     - !ask <question>: Question au LLM
-    - !qgame <name>: Recherche quantique de jeux
-    - !collapse <name> <number>: Ancrer jeu vérité terrain
-    - !quantum: Stats système quantique multi-domain
-    - !decoherence: Cleanup manuel états quantiques
+    - !decoherence: Cleanup manuel cache SQLite
     - !kisscharity <message>: Broadcaster message sur tous les channels
     """
     
@@ -72,22 +69,14 @@ class MessageHandler:
         # IRC Client (pour !kisscharity broadcast)
         self.irc_client = None
         
-        # Game Lookup
-        self.game_lookup: Optional[GameLookup] = None
-        if config and config.get("apis", {}).get("rawg_key"):
-            try:
-                self.game_lookup = GameLookup(config)
-                LOGGER.info("✅ GameLookup initialisé")
-            except Exception as e:
-                LOGGER.error(f"❌ GameLookup init failed: {e}")
-        
-        # Quantum Game Cache
-        self.game_cache: Optional[GameCache] = None
+        # Game Lookup (Rust Engine avec fallback Python)
+        self.game_lookup = None
         try:
-            self.game_cache = GameCache(config)
-            LOGGER.info("🔬 QuantumGameCache initialisé")
+            db_path = config.get('db_path', 'kissbot.db')
+            self.game_lookup = get_game_lookup(db_path, config)
+            LOGGER.info("🦀 GameLookup initialisé (Rust Engine v0.1.0 + Python fallback)")
         except Exception as e:
-            LOGGER.error(f"❌ QuantumGameCache init failed: {e}")
+            LOGGER.error(f"❌ GameLookup init failed: {e}")
         
         # Quantum Music Cache (POC)
         self.music_cache: Optional[MusicCache] = None
@@ -202,20 +191,20 @@ class MessageHandler:
             await self._cmd_help(msg)
         elif command == "!gi":
             await self._cmd_game_info(msg, args)
+        elif command == "!gs":
+            await self._cmd_game_summary(msg, args)
         elif command == "!gc":
             await self._cmd_game_current(msg)
+        elif command == "!perf":
+            await self._cmd_perf(msg, args)
+        elif command == "!perftrace":
+            await self._cmd_perftrace(msg, args)
         elif command == "!ask":
             await self._cmd_ask(msg, args)
         elif command == "!wiki":
             await self._cmd_wiki(msg, args)
         elif command == "!kissanniv":
             await self._cmd_kissanniv(msg, args)
-        elif command == "!qgame":
-            await self._cmd_qgame(msg, args)
-        elif command == "!collapse":
-            await self._cmd_collapse(msg, args)
-        elif command == "!quantum":
-            await self._cmd_quantum(msg)
         elif command == "!decoherence":
             await self._cmd_decoherence(msg, args)
         elif command == "!kisscharity":
@@ -223,6 +212,16 @@ class MessageHandler:
         else:
             # Commande inconnue, pas de réponse
             LOGGER.debug(f"Unknown command: {command}")
+            return
+        
+        # Publish command execution event for CommandLogger
+        await self.bus.publish("command.executed", {
+            'command': command[1:],  # Remove ! prefix
+            'user': msg.user_login,
+            'channel': msg.channel,
+            'args': args,
+            'result': 'success'
+        })
     
     async def _cmd_ping(self, msg: ChatMessage) -> None:
         """Commande !ping - Test de réponse du bot"""
@@ -297,7 +296,7 @@ class MessageHandler:
         
         # Ajouter game commands si disponibles
         if self.game_lookup:
-            commands_list += " !gi <game> !gc"
+            commands_list += " !gi <game> !gs <game> !gc"
         
         # Ajouter LLM command si disponible
         if self.llm_handler and self.llm_handler.is_available():
@@ -346,59 +345,35 @@ class MessageHandler:
             return
         
         try:
+            start_total = time.perf_counter()
             LOGGER.info(f"🎮 Searching game: {game_name}")
             
-            # Utiliser le cache quantique pour cohérence avec !qgame
-            if self.game_cache:
-                # Recherche quantique (retourne liste de superpositions)
-                superpositions = await self.game_cache.search_quantum_game(
-                    query=game_name,
-                    observer=msg.user_login
-                )
-                
-                if superpositions:
-                    # Prendre la 1ère superposition (meilleur score/collapsed)
-                    best_result_data = superpositions[0].get("game")
-                    
-                    # Reconstruire GameResult pour utiliser format_result()
-                    from backends.game_lookup import GameResult
-                    game = GameResult(
-                        name=best_result_data.get("name", "Unknown"),
-                        year=best_result_data.get("year", "?"),
-                        rating_rawg=best_result_data.get("rating_rawg", 0.0),
-                        metacritic=best_result_data.get("metacritic"),
-                        platforms=best_result_data.get("platforms", []),
-                        genres=best_result_data.get("genres", []),
-                        developers=best_result_data.get("developers", []),
-                        publishers=best_result_data.get("publishers", []),
-                        summary=best_result_data.get("summary"),
-                        reliability_score=best_result_data.get("reliability_score", 0.0)
-                    )
-                else:
-                    game = None
+            # Direct API search (SQLite cache handled inside search_game)
+            start_lookup = time.perf_counter()
+            game = await self.game_lookup.search_game(game_name)
+            elapsed_lookup_ms = (time.perf_counter() - start_lookup) * 1000
+            
+            if game:
+                LOGGER.info(f"✅ Game found: {game.name} | ⏱️ {elapsed_lookup_ms:.1f}ms")
             else:
-                # Fallback si pas de cache quantique
-                game = await self.game_lookup.search_game(game_name)
+                LOGGER.info(f"⏭️ Game not found | ⏱️ {elapsed_lookup_ms:.1f}ms")
             
             if not game:
+                elapsed_total_ms = (time.perf_counter() - start_total) * 1000
                 response_text = f"@{msg.user_login} ❌ Game not found: {game_name}"
+                LOGGER.info(f"❌ Game not found: {game_name} | ⏱️ Total: {elapsed_total_ms:.1f}ms")
             else:
-                # Utiliser format_result() pour cohérence avec !gc
-                game_info = self.game_lookup.format_result(game, compact=True)
+                start_format = time.perf_counter()
+                # Utiliser format_result() en mode complet (pas compact)
+                game_info = self.game_lookup.format_result(game, compact=False)
+                response_text = f"@{msg.user_login} {game_info}"
                 
-                # Ajouter description si disponible
-                prefix = f"@{msg.user_login} {game_info}"
-                if game.summary:
-                    max_summary_len = 450 - len(prefix) - 3  # -3 pour " | "
-                    if max_summary_len > 50:
-                        summary = game.summary[:max_summary_len]
-                        if len(game.summary) > max_summary_len:
-                            summary += "..."
-                        response_text = f"{prefix} | {summary}"
-                    else:
-                        response_text = prefix
-                else:
-                    response_text = prefix
+                elapsed_format_us = (time.perf_counter() - start_format) * 1_000_000
+                elapsed_total_ms = (time.perf_counter() - start_total) * 1000
+                LOGGER.info(
+                    f"✅ Game info sent: {game.name} | "
+                    f"⏱️ Format: {elapsed_format_us:.1f}µs | Total: {elapsed_total_ms:.1f}ms"
+                )
             
             await self.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,
@@ -406,11 +381,295 @@ class MessageHandler:
                 text=response_text,
                 prefer="irc"
             ))
-            LOGGER.info(f"✅ Game info sent for: {game_name}")
             
         except Exception as e:
             LOGGER.error(f"❌ Error searching game: {e}", exc_info=True)
             response_text = f"@{msg.user_login} ❌ Error searching game"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+    
+    async def _cmd_game_summary(self, msg: ChatMessage, game_name: str) -> None:
+        """
+        Commande !gs <game> - Summary (résumé) d'un jeu
+        
+        Version ULTRA-RAPIDE de !gi qui:
+        - Ne lit QUE le cache (pas d'appel API)
+        - Affiche uniquement: Nom + Année + Résumé
+        
+        Parfait pour le chat Twitch (instantané + léger).
+        Si le jeu n'est pas en cache, suggère d'utiliser !gi.
+        
+        Args:
+            msg: Message chat
+            game_name: Nom du jeu à rechercher
+        """
+        if not game_name.strip():
+            response_text = f"@{msg.user_login} Usage: !gs <game name>"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            return
+        
+        try:
+            start_total = time.perf_counter()
+            LOGGER.info(f"📝 Checking cache for game summary: {game_name}")
+            
+            # OPTIMISATION: Lecture cache UNIQUEMENT (pas d'API call)
+            game = None
+            
+            # 1. Check SQLite cache d'abord (plus rapide)
+            if hasattr(self.game_lookup, 'db') and self.game_lookup.db:
+                start_sqlite = time.perf_counter()
+                cached = self.game_lookup.db.get_cached_game(game_name.lower())
+                elapsed_sqlite_us = (time.perf_counter() - start_sqlite) * 1_000_000
+                
+                if cached and cached['confidence'] >= 0.90:
+                    # Cache hit! Reconstruire GameResult
+                    from backends.game_lookup_rust import GameResult
+                    game_data = cached['game_data']
+                    game = GameResult(
+                        name=game_data.get('name', 'Unknown'),
+                        year=game_data.get('year', '?'),
+                        summary=game_data.get('summary'),
+                        rating_rawg=game_data.get('rating_rawg', 0.0),
+                        metacritic=game_data.get('metacritic'),
+                        platforms=game_data.get('platforms', []),
+                        genres=game_data.get('genres', []),
+                        developers=game_data.get('developers', []),
+                        publishers=game_data.get('publishers', []),
+                        reliability_score=game_data.get('reliability_score', 0.0)
+                    )
+                    LOGGER.info(f"✅ Cache HIT (SQLite): {game.name} | ⏱️ {elapsed_sqlite_us:.1f}µs")
+                else:
+                    LOGGER.debug(f"⏭️ SQLite miss | ⏱️ {elapsed_sqlite_us:.1f}µs")
+            
+            # Cache miss: Suggérer !gi
+            if not game:
+                elapsed_total_us = (time.perf_counter() - start_total) * 1_000_000
+                response_text = (
+                    f"@{msg.user_login} ⚠️ '{game_name}' not in cache. "
+                    f"Use !gi {game_name} to search APIs first."
+                )
+                await self.bus.publish("chat.outbound", OutboundMessage(
+                    channel=msg.channel,
+                    channel_id=msg.channel_id,
+                    text=response_text,
+                    prefer="irc"
+                ))
+                LOGGER.info(f"⏭️ Cache MISS: {game_name} (suggest !gi) | ⏱️ Total: {elapsed_total_us:.1f}µs")
+                return
+            
+            # Format: Nom + Année + Summary uniquement
+            start_format = time.perf_counter()
+            summary = game.summary if game.summary else "No description available."
+            
+            # Nettoyer le summary si il commence par le nom du jeu (éviter doublon)
+            # Ex: "Cyberpunk 2077: Ultimate Edition is..." → "is..."
+            game_name_clean = game.name.lower().strip()
+            summary_clean = summary.strip()
+            
+            # Vérifier si le summary commence par le nom (ou une variante proche)
+            if summary_clean.lower().startswith(game_name_clean):
+                # Retirer le nom + "is/was/:" du début
+                summary = summary_clean[len(game_name_clean):].lstrip(' :-')
+                # Recapitaliser si nécessaire
+                if summary and summary[0].islower():
+                    summary = summary[0].upper() + summary[1:]
+            
+            # IRC limit: 512 bytes total (PRIVMSG #channel :text)
+            # Reserve ~100 bytes for IRC overhead, ~50 for username/emoji/name/year
+            # → Max summary: ~250 chars to be ULTRA safe
+            prefix = f"@{msg.user_login} 📝 {game.name} ({game.year}): "
+            available_length = 300 - len(prefix)  # Ultra safe IRC limit
+            
+            if len(summary) > available_length:
+                # Tronquer intelligemment (dernier point ou espace)
+                truncated = summary[:available_length]
+                last_dot = truncated.rfind('. ')
+                last_space = truncated.rfind(' ')
+                
+                if last_dot > available_length * 0.7:
+                    summary = truncated[:last_dot + 1]
+                elif last_space > available_length * 0.8:
+                    summary = truncated[:last_space] + "..."
+                else:
+                    summary = truncated + "..."
+            
+            response_text = f"{prefix}{summary}"
+            elapsed_format_us = (time.perf_counter() - start_format) * 1_000_000
+            
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            
+            elapsed_total_us = (time.perf_counter() - start_total) * 1_000_000
+            LOGGER.info(
+                f"✅ Game summary sent (cache): {game.name} | "
+                f"⏱️ Format: {elapsed_format_us:.1f}µs | Total: {elapsed_total_us:.1f}µs"
+            )
+            
+        except Exception as e:
+            LOGGER.error(f"❌ Error reading cache: {e}", exc_info=True)
+            response_text = f"@{msg.user_login} ❌ Error reading cache"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+    
+    async def _cmd_perf(self, msg: ChatMessage, args: str) -> None:
+        """
+        Commande !perf - Statistiques du cache de jeux (Mods/Broadcaster only)
+        
+        Affiche:
+        - Hit rate du cache
+        - Nombre d'entrées
+        - Jeu le plus populaire
+        """
+        # Vérifier permissions (mod ou broadcaster)
+        if not (msg.is_mod or msg.is_broadcaster):
+            return  # Silently ignore for non-mods
+        
+        if not self.game_lookup or not self.game_lookup.db:
+            response_text = f"@{msg.user_login} ❌ Database not available"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            return
+        
+        try:
+            # Get cache stats
+            stats = self.game_lookup.db.get_cache_stats()
+            
+            # Debug: log stats structure
+            LOGGER.debug(f"📊 Cache stats returned: {stats}")
+            
+            # Format response
+            response_text = (
+                f"@{msg.user_login} 📊 Cache: {stats['hit_rate']:.1f}% hit rate | "
+                f"{stats['count']} entries | "
+                f"Top: {stats['top_game']} ({stats['top_hits']} hits)"
+            )
+            
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            
+            LOGGER.info(f"📊 Cache stats sent to {msg.user_login}")
+            
+        except Exception as e:
+            LOGGER.error(f"❌ Error getting cache stats: {e}", exc_info=True)
+            response_text = f"@{msg.user_login} ❌ Error getting cache stats"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+    
+    async def _cmd_perftrace(self, msg: ChatMessage, args: str) -> None:
+        """
+        Commande !perftrace <game> - Trace performance détaillée (Broadcaster only)
+        
+        Effectue une recherche complète et sauvegarde un rapport microseconde
+        détaillé dans logs/perftrace_<timestamp>.txt
+        """
+        # Broadcaster only
+        if not msg.is_broadcaster:
+            return  # Silently ignore for non-broadcasters
+        
+        if not self.game_lookup:
+            response_text = f"@{msg.user_login} ❌ Game lookup not available"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            return
+        
+        if not args.strip():
+            response_text = f"@{msg.user_login} Usage: !perftrace <game name>"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            return
+        
+        try:
+            game_name = args.strip()
+            
+            # Clear previous traces
+            self.game_lookup.perf.clear()
+            
+            # Perform search with full tracing
+            LOGGER.info(f"🔬 Performance trace started for: {game_name}")
+            game = await self.game_lookup.search_game(game_name)
+            
+            # Get detailed report
+            report = self.game_lookup.perf.get_report()
+            
+            # Save to file
+            import os
+            os.makedirs("logs", exist_ok=True)
+            
+            timestamp = int(time.time())
+            filename = f"logs/perftrace_{timestamp}.txt"
+            
+            with open(filename, 'w') as f:
+                f.write(f"Performance Trace - {game_name}\n")
+                f.write(f"Timestamp: {timestamp}\n")
+                f.write(f"Result: {game.name if game else 'NOT FOUND'}\n")
+                f.write("=" * 60 + "\n\n")
+                f.write(report)
+                f.write("\n\n")
+                
+                # Add summary
+                summary = self.game_lookup.perf.get_summary()
+                f.write("SUMMARY:\n")
+                f.write(f"  Total duration: {summary['total_us']:.1f}µs\n")
+                f.write(f"  Operations: {summary['operation_count']}\n")
+                f.write(f"  Avg per operation: {summary['avg_us_per_operation']:.1f}µs\n")
+            
+            # Format summary for chat (just the key stats)
+            total_ms = summary['total_us'] / 1000
+            response_text = (
+                f"@{msg.user_login} 📊 Trace: {game.name if game else 'NOT FOUND'} | "
+                f"⏱️ {total_ms:.1f}ms total | "
+                f"{summary['operation_count']} ops | "
+                f"Saved to logs/"
+            )
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            
+            LOGGER.info(f"🔬 Performance trace saved: {filename}")
+            
+        except Exception as e:
+            LOGGER.error(f"❌ Error tracing performance: {e}", exc_info=True)
+            response_text = f"@{msg.user_login} ❌ Error tracing performance"
             await self.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,
                 channel_id=msg.channel_id,
@@ -444,12 +703,13 @@ class MessageHandler:
             if stream_info and stream_info.get("game_name"):
                 # Stream LIVE → Enrichir avec GameLookup
                 game_name = stream_info["game_name"]
+                game_id = stream_info.get("game_id")  # IGDB ID exact
                 viewer_count = stream_info.get("viewer_count", 0)
                 
-                # Enrichissement du jeu (IGDB name = source fiable)
-                if self.game_lookup:
-                    LOGGER.info(f"🎮 Enriching game from stream: {game_name}")
-                    game = await self.game_lookup.enrich_game_from_igdb_name(game_name)
+                # Enrichissement du jeu via IGDB ID (source de vérité)
+                if self.game_lookup and game_id:
+                    LOGGER.info(f"🎮 Enriching game from IGDB ID: {game_id} ({game_name})")
+                    game = await self.game_lookup.enrich_game_from_igdb_id(game_id)
                     
                     if game:
                         # Format COMPACT (sans confidence/sources pour gagner de l'espace)
@@ -801,286 +1061,8 @@ Réponds en te basant sur ces informations factuelles."""
             # Silent ignore en cas d'erreur
     
     # ============================================================
-    # QUANTUM COMMANDS
+    # ADMIN COMMANDS
     # ============================================================
-    
-    async def _cmd_qgame(self, msg: ChatMessage, game_name: str) -> None:
-        """
-        Commande !qgame <name> - Recherche quantique de jeux avec superposition
-        
-        Affiche multiple résultats numérotés (1-2-3) avec confiance quantique.
-        Users/Mods peuvent ensuite !collapse <name> <number> pour ancrer la vérité.
-        
-        Args:
-            msg: Message original
-            game_name: Nom du jeu à rechercher
-        """
-        if not self.game_cache:
-            response_text = f"@{msg.user_login} ❌ Quantum game cache not available"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            return
-        
-        if not game_name or len(game_name.strip()) == 0:
-            response_text = f"@{msg.user_login} 🔬 Usage: !qgame <game name>"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            return
-        
-        try:
-            LOGGER.info(f"🔬 Quantum game search from {msg.user_login}: {game_name}")
-            
-            # Recherche quantique (retourne liste de superpositions)
-            superpositions = await self.game_cache.search_quantum_game(
-                query=game_name,
-                observer=msg.user_login
-            )
-            
-            if not superpositions:
-                response_text = f"@{msg.user_login} ❌ Aucun jeu trouvé pour: {game_name}"
-                await self.bus.publish("chat.outbound", OutboundMessage(
-                    channel=msg.channel,
-                    channel_id=msg.channel_id,
-                    text=response_text,
-                    prefer="irc"
-                ))
-                return
-            
-            # Format response avec superpositions numérotées
-            if len(superpositions) == 1 and superpositions[0].get("collapsed"):
-                # État collapsed = vérité terrain confirmée
-                game = superpositions[0]["game"]
-                confirmations = superpositions[0].get("confirmations", 0)
-                
-                response_text = (
-                    f"@{msg.user_login} 🔒 {game['name']} ({game.get('year', '?')}) - "
-                    f"CONFIRMÉ ✅ ({confirmations} confirmations)"
-                )
-            else:
-                # Superposition active = multiple suggestions
-                response_parts = [f"@{msg.user_login} 🔬 Superposition pour '{game_name}':"]
-                
-                for sup in superpositions[:3]:  # Max 3 superpositions
-                    idx = sup["index"]
-                    game = sup["game"]
-                    conf = sup["confidence"]
-                    verified = sup["verified"]
-                    
-                    # Format game line
-                    game_line = f"{idx}. ⚛️ {game['name']}"
-                    if game.get("year"):
-                        game_line += f" ({game['year']})"
-                    
-                    # Add rating if available
-                    if game.get("metacritic"):
-                        game_line += f" - 🏆 {game['metacritic']}/100"
-                    elif game.get("rating_rawg"):
-                        game_line += f" - ⭐ {game['rating_rawg']:.1f}/5"
-                    
-                    game_line += f" (conf: {conf:.1f})"
-                    
-                    if verified:
-                        game_line += " ✅"
-                    
-                    response_parts.append(game_line)
-                
-                # Add collapse instruction
-                response_parts.append(f"→ !collapse {game_name} <number> pour confirmer")
-                
-                response_text = " | ".join(response_parts)
-            
-            # Truncate if too long
-            if len(response_text) > 500:
-                response_text = response_text[:497] + "..."
-            
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            LOGGER.info(f"✅ Quantum game response sent to {msg.user_login}")
-            
-        except Exception as e:
-            LOGGER.error(f"❌ Error processing !qgame: {e}", exc_info=True)
-            response_text = f"@{msg.user_login} ❌ Erreur recherche quantique"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-    
-    async def _cmd_collapse(self, msg: ChatMessage, args: str) -> None:
-        """
-        Commande !collapse <name> <number> - Ancrer vérité terrain (Mods/Admins only)
-        
-        Collapse la fonction d'onde quantique vers un état fixé.
-        Mods/Admins confirment quel jeu est le vrai parmi les superpositions.
-        
-        Args:
-            msg: Message original
-            args: "<game_name> <number>" (ex: "hades 1")
-        """
-        # Permission check: Mods/Admins only
-        if not (msg.is_mod or msg.is_broadcaster):
-            response_text = f"@{msg.user_login} ⚠️ !collapse réservé aux mods/admins"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            return
-        
-        if not self.game_cache:
-            response_text = f"@{msg.user_login} ❌ Quantum game cache not available"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            return
-        
-        if not args or len(args.strip()) == 0:
-            response_text = f"@{msg.user_login} 🔬 Usage: !collapse <game> <number>"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            return
-        
-        try:
-            # Parse args: "game name 1" → game_name="game name", number=1
-            parts = args.strip().rsplit(maxsplit=1)
-            
-            if len(parts) != 2:
-                response_text = f"@{msg.user_login} ❌ Format: !collapse <game> <number>"
-                await self.bus.publish("chat.outbound", OutboundMessage(
-                    channel=msg.channel,
-                    channel_id=msg.channel_id,
-                    text=response_text,
-                    prefer="irc"
-                ))
-                return
-            
-            game_name, number_str = parts
-            
-            try:
-                number = int(number_str)
-            except ValueError:
-                response_text = f"@{msg.user_login} ❌ Le nombre doit être 1, 2 ou 3"
-                await self.bus.publish("chat.outbound", OutboundMessage(
-                    channel=msg.channel,
-                    channel_id=msg.channel_id,
-                    text=response_text,
-                    prefer="irc"
-                ))
-                return
-            
-            LOGGER.info(f"💥 Quantum collapse from {msg.user_login}: {game_name} → {number}")
-            
-            # Collapse quantum state
-            collapsed_game = self.game_cache.collapse_game(
-                query=game_name,
-                observer=msg.user_login,
-                state_index=number
-            )
-            
-            if collapsed_game:
-                response_text = (
-                    f"💥 @{msg.user_login} a fait collapse '{game_name}' → "
-                    f"{collapsed_game['name']} ({collapsed_game.get('year', '?')}) ✅ État figé !"
-                )
-            else:
-                response_text = (
-                    f"@{msg.user_login} ❌ Impossible de collapse '{game_name}' "
-                    f"(état inexistant ou index invalide)"
-                )
-            
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            LOGGER.info(f"✅ Collapse response sent to {msg.user_login}")
-            
-        except Exception as e:
-            LOGGER.error(f"❌ Error processing !collapse: {e}", exc_info=True)
-            response_text = f"@{msg.user_login} ❌ Erreur collapse quantique"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-    
-    async def _cmd_quantum(self, msg: ChatMessage) -> None:
-        """
-        Commande !quantum - Stats système quantique multi-domain
-        
-        Aggregate stats de TOUS les domaines quantiques:
-        - GAME: Jeux en cache quantum
-        - MUSIC: Tracks en cache quantum (POC)
-        
-        Future: CLIPS, VODS, etc.
-        """
-        try:
-            LOGGER.info(f"🔬 Quantum stats request from {msg.user_login}")
-            
-            stats_parts = [f"@{msg.user_login} 🔬 Système Quantique"]
-            
-            # Game stats
-            if self.game_cache:
-                game_stats = self.game_cache.get_quantum_stats()
-                game_part = (
-                    f"GAME: {game_stats['total_games']} jeux | "
-                    f"{game_stats['superpositions_active']} superpositions | "
-                    f"{game_stats['verified_percentage']:.0f}% verified"
-                )
-                stats_parts.append(game_part)
-            
-            # Music stats (POC)
-            if self.music_cache:
-                music_stats = self.music_cache.get_quantum_stats()
-                music_part = (
-                    f"MUSIC: {music_stats['total_tracks']} tracks | "
-                    f"{music_stats['superpositions_active']} superpositions | "
-                    f"{music_stats['verified_percentage']:.0f}% verified"
-                )
-                stats_parts.append(music_part)
-            
-            response_text = " | ".join(stats_parts)
-            
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            LOGGER.info(f"✅ Quantum stats sent to {msg.user_login}")
-            
-        except Exception as e:
-            LOGGER.error(f"❌ Error processing !quantum: {e}", exc_info=True)
-            response_text = f"@{msg.user_login} ❌ Erreur stats quantiques"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
     
     async def _cmd_decoherence(self, msg: ChatMessage, args: str = "") -> None:
         """
@@ -1129,12 +1111,7 @@ Réponds en te basant sur ces informations factuelles."""
         
         cleanup_parts = [f"@{msg.user_login} 💨 Décohérence globale"]
         
-        # Cleanup game cache
-        if self.game_cache:
-            game_evaporated = self.game_cache.cleanup_expired()
-            cleanup_parts.append(f"GAME: {game_evaporated} évaporés")
-        
-        # Cleanup music cache
+        # Cleanup music cache only (game cache is now SQLite-only, no expiry)
         if self.music_cache:
             music_evaporated = self.music_cache.cleanup_expired()
             cleanup_parts.append(f"MUSIC: {music_evaporated} évaporés")
@@ -1169,20 +1146,42 @@ Réponds en te basant sur ces informations factuelles."""
         deleted_count = 0
         failed_names = []
         
-        # Try to delete from game cache
-        if self.game_cache:
-            for name in name_list:
-                cache_key = f"game:{name.lower().strip()}"
-                if cache_key in self.game_cache.quantum_states:
-                    del self.game_cache.quantum_states[cache_key]
-                    deleted_count += 1
-                    LOGGER.info(f"💨 Deleted quantum state: {cache_key}")
-                else:
-                    failed_names.append(name)
+        # Delete from BOTH caches (SQLite + Quantum)
+        for name in name_list:
+            name_lower = name.lower().strip()
+            deleted_any = False
             
-            # Save cache after deletions
-            if deleted_count > 0:
-                self.game_cache._save_cache()
+            # 1. Delete from SQLite cache (via Rust engine or Python fallback)
+            if hasattr(self, 'game_lookup') and self.game_lookup:
+                try:
+                    # Try Rust engine cleanup first
+                    if hasattr(self.game_lookup, '_engine'):
+                        # Note: Rust engine doesn't have delete by name yet
+                        # Fallback to Python DatabaseManager
+                        pass
+                    
+                    # Use Python fallback's DatabaseManager
+                    if hasattr(self.game_lookup, '_python_lookup') and self.game_lookup._python_lookup:
+                        db = self.game_lookup._python_lookup.db
+                        if db:
+                            # Check if exists first
+                            cached = db.get_cached_game(name_lower)
+                            if cached:
+                                # Delete from SQLite using proper connection context
+                                with db._get_connection() as conn:
+                                    conn.execute(
+                                        "DELETE FROM game_cache WHERE query = ?",
+                                        (name_lower,)
+                                    )
+                                deleted_any = True
+                                LOGGER.info(f"💨 Deleted from SQLite: {name_lower}")
+                except Exception as e:
+                    LOGGER.error(f"❌ Error deleting from SQLite: {e}")
+            
+            if deleted_any:
+                deleted_count += 1
+            else:
+                failed_names.append(name)
         
         # Build response
         if deleted_count > 0:

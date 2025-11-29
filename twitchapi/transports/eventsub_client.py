@@ -22,6 +22,7 @@ import logging
 from typing import Dict, List, Optional
 
 from twitchAPI.twitch import Twitch
+from twitchAPI.type import AuthType
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.object.eventsub import StreamOnlineEvent, StreamOfflineEvent
 
@@ -103,6 +104,47 @@ class EventSubClient:
         
         LOGGER.info(f"🔌 EventSubClient initialized for {len(channels)} channels")
     
+    async def _cleanup_old_subscriptions(self):
+        """
+        🧹 Auto-cleanup: Supprime les anciennes subscriptions EventSub orphelines.
+        
+        Prévient l'erreur "total cost exceeded" en nettoyant les subscriptions
+        des sessions précédentes qui n'ont pas été fermées proprement.
+        """
+        try:
+            LOGGER.info("🧹 Cleaning up old EventSub subscriptions...")
+            
+            # Lister toutes les subscriptions EventSub actives
+            # IMPORTANT: target_token=USER pour les WebSocket subscriptions
+            # (APP est pour les webhook subscriptions)
+            subscriptions = []
+            result = await self.twitch.get_eventsub_subscriptions(target_token=AuthType.USER)
+            async for sub in result:
+                subscriptions.append(sub)
+            
+            if not subscriptions:
+                LOGGER.info("✅ No old subscriptions to clean")
+                return
+            
+            LOGGER.info(f"🔍 Found {len(subscriptions)} existing subscriptions, deleting...")
+            
+            # Supprimer toutes les subscriptions
+            deleted_count = 0
+            for sub in subscriptions:
+                try:
+                    # Log détaillé pour debug
+                    LOGGER.info(f"🔍 Sub {sub.id[:8]}...: type={sub.type}, status={sub.status}, transport={sub.transport.method if hasattr(sub.transport, 'method') else 'N/A'}")
+                    await self.twitch.delete_eventsub_subscription(sub.id)
+                    deleted_count += 1
+                    LOGGER.debug(f"🗑️  Deleted: {sub.type} (cost: {sub.cost})")
+                except Exception as e:
+                    LOGGER.warning(f"⚠️  Failed to delete subscription {sub.id}: {e}")
+            
+            LOGGER.info(f"✅ Cleanup complete: {deleted_count}/{len(subscriptions)} subscriptions deleted")
+            
+        except Exception as e:
+            LOGGER.warning(f"⚠️  EventSub cleanup failed (non-critical): {e}")
+    
     async def start(self):
         """
         Démarre EventSub WebSocket et subscribe aux événements stream.
@@ -127,6 +169,10 @@ class EventSubClient:
             # IMPORTANT: Start EventSub AVANT de subscribe (NOTE: start() is NOT async!)
             self.eventsub.start()
             LOGGER.info("✅ EventSub WebSocket connected")
+            
+            # Note: Les anciennes subscriptions WebSocket sont auto-nettoyées par Twitch
+            # quand la connexion se ferme, mais il peut y avoir un délai (jusqu'à 10min).
+            # On laisse le système de retry gérer les erreurs "cost exceeded" temporaires.
             
             # Créer toutes les tasks de subscription (parallélisation pour speed!)
             subscription_tasks = []

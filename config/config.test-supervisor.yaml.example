@@ -1,0 +1,62 @@
+apis:
+  igdb_client_id: "YOUR_IGDB_CLIENT_ID"
+  igdb_client_secret: "YOUR_IGDB_CLIENT_SECRET"
+  openai_key: "YOUR_OPENAI_KEY"
+  rawg_key: "YOUR_RAWG_KEY"
+  steam_api_key: "YOUR_STEAM_API_KEY"
+  timeout: 10.0
+
+timeouts:
+  irc_send: 5.0
+  helix_request: 8.0
+  llm_inference: 30.0
+
+bot:
+  cooldown: 5
+  debug: true
+  name: serda_bot
+  personality: |
+    Test bot personality
+
+cache:
+  max_size: 1000
+  ttl_seconds: 3600
+
+commands:
+  cooldowns:
+    ask: 10.0
+    joke: 10.0
+    mention: 15.0
+    translate: 5.0
+    game_current: 5.0
+    game_info: 5.0
+    wiki: 5.0
+
+wikipedia:
+  lang: fr
+
+twitch:
+  # ✅ TEST CONFIG - Replace with your test channel
+  channels:
+    - your_test_channel
+  
+  prefix: '!'
+  client_id: "YOUR_TWITCH_CLIENT_ID"
+  client_secret: "YOUR_TWITCH_CLIENT_SECRET"
+  tokens:
+    your_bot_account:
+      user_id: "YOUR_BOT_USER_ID"
+      access_token: "YOUR_BOT_ACCESS_TOKEN"
+      refresh_token: "YOUR_BOT_REFRESH_TOKEN"
+    your_test_channel:
+      user_id: "YOUR_CHANNEL_USER_ID"
+      access_token: "YOUR_CHANNEL_ACCESS_TOKEN"
+      refresh_token: "YOUR_CHANNEL_REFRESH_TOKEN"
+
+announcements:
+  monitoring:
+    enabled: false  # Désactivé pour test
+  stream_online:
+    enabled: false
+  stream_offline:
+    enabled: false
