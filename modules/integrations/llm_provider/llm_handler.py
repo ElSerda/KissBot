@@ -5,8 +5,8 @@ Wrapper simple autour de l'intelligence/ existante pour MessageHandler
 """
 import logging
 from typing import Optional, Dict
-from intelligence.neural_pathway_manager import NeuralPathwayManager
-from intelligence.core import process_llm_request
+from modules.intelligence.neural_pathway_manager import NeuralPathwayManager
+from modules.intelligence.core import process_llm_request
 
 
 LOGGER = logging.getLogger(__name__)
