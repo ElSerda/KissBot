@@ -11,11 +11,11 @@ from typing import Any, Dict, Optional
 from core.message_bus import MessageBus
 from core.message_types import ChatMessage, OutboundMessage
 from core.registry import Registry
-from backends.game_lookup_rust import get_game_lookup
-from backends.music_cache import MusicCache
-from backends.llm_handler import LLMHandler
-from backends.translator import get_translator, get_dev_whitelist
-from intelligence.core import extract_mention_message
+from modules.integrations.game_engine.rust_wrapper import get_game_lookup
+from modules.integrations.music.music_cache import MusicCache
+from modules.integrations.llm_provider.llm_handler import LLMHandler
+from modules.integrations.translator.translator import get_translator, get_dev_whitelist
+from modules.intelligence.core import extract_mention_message
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -458,7 +458,7 @@ class MessageHandler:
                 
                 if cached and cached['confidence'] >= 0.90:
                     # Cache hit! Reconstruire GameResult
-                    from backends.game_lookup_rust import GameResult
+                    from modules.integrations.game_engine.rust_wrapper import GameResult
                     game_data = cached['game_data']
                     game = GameResult(
                         name=game_data.get('name', 'Unknown'),
@@ -857,7 +857,7 @@ class MessageHandler:
             # 🔥 RAG: Tentative Wikipedia pour contexte factuel (best-effort)
             wiki_context = None
             try:
-                from backends.wikipedia_handler import search_wikipedia
+                from modules.integrations.wikipedia.wikipedia_handler import search_wikipedia
                 
                 LOGGER.debug(f"🔍 Attempting Wikipedia lookup for RAG: {question[:30]}...")
                 wiki_context = await asyncio.wait_for(
@@ -1013,7 +1013,7 @@ Réponds en te basant sur ces informations factuelles."""
             args: Nom de la personne (optionnel)
         """
         try:
-            from commands.user_commands.kissanniv import cmd_kissanniv
+            from modules.classic_commands.user_commands.kissanniv import cmd_kissanniv
             await cmd_kissanniv(self.bus, msg, args)
         except Exception as e:
             LOGGER.error(f"❌ Error processing !kissanniv: {e}", exc_info=True)
@@ -1034,7 +1034,7 @@ Réponds en te basant sur ces informations factuelles."""
             name: Nom de la personne
         """
         try:
-            from commands.user_commands.anniv import cmd_anniv
+            from modules.classic_commands.user_commands.anniv import cmd_anniv
             await cmd_anniv(msg, name, self.bus, self.config)
         except Exception as e:
             LOGGER.error(f"❌ Error processing !anniv: {e}", exc_info=True)
@@ -1077,7 +1077,7 @@ Réponds en te basant sur ces informations factuelles."""
             # Appeler le LLM avec context="mention"
             # Note: LLMHandler.ask() utilise context="ask" par défaut
             # Pour context="mention", on doit appeler process_llm_request directement
-            from intelligence.core import process_llm_request
+            from modules.intelligence.core import process_llm_request
             
             llm_response = await process_llm_request(
                 llm_handler=self.llm_handler.neural_pathway,
@@ -1266,7 +1266,7 @@ Réponds en te basant sur ces informations factuelles."""
         - Cooldown 5 minutes global
         - Max 500 caractères
         """
-        from commands.bot_commands.broadcast import cmd_kisscharity
+        from modules.classic_commands.bot_commands.broadcast import cmd_kisscharity
         
         # Check si IRC client est disponible
         if not self.irc_client:

@@ -127,7 +127,7 @@ class GameInfoHandler:
     async def search_game_info(self, game_name: str) -> tuple[bool, str]:
         """See docs/api/handlers.md"""
         try:
-            from backends.game_lookup import GameLookup
+            from modules.integrations.game_engine.python_fallback import GameLookup
 
             game_lookup = GameLookup(self.config)
             result = await game_lookup.search_game(game_name)

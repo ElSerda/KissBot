@@ -517,7 +517,7 @@ async def main():
     message_handler = MessageHandler(bus, config)
     
     # Configure MessageBus pour game_lookup_rust (métriques)
-    from backends.game_lookup_rust import set_message_bus
+    from modules.integrations.game_engine.rust_wrapper import set_message_bus
     set_message_bus(bus)
     
     # Outbound Logger (DISABLED - real IRC send enabled)
