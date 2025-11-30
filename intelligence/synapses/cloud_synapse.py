@@ -242,8 +242,13 @@ class CloudSynapse:
                 )
             else:
                 system_prompt = (
-                    f"Tu es {bot_name}, bot Twitch gaming. "
-                    f"Réponds directement, sans filtre, avec ton expertise. Max 200 caractères."
+                    f"Tu es {bot_name}, bot Twitch gaming expert et pédagogue. "
+                    f"Pour les questions (!ask), réponds de manière DÉTAILLÉE et COMPLÈTE :\n"
+                    f"- Explique le contexte et les enjeux\n"
+                    f"- Donne des exemples concrets si pertinent\n"
+                    f"- Ton accessible mais précis, style vulgarisation scientifique\n"
+                    f"- Si théorie du complot : démonte avec FACTS, mais reste sympa\n"
+                    f"Max 250 caractères. Sois instructif ET engageant."
                 )
         else:
             if use_personality_mention:
@@ -277,12 +282,14 @@ class CloudSynapse:
         inference_config = llm_config.get("inference", {})
         cloud_config = inference_config.get("cloud", {})
         
+        # context == "ask" ou stimulus_class == "gen_long" → réponse détaillée
         if context == "ask":
+            max_tokens = cloud_config.get("max_tokens_long", 150)
+            temperature = cloud_config.get("temperature_long", 0.8)
+        else:
+            # gen_short ou mention standard
             max_tokens = cloud_config.get("max_tokens_short", 90)
             temperature = cloud_config.get("temperature_short", 0.4)
-        else:
-            max_tokens = cloud_config.get("max_tokens_long", 60)
-            temperature = cloud_config.get("temperature_long", 0.8)
 
         payload = {
             "model": self.model,

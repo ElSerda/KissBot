@@ -26,7 +26,7 @@ async def main():
     token_data = db.get_tokens(user['id'], token_type='bot')
     
     print(f"Current token expires: {token_data['expires_at']}")
-    print(f"Refresh token: {token_data['refresh_token'][:20]}...")
+    print(f"Refresh token: [REDACTED]")
     
     # Try to refresh
     twitch = await Twitch(client_id, client_secret)
@@ -42,8 +42,8 @@ async def main():
         )
         
         print(f"\n✅ Token refreshed successfully!")
-        print(f"New access token: {new_access[:20]}...")
-        print(f"New refresh token: {new_refresh[:20]}...")
+        print(f"New access token: [REDACTED]")
+        print(f"New refresh token: [REDACTED]")
         
         # Save to DB
         db.store_tokens(

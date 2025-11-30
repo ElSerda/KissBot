@@ -81,11 +81,15 @@ class ReflexCenter:
         stimulus_class: str = "gen_short",
         correlation_id: str = "",
     ) -> str | None:
-        """🔥 RÉFLEXE NEURAL INSTANTANÉ"""
+        """🔥 RÉFLEXE NEURAL INSTANTANÉ (ping uniquement)"""
         start_time = time.time()
 
         # Classification stimulus pour pattern optimal
         pattern_key = self._classify_for_pattern(stimulus, context, stimulus_class)
+        
+        # Si pas de pattern reflex, retourner None (passe à GPT)
+        if pattern_key is None:
+            return None
 
         # Sélection réponse contextuelle
         response = self._select_contextual_response(pattern_key, stimulus)
@@ -97,21 +101,18 @@ class ReflexCenter:
         self.logger.info(f"🛡️⚡ [{correlation_id}] Reflex {pattern_key} - {latency*1000:.1f}ms")
         return response
 
-    def _classify_for_pattern(self, stimulus: str, context: str, stimulus_class: str) -> str:
-        """🎯 CLASSIFICATION POUR PATTERN RÉFLEXE (3 classes)"""
+    def _classify_for_pattern(self, stimulus: str, context: str, stimulus_class: str) -> str | None:
+        """🎯 CLASSIFICATION POUR PATTERN RÉFLEXE (ping uniquement)"""
         stimulus_lower = stimulus.lower()
 
-        # Classification prioritaire par context/stimulus_class
+        # Reflex uniquement pour ping/test (patterns triviaux)
         if stimulus_class == "ping" or any(
             word in stimulus_lower for word in ["ping", "test", "alive", "ça va"]
         ):
             return "ping"
-        elif stimulus_class == "gen_long" or context == "ask":
-            return "gen_long"
-        elif stimulus_class == "gen_short":
-            return "gen_short"
-        else:
-            return "error"  # Fallback général
+        
+        # Tout le reste passe à GPT (gen_short, gen_long, etc.)
+        return None
 
     def _select_contextual_response(self, pattern_key: str, stimulus: str) -> str:
         """🎭 SÉLECTION RÉPONSE CONTEXTUELLE"""

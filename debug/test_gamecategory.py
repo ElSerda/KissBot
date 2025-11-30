@@ -111,7 +111,7 @@ async def test_real_twitch_api():
                 
                 token_data = await resp.json()
                 access_token = token_data.get("access_token")
-                print(f"✅ Token obtenu: {access_token[:20]}...")
+                print(f"✅ Token obtenu: [REDACTED]")
             
             # 2. Get stream info
             broadcaster_name = "elserda"  # Change ça pour tester
