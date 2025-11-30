@@ -62,6 +62,9 @@ class IRCClient:
         self._channel_permissions = {}   # channel -> {is_mod, is_vip, rate_limit, safe_delay}
         self._vip_status_cache = {}      # Glue code: Cache VIP status (pyTwitchAPI only caches mod/sub)
         
+        # Keepalive task (prevent silent IRC disconnects)
+        self._keepalive_task: Optional[asyncio.Task] = None
+        
         # Subscribe aux messages sortants
         self.bus.subscribe("chat.outbound", self._handle_outbound_message)
         
@@ -120,6 +123,9 @@ class IRCClient:
             self.chat.start()
             self._running = True
             
+            # Démarrer le keepalive
+            self._keepalive_task = asyncio.create_task(self._keepalive_loop())
+            
             LOGGER.info("✅ IRC Client démarré")
             
         except Exception as e:
@@ -132,6 +138,15 @@ class IRCClient:
             return
         
         LOGGER.info("🛑 Arrêt IRC Client...")
+        
+        # Arrêter le keepalive
+        if self._keepalive_task:
+            self._keepalive_task.cancel()
+            try:
+                await self._keepalive_task
+            except asyncio.CancelledError:
+                pass
+            self._keepalive_task = None
         
         if self.chat:
             self.chat.stop()
@@ -493,3 +508,31 @@ class IRCClient:
         LOGGER.info(f"📊 Broadcast terminé: {success_count}/{len(target_channels)} envoyés")
         
         return (success_count, len(target_channels))
+    
+    async def _keepalive_loop(self):
+        """
+        Keepalive IRC : envoie un PING toutes les 4 minutes pour éviter
+        les silent disconnects (Twitch timeout = 5 min).
+        """
+        LOGGER.info("💓 IRC Keepalive démarré (ping toutes les 4 min)")
+        
+        while self._running:
+            try:
+                await asyncio.sleep(240)  # 4 minutes
+                
+                if self.chat and self.chat._running:
+                    # Ping via le WebSocket interne de pyTwitchAPI
+                    # pyTwitchAPI gère le PONG automatiquement
+                    try:
+                        await self.chat._connection.ping()
+                        LOGGER.debug("💓 IRC keepalive ping sent")
+                    except Exception as e:
+                        LOGGER.warning(f"⚠️ Keepalive ping failed: {e}")
+                        # Le prochain ping tentera à nouveau
+                        
+            except asyncio.CancelledError:
+                LOGGER.info("🛑 IRC Keepalive arrêté")
+                break
+            except Exception as e:
+                LOGGER.error(f"❌ Erreur keepalive loop: {e}")
+                await asyncio.sleep(60)  # Retry dans 1 min si erreur
