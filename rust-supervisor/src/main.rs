@@ -1,5 +1,5 @@
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use signal_hook::consts::signal::*;
 use signal_hook_tokio::Signals;
 use std::collections::HashMap;
@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use tokio::process::{Child, Command};
 use tokio::sync::RwLock;
 use tokio::time::sleep;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tracing::{error, info, warn};
 use futures::StreamExt;
 
@@ -578,7 +579,185 @@ impl Supervisor {
         Ok(())
     }
 
-    async fn run(&self) -> Result<()> {
+    async fn interactive_cli(&self) -> Result<()> {
+        println!();
+        println!("{}", "=".repeat(90));
+        println!("KissBot Supervisor (Rust) - Interactive CLI");
+        println!("{}", "=".repeat(90));
+        println!("Commands:");
+        println!("  status              - Show status of all processes");
+        println!("  start <channel>     - Start a specific bot");
+        println!("  stop <channel>      - Stop a specific bot");
+        println!("  restart <channel>   - Restart a specific bot");
+        println!("  start-all           - Start all processes (Hub + Bots)");
+        println!("  stop-all            - Stop all processes");
+        println!("  restart-all         - Restart all processes");
+        println!("  hub-status          - Show Hub status");
+        println!("  hub-restart         - Restart EventSub Hub");
+        println!("  quit / exit         - Stop all and exit");
+        println!("{}", "=".repeat(90));
+        println!();
+
+        let stdin = BufReader::new(tokio::io::stdin());
+        let mut lines = stdin.lines();
+
+        while *self.running.read().await {
+            // Print prompt
+            print!("supervisor> ");
+            use std::io::Write;
+            std::io::stdout().flush().ok();
+
+            // Read line (blocking until input - CLI waits for user)
+            let line = match lines.next_line().await {
+                Ok(Some(line)) => line,
+                Ok(None) => break, // EOF (Ctrl+D)
+                Err(e) => {
+                    error!("❌ Input error: {}", e);
+                    continue;
+                }
+            };
+
+            let cmd = line.trim().to_lowercase();
+            
+            if cmd.is_empty() {
+                continue;
+            }
+
+            match cmd.as_str() {
+                "quit" | "exit" => {
+                    println!("👋 Shutting down...");
+                    *self.running.write().await = false;
+                    break;
+                }
+
+                "status" => {
+                    self.print_status().await;
+                }
+
+                "start-all" => {
+                    if let Err(e) = self.start_all().await {
+                        println!("❌ Error starting all: {}", e);
+                    } else {
+                        println!("✅ All processes started");
+                    }
+                }
+
+                "stop-all" => {
+                    if let Err(e) = self.stop_all().await {
+                        println!("❌ Error stopping all: {}", e);
+                    } else {
+                        println!("✅ All processes stopped");
+                    }
+                }
+
+                "restart-all" => {
+                    println!("🔄 Restarting all...");
+                    if let Err(e) = self.stop_all().await {
+                        println!("❌ Error stopping: {}", e);
+                    }
+                    sleep(Duration::from_secs(2)).await;
+                    if let Err(e) = self.start_all().await {
+                        println!("❌ Error starting: {}", e);
+                    } else {
+                        println!("✅ All processes restarted");
+                    }
+                }
+
+                "hub-status" => {
+                    let mut hub = self.hub.write().await;
+                    if let Some(ref mut h) = *hub {
+                        let status = if h.is_running() { "🟢 RUNNING" } else { "🔴 STOPPED" };
+                        let pid = h.pid().map(|p| p.to_string()).unwrap_or_else(|| "N/A".to_string());
+                        let uptime = h.uptime().map(|d| format!("{}s", d.as_secs())).unwrap_or_else(|| "N/A".to_string());
+                        
+                        println!();
+                        println!("🌐 EventSub Hub Status:");
+                        println!("  Status: {}", status);
+                        println!("  PID: {}", pid);
+                        println!("  Uptime: {}", uptime);
+                        println!("  Restarts: {}", h.restart_count);
+                        println!("  Socket: {}", self.config.hub_socket.display());
+                        println!();
+                    } else {
+                        println!("❌ EventSub Hub not enabled");
+                    }
+                }
+
+                "hub-restart" => {
+                    let mut hub = self.hub.write().await;
+                    if let Some(ref mut h) = *hub {
+                        println!("🔄 Restarting EventSub Hub...");
+                        if let Err(e) = h.restart().await {
+                            println!("❌ Error: {}", e);
+                        } else {
+                            println!("✅ Hub restarted");
+                        }
+                    } else {
+                        println!("❌ EventSub Hub not enabled");
+                    }
+                }
+
+                _ if cmd.starts_with("start ") => {
+                    let channel = cmd.strip_prefix("start ").unwrap().trim();
+                    let mut bots = self.bots.write().await;
+                    
+                    if let Some(bot) = bots.get_mut(channel) {
+                        if bot.is_running() {
+                            println!("⚠️  {} already running (PID {})", channel, bot.pid().unwrap_or(0));
+                        } else {
+                            match bot.start().await {
+                                Ok(true) => println!("✅ {} started (PID {})", channel, bot.pid().unwrap_or(0)),
+                                _ => println!("❌ {} failed to start", channel),
+                            }
+                        }
+                    } else {
+                        println!("❌ Channel '{}' not found", channel);
+                    }
+                }
+
+                _ if cmd.starts_with("stop ") => {
+                    let channel = cmd.strip_prefix("stop ").unwrap().trim();
+                    let mut bots = self.bots.write().await;
+                    
+                    if let Some(bot) = bots.get_mut(channel) {
+                        if !bot.is_running() {
+                            println!("⚠️  {} not running", channel);
+                        } else {
+                            let pid = bot.pid().unwrap_or(0);
+                            let _ = bot.stop(10).await;
+                            println!("✅ {} stopped (was PID {})", channel, pid);
+                        }
+                    } else {
+                        println!("❌ Channel '{}' not found", channel);
+                    }
+                }
+
+                _ if cmd.starts_with("restart ") => {
+                    let channel = cmd.strip_prefix("restart ").unwrap().trim();
+                    let mut bots = self.bots.write().await;
+                    
+                    if let Some(bot) = bots.get_mut(channel) {
+                        println!("🔄 Restarting {}...", channel);
+                        if let Err(e) = bot.restart().await {
+                            println!("❌ Error: {}", e);
+                        } else {
+                            println!("✅ {} restarted (PID {})", channel, bot.pid().unwrap_or(0));
+                        }
+                    } else {
+                        println!("❌ Channel '{}' not found", channel);
+                    }
+                }
+
+                _ => {
+                    println!("❓ Unknown command: '{}'. Type 'status' for help.", cmd);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn run(&self, interactive: bool) -> Result<()> {
         // Start all processes
         self.start_all().await?;
 
@@ -596,8 +775,51 @@ impl Supervisor {
             }
         });
 
-        // Run health check loop
-        self.health_check_loop().await?;
+        // Spawn command listener in background (for kissbot.sh compatibility)
+        let bots = Arc::clone(&self.bots);
+        let running = Arc::clone(&self.running);
+        tokio::spawn(async move {
+            let cmd_file = PathBuf::from("pids/supervisor.cmd");
+            let result_file = PathBuf::from("pids/supervisor.result");
+            
+            info!("📡 Command listener started");
+            
+            while *running.read().await {
+                if cmd_file.exists() {
+                    match tokio::fs::read_to_string(&cmd_file).await {
+                        Ok(cmd) => {
+                            let cmd = cmd.trim();
+                            info!("📨 Received command: {}", cmd);
+                            
+                            let _ = tokio::fs::remove_file(&cmd_file).await;
+                            
+                            let result = execute_cmd(&cmd, &bots).await;
+                            
+                            if let Err(e) = tokio::fs::write(&result_file, &result).await {
+                                error!("❌ Failed to write result file: {}", e);
+                            } else {
+                                info!("📤 Command result: {}", result);
+                            }
+                        }
+                        Err(e) => {
+                            error!("❌ Failed to read command file: {}", e);
+                            let _ = tokio::fs::remove_file(&cmd_file).await;
+                        }
+                    }
+                }
+                
+                sleep(Duration::from_millis(100)).await;
+            }
+        });
+
+        // Run interactive CLI or health check loop
+        if interactive {
+            // Interactive mode: CLI takes over
+            self.interactive_cli().await?;
+        } else {
+            // Daemon mode: just health checks
+            self.health_check_loop().await?;
+        }
 
         // Cleanup
         info!("🧹 Cleaning up...");
@@ -605,6 +827,119 @@ impl Supervisor {
         info!("✅ Supervisor stopped");
 
         Ok(())
+    }
+}
+
+// ============================================================================
+// Command Execution Helper
+// ============================================================================
+
+async fn execute_cmd(cmd: &str, bots: &Arc<RwLock<HashMap<String, BotProcess>>>) -> String {
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    
+    if parts.is_empty() {
+        return "ERROR: Empty command".to_string();
+    }
+    
+    match parts[0] {
+        "start" => {
+            if parts.len() < 2 {
+                return "ERROR: Usage: start <channel>".to_string();
+            }
+            
+            let channel = parts[1];
+            let mut bots = bots.write().await;
+            
+            if let Some(bot) = bots.get_mut(channel) {
+                if bot.is_running() {
+                    let pid = bot.pid().unwrap_or(0);
+                    format!("ERROR: {} already running (PID {})", channel, pid)
+                } else {
+                    match bot.start().await {
+                        Ok(true) => {
+                            sleep(Duration::from_secs(1)).await;
+                            if bot.is_running() {
+                                let pid = bot.pid().unwrap_or(0);
+                                format!("SUCCESS: {} started (PID {})", channel, pid)
+                            } else {
+                                format!("ERROR: {} failed to start", channel)
+                            }
+                        }
+                        _ => format!("ERROR: {} failed to start", channel),
+                    }
+                }
+            } else {
+                format!("ERROR: Channel '{}' not found", channel)
+            }
+        }
+        
+        "stop" => {
+            if parts.len() < 2 {
+                return "ERROR: Usage: stop <channel>".to_string();
+            }
+            
+            let channel = parts[1];
+            let mut bots = bots.write().await;
+            
+            if let Some(bot) = bots.get_mut(channel) {
+                if !bot.is_running() {
+                    format!("ERROR: {} not running", channel)
+                } else {
+                    let old_pid = bot.pid().unwrap_or(0);
+                    let _ = bot.stop(10).await;
+                    sleep(Duration::from_millis(500)).await;
+                    
+                    if !bot.is_running() {
+                        format!("SUCCESS: {} stopped (was PID {})", channel, old_pid)
+                    } else {
+                        format!("ERROR: {} failed to stop", channel)
+                    }
+                }
+            } else {
+                format!("ERROR: Channel '{}' not found", channel)
+            }
+        }
+        
+        "restart" => {
+            if parts.len() < 2 {
+                return "ERROR: Usage: restart <channel>".to_string();
+            }
+            
+            let channel = parts[1];
+            let mut bots = bots.write().await;
+            
+            if let Some(bot) = bots.get_mut(channel) {
+                match bot.restart().await {
+                    Ok(_) => {
+                        sleep(Duration::from_secs(1)).await;
+                        if bot.is_running() {
+                            let pid = bot.pid().unwrap_or(0);
+                            format!("SUCCESS: {} restarted (PID {})", channel, pid)
+                        } else {
+                            format!("ERROR: {} failed to restart", channel)
+                        }
+                    }
+                    Err(e) => format!("ERROR: {} failed to restart: {}", channel, e),
+                }
+            } else {
+                format!("ERROR: Channel '{}' not found", channel)
+            }
+        }
+        
+        "status" => {
+            let mut bots = bots.write().await;
+            let mut statuses = Vec::new();
+            
+            for (channel, bot) in bots.iter_mut() {
+                let status = if bot.is_running() { "RUNNING" } else { "STOPPED" };
+                let pid = bot.pid().map(|p| p.to_string()).unwrap_or_else(|| "N/A".to_string());
+                statuses.push(format!("{}:{}:{}", channel, status, pid));
+            }
+            
+            format!("SUCCESS: {}", statuses.join(" | "))
+        }
+        
+        _ => format!("ERROR: Unknown command '{}'", parts[0]),
     }
 }
 
@@ -630,6 +965,7 @@ async fn main() -> Result<()> {
     let mut db_path = PathBuf::from("kissbot.db");
     let mut enable_hub = false;
     let mut hub_socket = PathBuf::from("/tmp/kissbot_hub.sock");
+    let mut interactive = false;
 
     // Simple arg parsing
     let mut i = 1;
@@ -655,6 +991,10 @@ async fn main() -> Result<()> {
                 hub_socket = PathBuf::from(&args[i + 1]);
                 i += 2;
             }
+            "-i" | "--interactive" => {
+                interactive = true;
+                i += 1;
+            }
             _ => i += 1,
         }
     }
@@ -677,6 +1017,7 @@ async fn main() -> Result<()> {
     if enable_hub {
         println!("Hub Socket: {}", hub_socket.display());
     }
+    println!("Interactive: {}", if interactive { "YES" } else { "NO (daemon mode)" });
     println!("{}", "=".repeat(90));
 
     let config = SupervisorConfig {
@@ -689,7 +1030,7 @@ async fn main() -> Result<()> {
     };
 
     let supervisor = Supervisor::new(config).await?;
-    supervisor.run().await?;
+    supervisor.run(interactive).await?;
 
     Ok(())
 }
