@@ -140,3 +140,46 @@ async def handle_gi(bot, cmd: ChatCommand):
     except Exception as e:
         LOGGER.error(f"❌ Erreur handle_gi: {e}")
         await bot.send_message(cmd.room.name, f"❌ Erreur: {e}")
+
+
+async def handle_gs(bot, cmd: ChatCommand):
+    """
+    !gs / !gamesummary <nom du jeu>
+    Affiche uniquement le nom et la description d'un jeu (format minimaliste).
+    
+    Format: 🎮 Nom du Jeu (année): Description courte...
+    """
+    game_name = cmd.parameter.strip() if cmd.parameter else None
+    
+    if not game_name:
+        await bot.send_message(cmd.room.name, "🎮 Usage: !gamesummary <nom du jeu>")
+        return
+
+    try:
+        # Rechercher le jeu
+        result = await bot.game_lookup.search_game(game_name)
+        
+        if not result:
+            await bot.send_message(cmd.room.name, f"❌ Jeu '{game_name}' non trouvé")
+            return
+        
+        # Format minimaliste : Nom (année): Description
+        output = f"🎮 {result.name}"
+        
+        if result.year != "?":
+            output += f" ({result.year})"
+        
+        if result.summary:
+            # Limiter à 200 caractères pour Twitch
+            summary_short = result.summary[:200].strip()
+            if len(result.summary) > 200:
+                summary_short += "..."
+            output += f": {summary_short}"
+        else:
+            output += " (Aucune description disponible)"
+        
+        await bot.send_message(cmd.room.name, output)
+
+    except Exception as e:
+        LOGGER.error(f"❌ Erreur handle_gs: {e}")
+        await bot.send_message(cmd.room.name, f"❌ Erreur: {e}")

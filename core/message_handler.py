@@ -219,6 +219,8 @@ class MessageHandler:
             await self._cmd_perftrace(msg, args)
         elif command == "!ask":
             await self._cmd_ask(msg, args)
+        elif command == "!joke":
+            await self._cmd_joke(msg)
         elif command == "!wiki":
             await self._cmd_wiki(msg, args)
         elif command == "!trad":
@@ -420,19 +422,22 @@ class MessageHandler:
     
     async def _cmd_game_summary(self, msg: ChatMessage, game_name: str) -> None:
         """
-        Commande !gs <game> - Summary (résumé) d'un jeu
-        
-        Version ULTRA-RAPIDE de !gi qui:
-        - Ne lit QUE le cache (pas d'appel API)
-        - Affiche uniquement: Nom + Année + Résumé
-        
-        Parfait pour le chat Twitch (instantané + léger).
-        Si le jeu n'est pas en cache, suggère d'utiliser !gi.
+        Commande !gs <game> - Résumé court d'un jeu (nom + description uniquement)
         
         Args:
             msg: Message chat
             game_name: Nom du jeu à rechercher
         """
+        if not self.game_lookup:
+            response_text = f"@{msg.user_login} ❌ Game lookup not available"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            return
+        
         if not game_name.strip():
             response_text = f"@{msg.user_login} Usage: !gs <game name>"
             await self.bus.publish("chat.outbound", OutboundMessage(
@@ -445,91 +450,33 @@ class MessageHandler:
         
         try:
             start_total = time.perf_counter()
-            LOGGER.info(f"📝 Checking cache for game summary: {game_name}")
+            LOGGER.info(f"🎮 Searching game summary: {game_name}")
             
-            # OPTIMISATION: Lecture cache UNIQUEMENT (pas d'API call)
-            game = None
+            # Rechercher le jeu
+            game = await self.game_lookup.search_game(game_name)
+            elapsed_lookup_ms = (time.perf_counter() - start_total) * 1000
             
-            # 1. Check SQLite cache d'abord (plus rapide)
-            if hasattr(self.game_lookup, 'db') and self.game_lookup.db:
-                start_sqlite = time.perf_counter()
-                cached = self.game_lookup.db.get_cached_game(game_name.lower())
-                elapsed_sqlite_us = (time.perf_counter() - start_sqlite) * 1_000_000
-                
-                if cached and cached['confidence'] >= 0.90:
-                    # Cache hit! Reconstruire GameResult
-                    from modules.integrations.game_engine.rust_wrapper import GameResult
-                    game_data = cached['game_data']
-                    game = GameResult(
-                        name=game_data.get('name', 'Unknown'),
-                        year=game_data.get('year', '?'),
-                        summary=game_data.get('summary'),
-                        rating_rawg=game_data.get('rating_rawg', 0.0),
-                        metacritic=game_data.get('metacritic'),
-                        platforms=game_data.get('platforms', []),
-                        genres=game_data.get('genres', []),
-                        developers=game_data.get('developers', []),
-                        publishers=game_data.get('publishers', []),
-                        reliability_score=game_data.get('reliability_score', 0.0)
-                    )
-                    LOGGER.info(f"✅ Cache HIT (SQLite): {game.name} | ⏱️ {elapsed_sqlite_us:.1f}µs")
-                else:
-                    LOGGER.debug(f"⏭️ SQLite miss | ⏱️ {elapsed_sqlite_us:.1f}µs")
-            
-            # Cache miss: Suggérer !gi
             if not game:
-                elapsed_total_us = (time.perf_counter() - start_total) * 1_000_000
-                response_text = (
-                    f"@{msg.user_login} ⚠️ '{game_name}' not in cache. "
-                    f"Use !gi {game_name} to search APIs first."
-                )
-                await self.bus.publish("chat.outbound", OutboundMessage(
-                    channel=msg.channel,
-                    channel_id=msg.channel_id,
-                    text=response_text,
-                    prefer="irc"
-                ))
-                LOGGER.info(f"⏭️ Cache MISS: {game_name} (suggest !gi) | ⏱️ Total: {elapsed_total_us:.1f}µs")
-                return
-            
-            # Format: Nom + Année + Summary uniquement
-            start_format = time.perf_counter()
-            summary = game.summary if game.summary else "No description available."
-            
-            # Nettoyer le summary si il commence par le nom du jeu (éviter doublon)
-            # Ex: "Cyberpunk 2077: Ultimate Edition is..." → "is..."
-            game_name_clean = game.name.lower().strip()
-            summary_clean = summary.strip()
-            
-            # Vérifier si le summary commence par le nom (ou une variante proche)
-            if summary_clean.lower().startswith(game_name_clean):
-                # Retirer le nom + "is/was/:" du début
-                summary = summary_clean[len(game_name_clean):].lstrip(' :-')
-                # Recapitaliser si nécessaire
-                if summary and summary[0].islower():
-                    summary = summary[0].upper() + summary[1:]
-            
-            # IRC limit: 512 bytes total (PRIVMSG #channel :text)
-            # Reserve ~100 bytes for IRC overhead, ~50 for username/emoji/name/year
-            # → Max summary: ~250 chars to be ULTRA safe
-            prefix = f"@{msg.user_login} 📝 {game.name} ({game.year}): "
-            available_length = 300 - len(prefix)  # Ultra safe IRC limit
-            
-            if len(summary) > available_length:
-                # Tronquer intelligemment (dernier point ou espace)
-                truncated = summary[:available_length]
-                last_dot = truncated.rfind('. ')
-                last_space = truncated.rfind(' ')
+                response_text = f"@{msg.user_login} ❌ Game not found: {game_name}"
+                LOGGER.info(f"❌ Game not found: {game_name} | ⏱️ {elapsed_lookup_ms:.1f}ms")
+            else:
+                # Format minimaliste : Nom (année): Description
+                output = f"🎮 {game.name}"
                 
-                if last_dot > available_length * 0.7:
-                    summary = truncated[:last_dot + 1]
-                elif last_space > available_length * 0.8:
-                    summary = truncated[:last_space] + "..."
+                if game.year != "?":
+                    output += f" ({game.year})"
+                
+                if game.summary:
+                    # Limiter à 200 caractères pour Twitch
+                    summary_short = game.summary[:200].strip()
+                    if len(game.summary) > 200:
+                        summary_short += "..."
+                    output += f": {summary_short}"
                 else:
-                    summary = truncated + "..."
-            
-            response_text = f"{prefix}{summary}"
-            elapsed_format_us = (time.perf_counter() - start_format) * 1_000_000
+                    output += " (Aucune description disponible)"
+                
+                response_text = f"@{msg.user_login} {output}"
+                LOGGER.info(f"✅ Game summary sent: {game.name} | ⏱️ {elapsed_lookup_ms:.1f}ms")
             
             await self.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,
@@ -537,22 +484,17 @@ class MessageHandler:
                 text=response_text,
                 prefer="irc"
             ))
-            
-            elapsed_total_us = (time.perf_counter() - start_total) * 1_000_000
-            LOGGER.info(
-                f"✅ Game summary sent (cache): {game.name} | "
-                f"⏱️ Format: {elapsed_format_us:.1f}µs | Total: {elapsed_total_us:.1f}µs"
-            )
             
         except Exception as e:
-            LOGGER.error(f"❌ Error reading cache: {e}", exc_info=True)
-            response_text = f"@{msg.user_login} ❌ Error reading cache"
+            LOGGER.error(f"❌ Error searching game summary: {e}", exc_info=True)
+            response_text = f"@{msg.user_login} ❌ Error searching game"
             await self.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,
                 channel_id=msg.channel_id,
                 text=response_text,
                 prefer="irc"
             ))
+    
     
     async def _cmd_perf(self, msg: ChatMessage, args: str) -> None:
         """
@@ -932,6 +874,89 @@ Réponds en te basant sur ces informations factuelles."""
                 prefer="irc"
             ))
     
+    async def _cmd_joke(self, msg: ChatMessage) -> None:
+        """
+        Commande !joke - Génération de blague via LLM
+        
+        Args:
+            msg: Message entrant
+        """
+        # Rate limiting: 60s cooldown par utilisateur
+        if not hasattr(self, '_joke_last_time'):
+            self._joke_last_time = {}
+        if not hasattr(self, '_joke_cooldown'):
+            self._joke_cooldown = 60.0
+        
+        current_time = time.time()
+        last_time = self._joke_last_time.get(msg.user_id, 0)
+        
+        if current_time - last_time < self._joke_cooldown:
+            cooldown_remaining = int(self._joke_cooldown - (current_time - last_time))
+            response_text = f"@{msg.user_login} ⏰ Cooldown: {cooldown_remaining}s restants"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            return
+        
+        # Update cooldown
+        self._joke_last_time[msg.user_id] = current_time
+        
+        if not self.llm_handler or not self.llm_handler.is_available():
+            response_text = f"@{msg.user_login} ❌ Le système d'IA n'est pas disponible"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            return
+        
+        try:
+            LOGGER.info(f"😄 Joke request from {msg.user_login}")
+            
+            # Demander une blague au LLM
+            llm_response = await self.llm_handler.ask(
+                question="Raconte-moi une blague courte et drôle",
+                user_name=msg.user_login,
+                channel=msg.channel
+            )
+            
+            if llm_response:
+                response_text = f"@{msg.user_login} {llm_response}"
+                
+                # Tronquer si trop long
+                if len(response_text) > 500:
+                    response_text = response_text[:497] + "..."
+                
+                await self.bus.publish("chat.outbound", OutboundMessage(
+                    channel=msg.channel,
+                    channel_id=msg.channel_id,
+                    text=response_text,
+                    prefer="irc"
+                ))
+                LOGGER.info(f"✅ Joke sent to {msg.user_login}")
+            else:
+                response_text = f"@{msg.user_login} ❌ Je n'ai pas pu générer une blague"
+                await self.bus.publish("chat.outbound", OutboundMessage(
+                    channel=msg.channel,
+                    channel_id=msg.channel_id,
+                    text=response_text,
+                    prefer="irc"
+                ))
+                
+        except Exception as e:
+            LOGGER.error(f"❌ Error processing !joke: {e}", exc_info=True)
+            response_text = f"@{msg.user_login} ❌ Erreur lors de la génération de la blague"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+    
     async def _cmd_wiki(self, msg: ChatMessage, query: str) -> None:
         """
         Commande !wiki - Recherche Wikipedia sans LLM
@@ -951,7 +976,7 @@ Réponds en te basant sur ces informations factuelles."""
             return
         
         try:
-            from backends.wikipedia_handler import search_wikipedia
+            from modules.integrations.wikipedia.wikipedia_handler import search_wikipedia
             
             # Basic validation
             if not query or len(query.strip()) < 2:

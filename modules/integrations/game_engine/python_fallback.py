@@ -63,7 +63,7 @@ except ImportError:
     pass
 
 # Import NAHL client
-from modules.integrations.nahl_client import NAHLClient
+from modules.integrations.nahl.nahl_client import NAHLClient
 # Optional DRAKON HTTP API client (fast fuzzy search)
 DrakonHTTPClient = None
 try:
@@ -172,7 +172,7 @@ class GameLookup:
         self.igdb_client_secret = apis_config.get("igdb_client_secret")
 
         # Initialize providers (modular API backends)
-        from modules.integrations.providers import SteamProvider, IGDBProvider, RAWGProvider
+        from modules.integrations.game_engine.providers import SteamProvider, IGDBProvider, RAWGProvider
         self.providers = []
         
         if self.steam_key or True:  # Steam store search doesn't need key

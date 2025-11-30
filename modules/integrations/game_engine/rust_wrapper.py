@@ -110,7 +110,7 @@ class GameLookup:
         # Initialize Python fallback for enriched searches
         if self.config:
             try:
-                from modules.integrations.game_lookup import GameLookup as PythonGameLookup
+                from modules.integrations.game_engine.python_fallback import GameLookup as PythonGameLookup
                 self._python_lookup = PythonGameLookup(self.config)
                 logger.info("✅ Python fallback initialisé (enrichissement)")
             except Exception as e:
@@ -165,7 +165,7 @@ class GameLookup:
                     genres=game_data.get('genres', []),
                     developers=game_data.get('developers', []),
                     publishers=game_data.get('publishers', []),
-                    summary=game_data.get('short_description'),
+                    summary=game_data.get('short_description') or game_data.get('summary'),
                     description_raw=game_data.get('description'),
                     reliability_score=result['score'] / 100.0,
                     confidence="HIGH" if result['score'] > 80 else "MEDIUM" if result['score'] > 50 else "LOW",
@@ -266,7 +266,7 @@ class GameLookup:
                     genres=alt_data.get('genres', []),
                     developers=alt_data.get('developers', []),
                     publishers=alt_data.get('publishers', []),
-                    summary=alt_data.get('short_description'),
+                    summary=alt_data.get('short_description') or alt_data.get('summary'),
                     description_raw=alt_data.get('description'),
                     primary_source=alt_data.get('provider', 'steam'),
                     api_sources=[alt_data.get('provider', 'steam')],
@@ -284,7 +284,7 @@ class GameLookup:
                 genres=game_data.get('genres', []),
                 developers=game_data.get('developers', []),
                 publishers=game_data.get('publishers', []),
-                summary=game_data.get('short_description'),
+                summary=game_data.get('short_description') or game_data.get('summary'),
                 description_raw=game_data.get('description'),
                 reliability_score=result['score'] / 100.0,
                 confidence="HIGH" if result['score'] > 80 else "MEDIUM" if result['score'] > 50 else "LOW",
