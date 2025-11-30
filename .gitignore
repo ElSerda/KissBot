@@ -195,3 +195,5 @@ config/config.test-supervisor.yaml
 
 # Archive legacy (local only)
 archive/
+config/config.test.yaml
+config/config.test-supervisor.yaml
