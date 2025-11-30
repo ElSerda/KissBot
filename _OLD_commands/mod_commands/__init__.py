@@ -1,1 +1,0 @@
-"""Commandes modérateur (permissions requises)."""
