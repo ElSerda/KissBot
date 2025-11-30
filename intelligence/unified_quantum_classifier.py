@@ -235,8 +235,12 @@ class UnifiedQuantumClassifier:
             metadata["classification_reason"] = "explicit_ask_command"
             return class_scores, metadata
 
-        # 2. 🎤 DÉTECTION REFLEX (messages triviaux)
-        ping_matches = sum(1 for pattern in self.classification_rules["ping"]["patterns"] if pattern in stimulus_lower)
+        # 2. 🎤 DÉTECTION REFLEX (messages triviaux - match mots complets)
+        import re
+        ping_patterns = self.classification_rules["ping"]["patterns"]
+        # Utiliser word boundaries pour éviter faux positifs (ex: "test" dans "testo")
+        ping_matches = sum(1 for pattern in ping_patterns if re.search(rf'\b{re.escape(pattern)}\b', stimulus_lower))
+        
         if ping_matches > 0:
             class_scores["ping"] = 1.0
             metadata["classification_reason"] = f"reflex_trivial_match_{ping_matches}"
