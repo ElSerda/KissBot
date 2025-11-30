@@ -1,22 +1,33 @@
-# 🏗️ KissBot V2 — Architecture Modulaire
+# KissBot – Architecture V2 (Core + Modules)
 
-> **Vision** : Bot Twitch modulaire avec core KISS + plugins  
-> **Philosophie** : Une chose simple qui fait une chose bien, puis composer  
-> **Features** : Commandes dynamiques + LLM optionnel + output routing
+> **TL;DR**  
+> KissBot v2 = un **core ultra simple & robuste** + une **couche modulaire** (LLM, TTS, OBS, etc.)  
+> Tout ce qui est "magique" ou spécifique à un use-case va dans des **modules**, pas dans le core.
 
 ---
 
-## 🎯 Principe fondamental
+## 1. Objectifs d'architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  KissBot = Core KISS + Modules Composables                  │
-│                                                               │
-│  Twitch Event → Core → [Modules] → Output Router            │
-│                   ↓                         ↓                │
-│              Sécurité                chat|tts|obs|webhook    │
-└─────────────────────────────────────────────────────────────┘
-```
+- **KISS** – Le core fait le minimum vital **parfaitement** :
+  - Connexion Twitch (IRC + EventSub)
+  - Parsing des messages
+  - Routing de commandes
+  - Sécurité de base (rate limit, permissions)
+  
+- **Modulaire** – Tout le reste se branche :
+  - LLM (local ou cloud)
+  - Système de persona
+  - Commandes custom
+  - Intégrations (Streamer.bot, TTS, webhooks, etc.)
+  
+- **Par chaîne** – Chaque chaîne Twitch a :
+  - Sa config
+  - Ses commandes custom
+  - Sa "personnalité"
+  
+- **Auditable** – Le core doit rester lisible, diffable, auditable en sécurité.
+
+- **Extensible** – Un module = un dossier + un README + un petit registre → facile à PR.
 
 ### Inspirations
 - **Unix** : "Do one thing well, then compose"
@@ -26,60 +37,244 @@
 
 ---
 
-## 🧱 Architecture en couches
+## 2. Vue d'ensemble
 
-### Layer 1️⃣ : Core (KISS absolu)
-**Responsabilité** : Connexion stable, parsing sécurisé, routing simple
+Flux logique global :
 
 ```
-core/
-├── irc_client.py           # IRC Twitch (keepalive, reconnect)
-├── eventsub_hub.py         # WebSocket centralisé
-├── message_handler.py      # Parsing + validation
-├── rate_limiter.py         # Anti-spam + cooldowns
-├── command_router.py       # Dispatch vers modules
-└── security.py             # Filtres, tokens chiffrés
+       ┌──────────────────┐
+       │  Twitch (IRC +   │
+       │  EventSub/Helix) │
+       └────────┬─────────┘
+                │ events / messages
+                ▼
+        ┌───────────────┐
+        │   Core Input  │  (= clients + normalisation)
+        │   (irc/event) │
+        └──────┬────────┘
+               │ ChatMessage / TwitchEvent unifié
+               ▼
+        ┌───────────────┐
+        │ CommandRouter │  (détecte !commande, args, contexte)
+        └──────┬────────┘
+    core cmd   │     custom cmd
+───────────────┼────────────────────────────
+               │
+         ┌─────▼───────────┐
+         │ CustomCommand   │
+         │   Engine        │
+         └─────┬───────────┘
+               │
+               │   (optionnel)
+               ▼
+       ┌───────────────────┐
+       │   LLM Engine      │  (ON/OFF par commande + persona)
+       └────────┬──────────┘
+                │ texte final
+                ▼
+        ┌──────────────────┐
+        │  Output Router   │
+        └─────┬─────┬──────┘
+              │     │
+              │     │
+        chat / TTS / OBS / webhook / etc. (modules)
 ```
+
+---
+
+## 3. Structure des dossiers
+
+```
+kissbot/
+  core/
+    __init__.py
+    config.py
+    irc_client.py           # IRC Twitch (keepalive, reconnect)
+    eventsub_hub.py         # WebSocket centralisé
+    twitch_models.py        # ChatMessage, TwitchEvent, User, ChannelContext
+    message_parser.py       # Parsing + validation
+    command_router.py       # Dispatch vers modules
+    rate_limiter.py         # Anti-spam + cooldowns
+    permissions.py          # Vérifications mod/VIP/broadcaster
+    storage.py              # Accès BDD générique (tokens, settings)
+
+  modules/
+    custom_commands/
+      __init__.py
+      engine.py             # !kbadd / !kbdel / résolution
+      models.py             # Représentation commande utilisateur
+      README.md
+
+    personality/
+      __init__.py
+      db.py                 # PersonalityDB par channel
+      style_engine.py       # Profil style (soft/cru, ton, etc.)
+      README.md
+
+    llm/
+      __init__.py
+      engine.py             # Abstraction LLM: local, OpenAI, autre
+      providers/
+        openai_client.py
+        local_client.py
+      README.md
+
+    outputs/
+      chat/
+        __init__.py
+        handler.py
+      tts/
+        __init__.py
+        streamerbot_adapter.py
+      obs/
+        __init__.py
+        streamerbot_adapter.py
+      webhook/
+        __init__.py
+        client.py
+
+    examples/
+      game_info/            # Ancien !gc / !gi, exemple de module
+        __init__.py
+        commands.py
+        README.md
+
+  database/
+    ...
+
+  docs/
+    ARCHITECTURE_V2.md      # (ce fichier)
+    MODULE_HOWTO.md         # Comment faire un module & PR
+    MIGRATION_PLAN.md       # Plan migration V1 → V2
+```
+
+---
+
+## 4. Core vs Modules
+
+### 4.1 Ce que le core **doit** faire
+
+- ✅ Gérer la connexion Twitch (IRC + EventSub/Helix)
+- ✅ Normaliser tous les événements dans des modèles (`ChatMessage`, `TwitchEvent`)
+- ✅ Router les commandes vers :
+  - Commandes core (`!ping`, `!uptime`, `!help`, `!kbadd`, `!kbdel`)
+  - `CustomCommandEngine` pour le reste
+- ✅ Appliquer :
+  - Rate limiting global / par user
+  - Checks de permission (mod, VIP, broadcaster)
+  - Logs de base
 
 **Règles du Core** :
 - ✅ Zéro dépendance externe (sauf Twitch API)
 - ✅ 100% testable unitairement
-- ✅ Logs structurés (pas de print())
+- ✅ Logs structurés (pas de `print()`)
 - ✅ Pas de "magie" (pas de métaprog complexe)
 - ✅ Documentation inline (docstrings)
 
----
+### 4.2 Ce que le core ne doit **PAS** faire
 
-### Layer 2️⃣ : Modules (Features branchables)
+⚠️ **Important** :
+- ❌ Parler LLM directement
+- ❌ Faire OBS/TTS lui-même
+- ❌ Contenir de la logique métier spécifique à un stream
 
-#### 📦 Module Structure
+**Tout ça va dans les modules.**
+
+### 4.3 Ce que les modules **peuvent** faire
+
+✅ Ajouter des commandes :
+- Ex: `modules/game_info` expose `!gc` / `!gi`
+- Ex: `modules/personality` expose `!persona`
+
+✅ Brancher des outputs :
+- Envoyer à Streamer.bot, TTS, OBS, webhook, etc.
+
+✅ Ajouter des pipelines :
+- `ChatMessage → LLM → réponse chat`
+- `Event new_sub → TTS + animation OBS`
+
+**Interface module** :
 ```python
-# modules/example_module.py
-
-class ExampleModule:
-    """
-    Description brève du module
-    """
-    def __init__(self, config: dict):
-        self.enabled = config.get("enabled", False)
-    
-    async def handle(self, event: BotEvent) -> Optional[BotResponse]:
-        """
-        Traite un événement, retourne None si pas géré
-        """
-        if not self.enabled:
-            return None
-        # ... logique métier
-        return BotResponse(...)
-    
-    async def shutdown(self):
-        """Nettoyage propre"""
-        pass
+# modules/some_module/__init__.py
+def register(registry):
+    registry.register_command("cmd_name", handler, permissions=...)
+    registry.register_event_handler("on_sub", on_sub_handler)
 ```
 
-#### 🧩 Modules disponibles
+Chaque module déclare un petit `README.md` avec :
+- Ce que fait le module
+- Comment l'activer
+- Quelles variables d'environnement / configs il utilise
 
-##### 1. `personality/` — Personnalité par channel
+---
+
+## 5. Custom Commands & Pipeline LLM
+
+### 5.1 Commandes dynamiques (concept)
+
+**Objectif** : Que le broadcaster puisse définir une commande **sans coder** :
+
+```bash
+!kbadd !roast llm:on persona:troll prompt:"insulte gentiment {user}" output:chat
+!kbadd !trad llm:off lang:en input:{user_message} output:chat
+!kbadd !hype llm:on persona:hyper output:chat+tts cost:50points
+```
+
+Chaque définition de commande décrit :
+- **trigger** : `!roast`, `!trad`, etc.
+- **options** :
+  - `llm:on/off`
+  - `persona:<name>`
+  - `prompt:` ce qui est envoyé au LLM
+  - `output:` une ou plusieurs destinations (`chat`, `tts`, `obs`, `webhook`, …)
+  - `cost:` (optionnel) coût en points de chaîne
+
+Le `CustomCommandEngine` stocke ça en BDD (perso par channel).
+
+### 5.2 Pipeline logique pour une commande custom
+
+Exemple pour `!roast` :
+
+```
+ChatMessage("!roast @pseudo") 
+  ↓
+CommandRouter détecte "roast" 
+  ↓
+CustomCommandEngine
+  → Récupère définition de !roast pour cette chaîne
+  → Vérifie:
+    - Permissions
+    - Coût en points
+    - Cooldown
+  → Construit contexte LLM:
+    - persona: "troll"
+    - prompt: "insulte gentiment @pseudo"
+    - contraintes de sécurité (no hate, no harcèlement)
+  → Si llm:on → LLM Engine → réponse
+  → Sinon     → formatage simple
+  ↓
+Output Router:
+  → chat
+  → (optionnel) TTS via module outputs/tts
+```
+
+---
+
+## 6. Modules essentiels
+
+### 6.1 `personality/` — Personnalité par channel
+
+**Philosophy** : La personnalité ne doit pas être un corpus de phrases copiées/collées,  
+mais un **profil de style** :
+- Niveau "cru" vs "soft"
+- Registre (casual / neutre / soutenu)
+- Densité d'emojis
+- Énergie (calme vs excité)
+- Niveau de sarcasme / troll
+
+Chaque chaîne a sa `PersonalityDB`, stockée chiffrée comme tes autres données.
+
+**Config exemple** :
 ```yaml
 # config/modules/personality.yaml
 enabled: true
@@ -107,14 +302,18 @@ presets:
 ```
 
 **Commandes** :
-- `!persona` → affiche profil actuel
-- `!persona tone cru` → modifie un paramètre
-- `!persona preset soir_cru` → applique preset
-- `!persona reset` → retour défaut
+```bash
+!persona set tone:casual spice:cru emojis:high
+!persona set tone:soft spice:light emojis:low
+!persona           # Affiche profil actuel
+!persona reset     # Retour défaut
+```
+
+Le `LLM Engine` reçoit toujours le profil de style, **pas des phrases brutes**.
 
 ---
 
-##### 2. `llm/` — LLM on-demand
+### 6.2 `llm/` — LLM on-demand
 ```yaml
 # config/modules/llm.yaml
 enabled: true
@@ -130,7 +329,7 @@ max_tokens_default: 90
 
 **Injection de style** :
 ```python
-# modules/llm/cloud_synapse.py
+# modules/llm/engine.py
 
 async def generate(self, prompt: str, persona: PersonalityProfile):
     style_prompt = build_style_instructions(persona)
@@ -146,21 +345,21 @@ async def generate(self, prompt: str, persona: PersonalityProfile):
     return response.choices[0].message.content
 ```
 
+**Important** : 
+- Reçoit uniquement le contexte nécessaire (jamais de secrets)
+- Instructions système pour respecter les règles Twitch / anti-harcèlement
+
 ---
 
-##### 3. `custom_commands/` — Commandes dynamiques
-**Le Game Changer** 🔥
+### 6.3 `custom_commands/` — Commandes dynamiques
 
-```python
-# Syntaxe : !addcmd <nom> "<texte>" [OPTIONS]
-
-!addcmd greet "Coucou {user} ! 👋" LLM:OFF OUTPUT:chat
-
-!addcmd analyse "{user} demande: {msg}" LLM:ON PERSONA:serious OUTPUT:obs+chat
-
-!addcmd hype "LETS GOOOO 🔥" LLM:ON PERSONA:sassy OUTPUT:tts POINTS:50
-
-!addcmd webhook "New sub!" OUTPUT:webhook:https://myapi.com/notify
+**Syntaxe** :
+```bash
+!kbadd <cmd> [OPTIONS]        # Create
+!kbedit <cmd> <key> <value>   # Update
+!kbdel <cmd>                  # Delete
+!kblist                       # List all
+!kbinfo <cmd>                 # Show config
 ```
 
 **Variables disponibles** :
@@ -171,14 +370,15 @@ async def generate(self, prompt: str, persona: PersonalityProfile):
 - `{points}` → points utilisateur
 
 **Options** :
-- `LLM:ON|OFF` → passe par GPT-4 ou non
-- `PERSONA:cru|soft|serious|sassy` → style override
-- `OUTPUT:chat|tts|obs|webhook:URL` → routing
-- `POINTS:X` → coût en points
+- `llm:on|off` → passe par LLM ou non
+- `persona:<name>` → style override
+- `prompt:"..."` → template pour LLM
+- `output:chat|tts|obs|webhook:URL` → routing
+- `cost:X` → coût en points
 
 ---
 
-##### 4. `outputs/` — Output Router
+### 6.4 `outputs/` — Output Router
 ```
 outputs/
 ├── chat_output.py         # IRC Twitch
@@ -205,7 +405,7 @@ class OutputRouter:
 
 ---
 
-##### 5. `integrations/` — Rust + APIs externes
+### 6.5 `integrations/` — Rust + APIs externes
 ```
 integrations/
 ├── game_engine/          # kissbot-game-engine (Rust)
@@ -218,7 +418,23 @@ integrations/
 
 ---
 
-### Layer 3️⃣ : Configuration (YAML + DB)
+## 7. Sécurité & Isolation
+
+### Tokens & secrets
+- ✅ Déjà chiffrés (Fernet) en BDD → on garde
+- ✅ `.kissbot.key` indispensable pour déchiffrage
+
+### Modules
+- ✅ N'ont accès qu'au strict minimum (contexte, config de channel)
+- ❌ Pas d'`eval`, pas d'`exec`, pas de SQL direct sans passer par le core
+
+### LLM
+- ✅ Reçoit uniquement le contexte nécessaire (jamais de secrets)
+- ✅ Instructions système pour respecter les règles Twitch / anti-harcèlement
+
+---
+
+## 8. Configuration (YAML + DB)
 
 ```yaml
 # config/kissbot.yaml
@@ -290,7 +506,7 @@ CREATE TABLE personality (
 
 ---
 
-## 🚀 Pipeline de traitement
+## 9. Pipeline de traitement complet
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -324,7 +540,7 @@ CREATE TABLE personality (
 
 ---
 
-## 🔥 Exemples concrets
+## 10. Exemples concrets
 
 ### Exemple 1 : Commande simple
 ```
@@ -362,7 +578,35 @@ Bot: [POST https://discord.com/api/webhooks/... avec payload]
 
 ---
 
-## 🧪 Tests & Qualité
+## 11. Roadmap V2
+
+### Phase 1 – Isolation du core
+- Extraire tout ce qui est "Twitch + routing" dans `core/`
+- Marquer ce qui est "module candidate" (`!gc`, `!gi`, LLM, TTS, etc.)
+
+### Phase 2 – Modules essentiels
+- `modules/custom_commands` (+ `!kbadd` / `!kbdel`)
+- `modules/llm` (abstraction OpenAI/local)
+- `modules/personality`
+- `modules/outputs/chat` + `outputs/tts` (streamer.bot)
+
+### Phase 3 – Polish & doc
+- `ARCHITECTURE_V2.md` (ce fichier)
+- `MODULE_HOWTO.md` (comment faire un module & une PR)
+- Exemples :
+  - `modules/examples/game_info` (ancien `!gc` / `!gi`)
+  - `modules/examples/roast`
+  - `modules/examples/trad`
+
+### Phase 4 – Ecosystème
+- "Module Gallery" dans le README
+- Labels GitHub : `module-idea`, `good first issue`
+
+Voir `MIGRATION_PLAN.md` pour le plan détaillé.
+
+---
+
+## 12. Tests & Qualité
 
 ### Tests Core (obligatoires)
 ```bash
@@ -452,7 +696,15 @@ python test_rate_limiting.py
 
 ---
 
-## 💎 Philosophie finale
+## 15. Licence & usage
+
+- Le **core** reste sous ta licence actuelle (non-commercial pour usage pro / SaaS)
+- Les **modules communautaires** peuvent rester sous la même licence, sauf mention contraire
+- **Objectif** : Laissé libre pour streamers & devs, tout en évitant les gros abus commerciaux non déclarés
+
+---
+
+## 16. Philosophie finale
 
 > **"Commence simple, compose infiniment."**
 
@@ -460,7 +712,7 @@ Le core fait **une chose** : router des messages Twitch de manière fiable.
 
 Les modules font **chacun une chose** : personnalité, LLM, outputs, intégrations.
 
-Le broadcaster **compose** : `!addcmd X "..." LLM:ON PERSONA:Y OUTPUT:Z`
+Le broadcaster **compose** : `!kbadd X "..." llm:on persona:Y output:Z`
 
 **C'est l'esprit Unix appliqué au streaming Twitch.**
 
@@ -480,5 +732,5 @@ Croissance organique, pas de target artificielle.
 
 **Date** : 30 novembre 2025  
 **Version** : 2.0.0-alpha  
-**Auteur** : ElSerda + GitHub Copilot (Claude Sonnet 4.5)  
-**Licence** : MIT
+**Auteurs** : ElSerda + GitHub Copilot (Claude Sonnet 4.5)  
+**Licence** : Voir LICENSE
