@@ -193,18 +193,43 @@ def get_dynamic_prompt(base_prompt: str) -> str:
     Exemple:
         base = "raconte une blague courte"
         dynamic = get_dynamic_prompt(base)
-        # → "raconte une blague courte style absurde"
+        # → "raconte une blague courte style absurde #a7f3"
     """
-    variants = [
+    # Thèmes variés pour plus de diversité
+    themes = [
+        "sur les animaux",
+        "sur la technologie",
+        "sur la nourriture",
+        "sur le travail",
+        "sur l'école",
+        "sur les jeux vidéo",
+        "sur internet",
+        "sur les vacances",
+        "sur la météo",
+        "sur les voitures",
+        "sur les médecins",
+        "sur les programmeurs",
+        "sur les chats",
+        "sur les chiens",
+        "sur la musique",
+    ]
+    
+    styles = [
         "style drôle",
         "style absurde",
         "style court",
-        "pour enfants",
-        "pour adultes",
+        "style naïf",
+        "style sarcastique",
         "avec un jeu de mots",
-        "surprise-moi"
+        "avec une chute inattendue",
+        "style papa blague",
+        "style geek",
     ]
 
-    variant = random.choice(variants)
-    return f"{base_prompt} {variant}"
+    # Combiner thème + style + identifiant unique
+    theme = random.choice(themes)
+    style = random.choice(styles)
+    unique_id = f"#{random.randint(1000, 9999)}"
+    
+    return f"{base_prompt} {theme} {style} {unique_id}"
 
