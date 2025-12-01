@@ -28,6 +28,9 @@ rapidfuzz>=3.0.0
 # Translation service (Google Translate API)
 deep-translator>=1.11.0
 
+# Language detection (for auto-translate)
+langdetect>=1.0.9
+
 # Monitoring système
 psutil>=5.9.0
 

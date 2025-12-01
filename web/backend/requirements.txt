@@ -19,3 +19,6 @@ slowapi>=0.1.9
 
 # CORS / Forms
 python-multipart>=0.0.6
+
+# Environment variables
+python-dotenv>=1.0.0
