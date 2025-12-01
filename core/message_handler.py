@@ -252,6 +252,8 @@ class MessageHandler:
             await self._cmd_kisscharity(msg, args)
         elif command == "!kbupdate":
             await self._cmd_kbupdate(msg, args)
+        elif command == "!kbkofi":
+            await self._cmd_kbkofi(msg)
         # ═══════════════════════════════════════════════════════════════════
         # 🚫 BANWORD COMMANDS (Mod/Broadcaster only)
         # ═══════════════════════════════════════════════════════════════════
@@ -1468,6 +1470,18 @@ Réponds en te basant sur ces informations factuelles."""
                 text=response_text,
                 prefer="irc"
             ))
+    
+    async def _cmd_kbkofi(self, msg: ChatMessage) -> None:
+        """
+        !kbkofi - Affiche le lien Ko-fi pour soutenir le développement de KissBot
+        """
+        response_text = "☕ Soutenez KissBot ! → https://ko-fi.com/el_serda 💜"
+        await self.bus.publish("chat.outbound", OutboundMessage(
+            channel=msg.channel,
+            channel_id=msg.channel_id,
+            text=response_text,
+            prefer="irc"
+        ))
     
     def get_stats(self) -> dict:
         """Retourne les stats du handler"""

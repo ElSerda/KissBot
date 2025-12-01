@@ -35,7 +35,6 @@ def register_user_commands(bot, chat: Chat):
     from .user_commands.intelligence import handle_ask, handle_joke
     from .user_commands.wiki import handle_wiki
     from .user_commands.kissgit import handle_kissgit
-    from .user_commands.kofi import handle_kbkofi
     
     # Wrapper async pour chaque commande
     async def cmd_gc(cmd):
@@ -56,9 +55,6 @@ def register_user_commands(bot, chat: Chat):
     async def cmd_kissgit(cmd):
         await handle_kissgit(bot, cmd)
     
-    async def cmd_kbkofi(cmd):
-        await handle_kbkofi(bot, cmd)
-    
     chat.register_command('gc', cmd_gc)
     chat.register_command('gamecategory', cmd_gc)
     chat.register_command('gi', cmd_gi)
@@ -67,9 +63,8 @@ def register_user_commands(bot, chat: Chat):
     chat.register_command('joke', cmd_joke)
     chat.register_command('wiki', cmd_wiki)
     chat.register_command('kissgit', cmd_kissgit)
-    chat.register_command('kbkofi', cmd_kbkofi)
     
-    LOGGER.info("✅ User commands registered: gc, gi, ask, joke, wiki, kissgit, kbkofi")
+    LOGGER.info("✅ User commands registered: gc, gi, ask, joke, wiki, kissgit")
 
 
 def register_mod_commands(bot, chat: Chat):
