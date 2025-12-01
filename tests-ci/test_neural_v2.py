@@ -13,7 +13,7 @@ class TestNeuralPathwayManager:
     def test_neural_pathway_manager_imports(self):
         """Vérifie que NeuralPathwayManager s'importe"""
         try:
-            from intelligence.neural_pathway_manager import NeuralPathwayManager
+            from modules.intelligence.neural_pathway_manager import NeuralPathwayManager
             assert NeuralPathwayManager is not None
         except ImportError:
             pytest.skip("NeuralPathwayManager n'existe pas")
@@ -21,7 +21,7 @@ class TestNeuralPathwayManager:
     def test_neural_pathway_manager_instantiation(self):
         """Test l'instantiation du manager"""
         try:
-            from intelligence.neural_pathway_manager import NeuralPathwayManager
+            from modules.intelligence.neural_pathway_manager import NeuralPathwayManager
             
             # Config minimale
             config = {
@@ -39,7 +39,7 @@ class TestNeuralPathwayManager:
     async def test_neural_pathway_manager_classify_and_generate(self):
         """Test le pipeline classify → generate"""
         try:
-            from intelligence.neural_pathway_manager import NeuralPathwayManager
+            from modules.intelligence.neural_pathway_manager import NeuralPathwayManager
             
             config = {
                 'neural_llm': {
@@ -71,7 +71,7 @@ class TestSynapses:
     def test_local_synapse_imports(self):
         """Vérifie que LocalSynapse s'importe"""
         try:
-            from intelligence.synapses.local_synapse import LocalSynapse
+            from modules.intelligence.synapses.local_synapse import LocalSynapse
             assert LocalSynapse is not None
         except ImportError:
             pytest.skip("LocalSynapse n'existe pas")
@@ -79,7 +79,7 @@ class TestSynapses:
     def test_cloud_synapse_imports(self):
         """Vérifie que CloudSynapse s'importe"""
         try:
-            from intelligence.synapses.cloud_synapse import CloudSynapse
+            from modules.intelligence.synapses.cloud_synapse import CloudSynapse
             assert CloudSynapse is not None
         except ImportError:
             pytest.skip("CloudSynapse n'existe pas")
@@ -89,7 +89,7 @@ class TestSynapses:
     async def test_local_synapse_generate(self):
         """Test la génération locale"""
         try:
-            from intelligence.synapses.local_synapse import LocalSynapse
+            from modules.intelligence.synapses.local_synapse import LocalSynapse
             
             config = {
                 'llm': {
@@ -126,7 +126,7 @@ class TestReflexes:
     def test_reflex_center_imports(self):
         """Vérifie que ReflexCenter s'importe"""
         try:
-            from intelligence.reflexes.reflex_center import ReflexCenter
+            from modules.intelligence.reflexes.reflex_center import ReflexCenter
             assert ReflexCenter is not None
         except ImportError:
             pytest.skip("ReflexCenter n'existe pas")
@@ -134,7 +134,7 @@ class TestReflexes:
     def test_reflex_center_instantiation(self):
         """Test l'instantiation du reflex center"""
         try:
-            from intelligence.reflexes.reflex_center import ReflexCenter
+            from modules.intelligence.reflexes.reflex_center import ReflexCenter
             
             config = {}
             center = ReflexCenter(config)
@@ -145,7 +145,7 @@ class TestReflexes:
     def test_reflex_center_has_reflexes(self):
         """Vérifie que ReflexCenter a des reflexes définis"""
         try:
-            from intelligence.reflexes.reflex_center import ReflexCenter
+            from modules.intelligence.reflexes.reflex_center import ReflexCenter
             
             config = {}
             center = ReflexCenter(config)
@@ -173,7 +173,7 @@ class TestNeuralPrometheus:
     def test_neural_prometheus_imports(self):
         """Vérifie que NeuralPrometheus s'importe"""
         try:
-            from intelligence.neural_prometheus import NeuralPrometheus
+            from modules.intelligence.neural_prometheus import NeuralPrometheus
             assert NeuralPrometheus is not None
         except ImportError:
             pytest.skip("NeuralPrometheus n'existe pas")
@@ -181,7 +181,7 @@ class TestNeuralPrometheus:
     def test_neural_prometheus_instantiation(self):
         """Test l'instantiation de Prometheus"""
         try:
-            from intelligence.neural_prometheus import NeuralPrometheus
+            from modules.intelligence.neural_prometheus import NeuralPrometheus
             
             prometheus = NeuralPrometheus()
             assert prometheus is not None
@@ -191,7 +191,7 @@ class TestNeuralPrometheus:
     def test_neural_prometheus_record_metrics(self):
         """Test l'enregistrement de métriques"""
         try:
-            from intelligence.neural_prometheus import NeuralPrometheus
+            from modules.intelligence.neural_prometheus import NeuralPrometheus
             
             prometheus = NeuralPrometheus()
             
@@ -207,12 +207,12 @@ class TestQuantumMetrics:
     
     def test_quantum_metrics_imports(self):
         """Vérifie que QuantumMetrics s'importe"""
-        from intelligence.quantum_metrics import QuantumMetrics
+        from modules.intelligence.quantum_metrics import QuantumMetrics
         assert QuantumMetrics is not None
     
     def test_quantum_metrics_instantiation(self):
         """Test l'instantiation de QuantumMetrics"""
-        from intelligence.quantum_metrics import QuantumMetrics
+        from modules.intelligence.quantum_metrics import QuantumMetrics
         
         config = {'cache': {'max_size': 100}}
         metrics = QuantumMetrics(config)
@@ -220,7 +220,7 @@ class TestQuantumMetrics:
     
     def test_quantum_metrics_has_methods(self):
         """Vérifie que QuantumMetrics a les méthodes attendues"""
-        from intelligence.quantum_metrics import QuantumMetrics
+        from modules.intelligence.quantum_metrics import QuantumMetrics
         
         config = {'cache': {'max_size': 100}}
         metrics = QuantumMetrics(config)
@@ -248,7 +248,7 @@ class TestEnhancedPatternsLoader:
     def test_patterns_loader_imports(self):
         """Vérifie que le patterns loader s'importe"""
         try:
-            from intelligence.enhanced_patterns_loader import load_patterns
+            from modules.intelligence.enhanced_patterns_loader import load_patterns
             assert load_patterns is not None
         except ImportError:
             pytest.skip("patterns loader n'existe pas")
@@ -256,7 +256,7 @@ class TestEnhancedPatternsLoader:
     def test_patterns_loader_returns_dict(self):
         """Test que load_patterns retourne un dict"""
         try:
-            from intelligence.enhanced_patterns_loader import load_patterns
+            from modules.intelligence.enhanced_patterns_loader import load_patterns
             
             patterns = load_patterns()
             assert isinstance(patterns, dict) or patterns is None

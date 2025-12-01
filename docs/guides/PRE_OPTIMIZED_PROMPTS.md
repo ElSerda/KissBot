@@ -192,7 +192,7 @@ tail -f logs/kissbot.log | grep "🎯 Prompt pré-optimisé"
 ```python
 # tests-local/test_my_command_poc.py
 import asyncio
-from intelligence.neural_pathway_manager import NeuralPathwayManager
+from modules.intelligence.neural_pathway_manager import NeuralPathwayManager
 import yaml
 
 async def test_my_command():
@@ -296,7 +296,7 @@ async def help_command(self, ctx: commands.Context):
 # tests-local/test_fact_command.py
 import pytest
 from unittest.mock import AsyncMock
-from intelligence.core import process_llm_request
+from modules.intelligence.core import process_llm_request
 
 @pytest.mark.asyncio
 async def test_fact_pipeline_success():

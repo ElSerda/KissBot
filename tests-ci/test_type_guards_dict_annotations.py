@@ -32,7 +32,7 @@ from pathlib import Path
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from intelligence.reflexes.reflex_center import ReflexCenter
+from modules.intelligence.reflexes.reflex_center import ReflexCenter
 
 
 def test_last_responses_initialization():

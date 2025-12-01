@@ -30,7 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backends.game_cache import GameCache
-from intelligence.core import find_game_in_cache
+from modules.intelligence.core import find_game_in_cache
 
 
 class TestFuzzyMatchingExact:

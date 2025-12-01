@@ -3,9 +3,9 @@ Tests du système Neural V2 - Shannon Entropy
 Reprise des tests de tests/test_intelligence_integration.py
 """
 import pytest
-from intelligence.unified_quantum_classifier import UnifiedQuantumClassifier
-from intelligence.entropy_calculator import EntropyCalculator
-from intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
+from modules.intelligence.unified_quantum_classifier import UnifiedQuantumClassifier
+from modules.intelligence.entropy_calculator import EntropyCalculator
+from modules.intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
 
 
 class TestUnifiedQuantumClassifier:

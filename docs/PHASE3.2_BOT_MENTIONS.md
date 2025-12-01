@@ -65,7 +65,7 @@ Response: "@user Salut ! Comment puis-je t'aider?"
 
 **Ajouts :**
 ```python
-from intelligence.core import extract_mention_message
+from modules.intelligence.core import extract_mention_message
 
 # Rate limiting state
 self._mention_last_time: Dict[str, float] = {}

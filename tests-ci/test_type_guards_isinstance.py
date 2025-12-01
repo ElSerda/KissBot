@@ -14,7 +14,7 @@ class TestEnhancedPatternsLoaderInstanceOf:
 
     def test_get_pattern_stats_with_valid_data(self):
         """✅ Test avec données valides (cas normal)"""
-        from intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
+        from modules.intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
 
         # Mock rules valides
         mock_rules = {
@@ -43,7 +43,7 @@ class TestEnhancedPatternsLoaderInstanceOf:
 
     def test_get_pattern_stats_with_none_patterns(self):
         """🔍 Test avec patterns=None → isinstance guard protège"""
-        from intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
+        from modules.intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
 
         # Mock rules avec patterns=None (YAML corrompu)
         mock_rules = {
@@ -66,7 +66,7 @@ class TestEnhancedPatternsLoaderInstanceOf:
 
     def test_get_pattern_stats_with_string_instead_of_list(self):
         """🔍 Test avec patterns='string' au lieu de list"""
-        from intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
+        from modules.intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
 
         # Mock rules avec patterns en string (erreur config)
         mock_rules = {
@@ -88,7 +88,7 @@ class TestEnhancedPatternsLoaderInstanceOf:
 
     def test_get_pattern_stats_with_none_context_modifiers(self):
         """🔍 Test avec context_modifiers=None"""
-        from intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
+        from modules.intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
 
         # Mock rules avec context_modifiers=None
         mock_rules = {
@@ -111,7 +111,7 @@ class TestEnhancedPatternsLoaderInstanceOf:
 
     def test_get_pattern_stats_with_list_instead_of_dict(self):
         """🔍 Test avec context_modifiers=['item'] au lieu de dict"""
-        from intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
+        from modules.intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
 
         # Mock rules avec context_modifiers en list
         mock_rules = {
@@ -133,7 +133,7 @@ class TestEnhancedPatternsLoaderInstanceOf:
 
     def test_get_pattern_stats_with_mixed_corruption(self):
         """🔍 Test avec corruption mixte (plusieurs types incorrects)"""
-        from intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
+        from modules.intelligence.enhanced_patterns_loader import EnhancedPatternsLoader
 
         # Mock rules totalement corrompues
         mock_rules = {
@@ -163,7 +163,7 @@ class TestInstanceOfGuardsSourceCode:
         """🔍 Vérifie présence des isinstance dans enhanced_patterns_loader.py"""
         import pathlib
 
-        loader_file = pathlib.Path(__file__).parent.parent / "intelligence" / "enhanced_patterns_loader.py"
+        loader_file = pathlib.Path(__file__).parent.parent / "modules" / "intelligence" / "enhanced_patterns_loader.py"
         source = loader_file.read_text()
 
         # Vérifie présence des guards
@@ -175,7 +175,7 @@ class TestInstanceOfGuardsSourceCode:
         """📊 Compte le nombre de isinstance guards"""
         import pathlib
 
-        loader_file = pathlib.Path(__file__).parent.parent / "intelligence" / "enhanced_patterns_loader.py"
+        loader_file = pathlib.Path(__file__).parent.parent / "modules" / "intelligence" / "enhanced_patterns_loader.py"
         source = loader_file.read_text()
 
         # Compte les occurrences

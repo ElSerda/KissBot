@@ -29,7 +29,7 @@ async def handle_ask(bot, cmd: ChatCommand):
             return
 
         # Traitement LLM
-        from intelligence.core import process_llm_request
+        from modules.intelligence.core import process_llm_request
         
         response = await process_llm_request(
             llm_handler=bot.llm_handler,
@@ -68,7 +68,7 @@ async def handle_joke(bot, cmd: ChatCommand):
             return
 
         # Prompt dynamique
-        from intelligence.joke_cache import get_dynamic_prompt
+        from modules.intelligence.joke_cache import get_dynamic_prompt
         
         base_prompt = "Réponds EN 1 PHRASE MAX EN FRANÇAIS, SANS TE PRÉSENTER, style humoristique : raconte une blague courte"
         dynamic_prompt = get_dynamic_prompt(base_prompt)
@@ -84,7 +84,7 @@ async def handle_joke(bot, cmd: ChatCommand):
             return
 
         # Appel LLM
-        from intelligence.core import process_llm_request
+        from modules.intelligence.core import process_llm_request
         
         response = await process_llm_request(
             llm_handler=bot.llm_handler,
