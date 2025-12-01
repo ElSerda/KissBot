@@ -70,21 +70,14 @@ def register_user_commands(bot, chat: Chat):
 def register_mod_commands(bot, chat: Chat):
     """
     Commandes modérateur (permissions requises).
+    
+    Note: Les commandes banword sont gérées directement dans MessageHandler
+    via le pattern !kbbanword, !kbunbanword, !kbbanwords
     """
-    # Wrapper pour vérifier les permissions mod
-    async def mod_only(handler):
-        async def wrapper(cmd):
-            if not cmd.user.mod:
-                await bot.send_message(cmd.room.name, f"@{cmd.user.name} ❌ Commande réservée aux modérateurs")
-                return
-            await handler(bot, cmd)
-        return wrapper
+    # Banword commands are now handled in message_handler.py
+    # following the same pattern as !adddev, !rmdev, !listdevs
     
-    # À implémenter: timeout, clear, etc.
-    # from .mod_commands.moderation import handle_timeout, handle_clear
-    # chat.register_command('timeout', mod_only(handle_timeout))
-    
-    LOGGER.info("✅ Mod commands registered: (none yet)")
+    LOGGER.info("✅ Mod commands registered: (handled in MessageHandler)")
 
 
 def register_admin_commands(bot, chat: Chat):

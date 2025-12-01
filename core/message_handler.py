@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from core.message_bus import MessageBus
 from core.message_types import ChatMessage, OutboundMessage
 from core.registry import Registry
+from modules.moderation import get_banword_manager
 from modules.integrations.game_engine.rust_wrapper import get_game_lookup
 from modules.integrations.music.music_cache import MusicCache
 from modules.integrations.llm_provider.llm_handler import LLMHandler
@@ -109,6 +110,10 @@ class MessageHandler:
         self.dev_whitelist = get_dev_whitelist(db_manager=None)  # Will set DB later
         LOGGER.info("🌍 TranslationService initialisé")
         
+        # BanWord Manager (auto-ban sur mots interdits)
+        self.banword_manager = get_banword_manager()
+        LOGGER.info("🚫 BanWordManager initialisé")
+        
         # Subscribe aux messages entrants
         self.bus.subscribe("chat.inbound", self._handle_chat_message)
         
@@ -156,6 +161,14 @@ class MessageHandler:
         if msg.user_login.lower() in KNOWN_BOTS:
             LOGGER.debug(f"🤖 Ignoring bot message from {msg.user_login}")
             return
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 🚫 BANWORD CHECK - Auto-ban si mot interdit détecté
+        # ═══════════════════════════════════════════════════════════════════
+        matched_banword = self.banword_manager.check_message(msg.channel, msg.text)
+        if matched_banword:
+            await self._execute_banword_ban(msg, matched_banword)
+            return  # Ne pas traiter le message davantage
         
         # Auto-traduction pour devs whitelistés (avant deduplication)
         if not msg.text.startswith("!"):
@@ -237,6 +250,15 @@ class MessageHandler:
             await self._cmd_decoherence(msg, args)
         elif command == "!kisscharity":
             await self._cmd_kisscharity(msg, args)
+        # ═══════════════════════════════════════════════════════════════════
+        # 🚫 BANWORD COMMANDS (Mod/Broadcaster only)
+        # ═══════════════════════════════════════════════════════════════════
+        elif command == "!kbbanword":
+            await self._cmd_kbbanword(msg, args)
+        elif command == "!kbunbanword":
+            await self._cmd_kbunbanword(msg, args)
+        elif command == "!kbbanwords":
+            await self._cmd_kbbanwords(msg)
         else:
             # Commande inconnue, pas de réponse
             LOGGER.debug(f"Unknown command: {command}")
@@ -1136,6 +1158,46 @@ Réponds en te basant sur ces informations factuelles."""
             LOGGER.error(f"❌ Error processing mention from {msg.user_login}: {e}", exc_info=True)
             # Silent ignore en cas d'erreur
     
+    async def _execute_banword_ban(self, msg: ChatMessage, matched_word: str) -> None:
+        """
+        Exécute un ban automatique suite à un banword détecté
+        
+        Args:
+            msg: Message contenant le banword
+            matched_word: Le mot interdit qui a déclenché le ban
+        """
+        # Construire la raison du ban
+        ban_reason = self.banword_manager.get_ban_reason(msg.channel, matched_word)
+        
+        LOGGER.warning(
+            f"🚫 BANWORD TRIGGERED: '{matched_word}' by {msg.user_login} "
+            f"in #{msg.channel} - Message: '{msg.text[:50]}...'"
+        )
+        
+        try:
+            # Envoyer la commande /ban via IRC
+            ban_command = f"/ban {msg.user_login} {ban_reason}"
+            
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=ban_command,
+                prefer="irc"
+            ))
+            
+            LOGGER.info(f"✅ Ban sent for {msg.user_login}: {ban_reason}")
+            
+            # Optionnel: Notifier les mods via un message
+            # await self.bus.publish("chat.outbound", OutboundMessage(
+            #     channel=msg.channel,
+            #     channel_id=msg.channel_id,
+            #     text=f"🚫 {msg.user_login} auto-banni (banword: {matched_word})",
+            #     prefer="irc"
+            # ))
+            
+        except Exception as e:
+            LOGGER.error(f"❌ Error executing banword ban for {msg.user_login}: {e}", exc_info=True)
+    
     # ============================================================
     # ADMIN COMMANDS
     # ============================================================
@@ -1473,6 +1535,100 @@ Réponds en te basant sur ces informations factuelles."""
         else:
             dev_list = ", ".join(devs)
             response_text = f"@{msg.user_login} 👥 Devs (auto-trad): {dev_list}"
+        
+        await self.bus.publish("chat.outbound", OutboundMessage(
+            channel=msg.channel,
+            channel_id=msg.channel_id,
+            text=response_text
+        ))
+    
+    # ════════════════════════════════════════════════════════════════════════
+    # 🚫 BANWORD COMMANDS (Mod/Broadcaster only)
+    # ════════════════════════════════════════════════════════════════════════
+    
+    async def _cmd_kbbanword(self, msg: ChatMessage, args: str) -> None:
+        """
+        Commande !kbbanword <mot> - Ajoute un banword (mod/broadcaster only)
+        
+        Tout message contenant ce mot = BAN instantané
+        """
+        if not (msg.is_mod or msg.is_broadcaster):
+            return  # Silently ignore
+        
+        if not args:
+            response_text = (
+                f"@{msg.user_login} Usage: !kbbanword <mot> — "
+                f"Ajoute un mot qui déclenche un BAN instantané"
+            )
+        else:
+            word = args.strip().lower()
+            
+            # Validation
+            if len(word) < 3:
+                response_text = f"@{msg.user_login} ⚠️ Le mot doit faire au moins 3 caractères"
+            elif len(word) > 50:
+                response_text = f"@{msg.user_login} ⚠️ Le mot est trop long (max 50 caractères)"
+            else:
+                added = self.banword_manager.add_banword(msg.channel, word, msg.user_login)
+                
+                if added:
+                    response_text = (
+                        f"@{msg.user_login} 🚫 Banword ajouté: \"{word}\" — "
+                        f"Tout message contenant ce mot = BAN instantané"
+                    )
+                    LOGGER.info(f"🚫 BANWORD | #{msg.channel} | {msg.user_login} added: '{word}'")
+                else:
+                    response_text = f"@{msg.user_login} ℹ️ \"{word}\" est déjà dans la liste"
+        
+        await self.bus.publish("chat.outbound", OutboundMessage(
+            channel=msg.channel,
+            channel_id=msg.channel_id,
+            text=response_text
+        ))
+    
+    async def _cmd_kbunbanword(self, msg: ChatMessage, args: str) -> None:
+        """Commande !kbunbanword <mot> - Retire un banword (mod/broadcaster only)"""
+        if not (msg.is_mod or msg.is_broadcaster):
+            return  # Silently ignore
+        
+        if not args:
+            response_text = f"@{msg.user_login} Usage: !kbunbanword <mot>"
+        else:
+            word = args.strip().lower()
+            removed = self.banword_manager.remove_banword(msg.channel, word)
+            
+            if removed:
+                response_text = f"@{msg.user_login} ✅ Banword retiré: \"{word}\""
+                LOGGER.info(f"✅ BANWORD | #{msg.channel} | {msg.user_login} removed: '{word}'")
+            else:
+                response_text = f"@{msg.user_login} ℹ️ \"{word}\" n'est pas dans la liste"
+        
+        await self.bus.publish("chat.outbound", OutboundMessage(
+            channel=msg.channel,
+            channel_id=msg.channel_id,
+            text=response_text
+        ))
+    
+    async def _cmd_kbbanwords(self, msg: ChatMessage) -> None:
+        """Commande !kbbanwords - Liste les banwords du channel (mod/broadcaster only)"""
+        if not (msg.is_mod or msg.is_broadcaster):
+            return  # Silently ignore
+        
+        words = self.banword_manager.list_banwords(msg.channel)
+        
+        if not words:
+            response_text = (
+                f"@{msg.user_login} ℹ️ Aucun banword configuré. "
+                f"Utilisez !kbbanword <mot> pour en ajouter"
+            )
+        else:
+            # Limiter l'affichage si trop de mots
+            if len(words) > 10:
+                display = ", ".join(words[:10]) + f" ... (+{len(words) - 10})"
+            else:
+                display = ", ".join(words)
+            
+            response_text = f"@{msg.user_login} 🚫 Banwords ({len(words)}): {display}"
         
         await self.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
