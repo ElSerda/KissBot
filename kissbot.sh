@@ -16,9 +16,10 @@ SUPERVISOR_LOG="$SCRIPT_DIR/supervisor.log"
 HUB_LOG="$SCRIPT_DIR/eventsub_hub.log"
 HUB_SOCKET="/tmp/kissbot_hub.sock"
 
-# Parse --use-db and --rust options
+# Parse --use-db, --rust, and --mono options
 USE_DB_FLAG=""
 USE_RUST=false
+USE_MONO=false
 for arg in "$@"; do
     case $arg in
         --use-db)
@@ -26,6 +27,9 @@ for arg in "$@"; do
             ;;
         --rust)
             USE_RUST=true
+            ;;
+        --mono)
+            USE_MONO=true
             ;;
     esac
 done
@@ -165,12 +169,16 @@ start() {
             return 1
         fi
         
-        echo -e "${GREEN}🦀 Starting KissBot Supervisor (Rust)...${NC}"
-        
-        # Rust supervisor handles Hub internally
+        # Build flags
         RUST_FLAGS="--config $CONFIG_FILE --enable-hub"
         if [ -n "$USE_DB_FLAG" ]; then
             RUST_FLAGS="$RUST_FLAGS --use-db --db $DB_FILE"
+        fi
+        if [ "$USE_MONO" = true ]; then
+            RUST_FLAGS="$RUST_FLAGS --mono"
+            echo -e "${GREEN}🦀 Starting KissBot Supervisor (Rust) [MONO-PROCESS]...${NC}"
+        else
+            echo -e "${GREEN}🦀 Starting KissBot Supervisor (Rust) [MULTI-PROCESS]...${NC}"
         fi
         
         nohup "$RUST_SUPERVISOR" $RUST_FLAGS > "$SUPERVISOR_LOG" 2>&1 &
@@ -180,6 +188,11 @@ start() {
         sleep 2
         if is_running; then
             echo -e "${GREEN}✅ KissBot Supervisor (Rust) started (PID: $SUPERVISOR_PID)${NC}"
+            if [ "$USE_MONO" = true ]; then
+                echo -e "${GREEN}   🦀 Mode: MONO-PROCESS (all channels in 1 process)${NC}"
+            else
+                echo -e "${GREEN}   🦀 Mode: MULTI-PROCESS (1 process per channel)${NC}"
+            fi
             echo -e "${GREEN}   🦀 RAM: ~5MB | CPU: <0.5% | Startup: <50ms${NC}"
             echo -e "${GREEN}📝 Supervisor log: tail -f $SUPERVISOR_LOG${NC}"
         else
@@ -648,15 +661,15 @@ case "$1" in
         logs "$@"
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|start-channel|stop-channel|restart-channel|status|logs [channel] [-f]} [--use-db] [--rust]"
+        echo "Usage: $0 {start|stop|restart|start-channel|stop-channel|restart-channel|status|logs [channel] [-f]} [options]"
         echo ""
         echo "Commands:"
         echo "  start [options]       - Start KissBot Stack (Hub + Supervisor + all bots)"
         echo "  stop                  - Stop KissBot Stack (Hub + Supervisor + all bots)"
         echo "  restart [options]     - Restart KissBot Stack (Hub + Supervisor + all bots)"
-        echo "  start-channel <ch>    - Start only one specific bot (supervisor must be running)"
-        echo "  stop-channel <ch>     - Stop only one specific bot (supervisor keeps running)"
-        echo "  restart-channel <ch>  - Restart only one specific bot (supervisor keeps running)"
+        echo "  start-channel <ch>    - Start only one specific bot (multi-process mode only)"
+        echo "  stop-channel <ch>     - Stop only one specific bot (multi-process mode only)"
+        echo "  restart-channel <ch>  - Restart only one specific bot (multi-process mode only)"
         echo "  status                - Show supervisor and bot status"
         echo "  logs                  - Show last 50 supervisor log lines"
         echo "  logs <channel>        - Show last 50 lines for a specific channel"
@@ -665,16 +678,20 @@ case "$1" in
         echo "Options:"
         echo "  --use-db              - Use database for OAuth tokens (default: YAML)"
         echo "  --rust                - Use Rust supervisor (5MB RAM vs 100MB Python)"
+        echo "  --mono                - Mono-process mode: all channels in 1 process (saves RAM)"
         echo ""
         echo "Examples:"
-        echo "  $0 start --rust            # Start with Rust supervisor (recommended)"
-        echo "  $0 start --use-db          # Start full stack with DB tokens"
+        echo "  $0 start --rust --mono     # Recommended: Rust + mono-process (minimal RAM)"
+        echo "  $0 start --rust            # Rust supervisor, multi-process (1 per channel)"
+        echo "  $0 start --use-db          # Python supervisor with DB tokens"
         echo "  $0 start --rust --use-db   # Rust supervisor + DB tokens"
-        echo "  $0 start-channel el_serda  # Start only el_serda bot"
-        echo "  $0 stop-channel pelerin_   # Stop only pelerin_ bot"
-        echo "  $0 restart-channel el_serda # Restart only el_serda bot"
+        echo "  $0 start-channel el_serda  # Start only el_serda bot (multi-process only)"
         echo "  $0 status"
         echo "  $0 logs el_serda -f"
+        echo ""
+        echo "RAM comparison (5 channels):"
+        echo "  Multi-process (default): ~5MB + 83MB × 5 = ~420MB"
+        echo "  Mono-process (--mono):   ~5MB + ~95MB    = ~100MB"
         exit 1
         ;;
 esac

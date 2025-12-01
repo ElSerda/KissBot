@@ -8,9 +8,8 @@ Copyright (c) 2024-2025 ElSerda
 Licence propriétaire "Source-Disponible" - Voir LICENSE et EULA_FR.md
 
 ✅ Gratuit pour usage personnel, éducatif et recherche
-⚠️ Usage commercial nécessite une licence KissBot Pro
+⚠️ Usage commercial nécessite une licence
 
-Ce bot inclut l'algorithme de filtrage sémantique Δₛ³.
 ════════════════════════════════════════════════════════════════════════════
 """
 
@@ -81,12 +80,17 @@ LOGGER = logging.getLogger(__name__)
 
 
 def parse_args():
-    """Parse command-line arguments for single-channel mode"""
+    """Parse command-line arguments for single or multi-channel mode"""
     parser = argparse.ArgumentParser(description="KissBot V4 - Twitch Bot")
     parser.add_argument(
         '--channel',
         type=str,
-        help='Run bot for a single channel (for multi-process mode)'
+        help='Run bot for a single channel (legacy multi-process mode)'
+    )
+    parser.add_argument(
+        '--channels',
+        type=str,
+        help='Comma-separated list of channels (mono-process multi-channel mode)'
     )
     parser.add_argument(
         '--config',
@@ -121,29 +125,41 @@ def parse_args():
     return parser.parse_args()
 
 
-def setup_logging(channel=None):
+def setup_logging(channel=None, channels=None):
     """
-    Setup hierarchical logging structure per channel
+    Setup hierarchical logging structure
     
-    Structure:
+    Args:
+        channel: Single channel (legacy mode)
+        channels: List of channels (multi-channel mode)
+    
+    Structure (single):
         logs/broadcast/{channel}/
-        ├── instance.log     (main bot logs, startup, errors)
-        ├── chat.log         (all chat messages in/out)
-        ├── commands.log     (command executions)
-        └── system.log       (CPU, RAM, performance metrics)
+        ├── instance.log, chat.log, commands.log, system.log
+    
+    Structure (multi):
+        logs/broadcast/multi/
+        ├── instance.log, chat.log, commands.log, system.log
     """
-    # Base logs directory
     logs_base = pathlib.Path("logs")
     
-    if channel:
-        # Hierarchical structure per channel
-        channel_dir = logs_base / "broadcast" / channel
+    if channels and len(channels) > 1:
+        # Multi-channel mode: shared logs directory
+        channel_dir = logs_base / "broadcast" / "multi"
         channel_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Main log file for this instance
         log_file = channel_dir / "instance.log"
-        
-        # Store paths for specialized loggers (used by components)
+        log_paths = {
+            'instance': channel_dir / "instance.log",
+            'chat': channel_dir / "chat.log",
+            'commands': channel_dir / "commands.log",
+            'system': channel_dir / "system.log"
+        }
+    elif channel or (channels and len(channels) == 1):
+        # Single channel mode
+        ch = channel or channels[0]
+        channel_dir = logs_base / "broadcast" / ch
+        channel_dir.mkdir(parents=True, exist_ok=True)
+        log_file = channel_dir / "instance.log"
         log_paths = {
             'instance': channel_dir / "instance.log",
             'chat': channel_dir / "chat.log",
@@ -151,7 +167,7 @@ def setup_logging(channel=None):
             'system': channel_dir / "system.log"
         }
     else:
-        # Legacy: single file for non-channel mode
+        # No channel specified: use config channels
         logs_base.mkdir(exist_ok=True)
         log_file = logs_base / "kissbot_production.log"
         log_paths = {'instance': log_file}
@@ -164,25 +180,27 @@ def setup_logging(channel=None):
             logging.FileHandler(log_file),
             logging.StreamHandler()
         ],
-        force=True  # Override any existing config
+        force=True
     )
     
     return log_file, log_paths
 
 
-def write_pid_file(channel=None):
+def write_pid_file(channel=None, channels=None):
     """Write PID file for process tracking"""
-    # Create pids directory if needed
     pids_dir = pathlib.Path("pids")
     pids_dir.mkdir(exist_ok=True)
     
-    # Determine PID file
-    if channel:
-        pid_file = pids_dir / f"{channel}.pid"
+    # Determine PID file name
+    if channels and len(channels) > 1:
+        # Multi-channel: single PID file
+        pid_file = pids_dir / "bot.pid"
+    elif channel or (channels and len(channels) == 1):
+        ch = channel or channels[0]
+        pid_file = pids_dir / f"{ch}.pid"
     else:
         pid_file = pids_dir / "kissbot.pid"
     
-    # Write current PID
     pid = os.getpid()
     with open(pid_file, 'w') as f:
         f.write(str(pid))
@@ -275,13 +293,18 @@ async def main():
     # Parse args first
     args = parse_args()
     
-    # Setup logging (per-channel if --channel specified)
-    log_file, log_paths = setup_logging(args.channel)
+    # Determine channels list from args
+    channels_list = None
+    if args.channels:
+        channels_list = [c.strip() for c in args.channels.split(',') if c.strip()]
+    
+    # Setup logging (supports both single and multi-channel)
+    log_file, log_paths = setup_logging(channel=args.channel, channels=channels_list)
     
     # Write PID file for process tracking
-    pid_file = write_pid_file(args.channel)
+    pid_file = write_pid_file(channel=args.channel, channels=channels_list)
     
-    # Signal: Process started (for restart-channel script)
+    # Signal: Process started (for restart-channel script) - only in single-channel mode
     if args.channel:
         starting_flag = pathlib.Path(f"pids/{args.channel}.starting")
         starting_flag.touch()
@@ -289,10 +312,12 @@ async def main():
     
     print("=" * 70)
     print("KissBot V4 - Twitch Bot with IRC + Helix + Stream Monitoring")
-    if args.channel:
+    if channels_list and len(channels_list) > 1:
+        print(f"Mode: MULTI-CHANNEL MONO-PROCESS ({len(channels_list)} channels)")
+    elif args.channel:
         print(f"Mode: SINGLE-CHANNEL ({args.channel})")
     else:
-        print("Mode: MULTI-CHANNEL")
+        print("Mode: CONFIG CHANNELS")
     if args.use_db:
         print(f"Token Source: DATABASE ({args.db})")
     else:
@@ -330,8 +355,13 @@ async def main():
     # IRC channels to join (also monitored by StreamMonitor)
     irc_channels = twitch_config.get("channels", [])
     
-    # Override channels if --channel specified (single-channel mode)
-    if args.channel:
+    # Override channels based on args
+    if args.channels:
+        # New mono-process multi-channel mode: --channels "el_serda,pelerin_,other"
+        irc_channels = [c.strip() for c in args.channels.split(',') if c.strip()]
+        LOGGER.info(f"🎯 Multi-channel mono-process mode: {irc_channels}")
+    elif args.channel:
+        # Legacy multi-process mode: --channel el_serda
         irc_channels = [args.channel]
         LOGGER.info(f"🎯 Single-channel mode: {args.channel}")
     

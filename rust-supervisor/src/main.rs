@@ -36,6 +36,7 @@ struct SupervisorConfig {
     enable_hub: bool,
     hub_socket: PathBuf,
     health_check_interval: Duration,
+    mono_process: bool,  // NEW: Use single process for all channels
 }
 
 // ============================================================================
@@ -219,6 +220,176 @@ impl BotProcess {
 }
 
 // ============================================================================
+// Unified Bot Process (Multi-channel in single process)
+// ============================================================================
+
+struct UnifiedBotProcess {
+    channels: Vec<String>,
+    config_path: PathBuf,
+    use_db: bool,
+    db_path: PathBuf,
+    eventsub_mode: String,
+    hub_socket: PathBuf,
+    process: Option<Child>,
+    start_time: Option<Instant>,
+    restart_count: u32,
+}
+
+impl UnifiedBotProcess {
+    fn new(
+        channels: Vec<String>,
+        config_path: PathBuf,
+        use_db: bool,
+        db_path: PathBuf,
+        eventsub_mode: String,
+        hub_socket: PathBuf,
+    ) -> Self {
+        Self {
+            channels,
+            config_path,
+            use_db,
+            db_path,
+            eventsub_mode,
+            hub_socket,
+            process: None,
+            start_time: None,
+            restart_count: 0,
+        }
+    }
+
+    async fn start(&mut self) -> Result<bool> {
+        if let Some(ref mut child) = self.process {
+            if let Ok(None) = child.try_wait() {
+                warn!(
+                    "⚠️  Bot: Process already running (PID {})",
+                    child.id().unwrap_or(0)
+                );
+                return Ok(false);
+            }
+        }
+
+        let venv_python = PathBuf::from("kissbot-venv/bin/python");
+        let python_cmd = if venv_python.exists() {
+            venv_python.to_str().unwrap()
+        } else {
+            "python3"
+        };
+
+        let mut cmd = Command::new(python_cmd);
+        
+        // Use --channels with comma-separated list
+        let channels_arg = self.channels.join(",");
+        cmd.arg("main.py")
+            .arg("--channels")
+            .arg(&channels_arg)
+            .arg("--config")
+            .arg(&self.config_path)
+            .arg("--eventsub")
+            .arg(&self.eventsub_mode);
+
+        if self.use_db {
+            cmd.arg("--use-db").arg("--db").arg(&self.db_path);
+        }
+
+        if self.eventsub_mode == "hub" {
+            cmd.arg("--hub-socket").arg(&self.hub_socket);
+        }
+
+        cmd.stdout(Stdio::null()).stderr(Stdio::null());
+
+        match cmd.spawn() {
+            Ok(child) => {
+                let pid = child.id().unwrap_or(0);
+                self.process = Some(child);
+                self.start_time = Some(Instant::now());
+
+                let mode_emoji = if self.eventsub_mode == "hub" { "🌐" } else { "🔌" };
+                info!(
+                    "✅ Bot started (PID {}) {} {} | Channels: {}",
+                    pid, mode_emoji, self.eventsub_mode, channels_arg
+                );
+                Ok(true)
+            }
+            Err(e) => {
+                error!("❌ Bot failed to start: {}", e);
+                Ok(false)
+            }
+        }
+    }
+
+    async fn stop(&mut self, timeout_secs: u64) -> Result<bool> {
+        if let Some(ref mut child) = self.process {
+            if let Ok(Some(_)) = child.try_wait() {
+                warn!("⚠️  Bot: Process not running");
+                return Ok(false);
+            }
+
+            info!("🛑 Bot: Sending SIGTERM (PID {})", child.id().unwrap_or(0));
+
+            #[cfg(unix)]
+            {
+                use nix::sys::signal::{kill, Signal};
+                use nix::unistd::Pid;
+                if let Some(pid) = child.id() {
+                    let _ = kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
+                }
+            }
+
+            tokio::select! {
+                _ = child.wait() => {
+                    info!("✅ Bot: Stopped gracefully");
+                    self.process = None;
+                    Ok(true)
+                }
+                _ = sleep(Duration::from_secs(timeout_secs)) => {
+                    warn!("⚠️  Bot: Timeout, sending SIGKILL");
+                    let _ = child.kill().await;
+                    self.process = None;
+                    info!("✅ Bot: Killed");
+                    Ok(true)
+                }
+            }
+        } else {
+            warn!("⚠️  Bot: Process not running");
+            Ok(false)
+        }
+    }
+
+    async fn restart(&mut self) -> Result<bool> {
+        info!("🔄 Bot: Restarting...");
+        self.stop(10).await?;
+        sleep(Duration::from_secs(1)).await;
+        let success = self.start().await?;
+        if success {
+            self.restart_count += 1;
+        }
+        Ok(success)
+    }
+
+    fn is_running(&mut self) -> bool {
+        if let Some(ref mut child) = self.process {
+            matches!(child.try_wait(), Ok(None))
+        } else {
+            false
+        }
+    }
+
+    fn uptime(&self) -> Option<Duration> {
+        self.start_time.and_then(|start| {
+            if self.process.is_some() {
+                Some(start.elapsed())
+            } else {
+                None
+            }
+        })
+    }
+
+    fn pid(&self) -> Option<u32> {
+        self.process.as_ref().and_then(|c| c.id())
+    }
+}
+
+// ============================================================================
 // Hub Process
 // ============================================================================
 
@@ -384,9 +555,13 @@ impl HubProcess {
 
 struct Supervisor {
     config: SupervisorConfig,
+    // Multi-process mode: one BotProcess per channel
     bots: Arc<RwLock<HashMap<String, BotProcess>>>,
+    // Mono-process mode: single UnifiedBotProcess for all channels
+    unified_bot: Arc<RwLock<Option<UnifiedBotProcess>>>,
     hub: Arc<RwLock<Option<HubProcess>>>,
     running: Arc<RwLock<bool>>,
+    channels: Vec<String>,  // Store channel list for reference
 }
 
 impl Supervisor {
@@ -395,22 +570,39 @@ impl Supervisor {
         let yaml_content = tokio::fs::read_to_string(&config.config_path).await?;
         let yaml_config: Config = serde_yaml::from_str(&yaml_content)?;
 
-        let mut bots = HashMap::new();
         let eventsub_mode = if config.enable_hub { "hub" } else { "direct" };
-
-        for channel in yaml_config.twitch.channels {
-            bots.insert(
-                channel.clone(),
-                BotProcess::new(
-                    channel,
-                    config.config_path.clone(),
-                    config.use_db,
-                    config.db_path.clone(),
-                    eventsub_mode.to_string(),
-                    config.hub_socket.clone(),
-                ),
+        let channels = yaml_config.twitch.channels.clone();
+        
+        // Initialize based on mode
+        let (bots, unified_bot) = if config.mono_process {
+            // Mono-process mode: single UnifiedBotProcess
+            let unified = UnifiedBotProcess::new(
+                channels.clone(),
+                config.config_path.clone(),
+                config.use_db,
+                config.db_path.clone(),
+                eventsub_mode.to_string(),
+                config.hub_socket.clone(),
             );
-        }
+            (HashMap::new(), Some(unified))
+        } else {
+            // Multi-process mode: one BotProcess per channel
+            let mut bots = HashMap::new();
+            for channel in &channels {
+                bots.insert(
+                    channel.clone(),
+                    BotProcess::new(
+                        channel.clone(),
+                        config.config_path.clone(),
+                        config.use_db,
+                        config.db_path.clone(),
+                        eventsub_mode.to_string(),
+                        config.hub_socket.clone(),
+                    ),
+                );
+            }
+            (bots, None)
+        };
 
         let hub = if config.enable_hub {
             Some(HubProcess::new(
@@ -424,19 +616,23 @@ impl Supervisor {
 
         let mode = if config.use_db { "DATABASE" } else { "YAML" };
         let hub_mode = if config.enable_hub { "HUB" } else { "DIRECT" };
+        let process_mode = if config.mono_process { "MONO-PROCESS" } else { "MULTI-PROCESS" };
 
         info!(
-            "📋 Supervisor initialized with {} channels (Token: {}, EventSub: {})",
-            bots.len(),
+            "📋 Supervisor initialized: {} channels, Token: {}, EventSub: {}, Mode: {}",
+            channels.len(),
             mode,
-            hub_mode
+            hub_mode,
+            process_mode
         );
 
         Ok(Self {
             config,
             bots: Arc::new(RwLock::new(bots)),
+            unified_bot: Arc::new(RwLock::new(unified_bot)),
             hub: Arc::new(RwLock::new(hub)),
             running: Arc::new(RwLock::new(true)),
+            channels,
         })
     }
 
@@ -454,9 +650,17 @@ impl Supervisor {
             }
         }
 
-        // Then start bots
-        info!("🤖 Starting all bots...");
-        {
+        // Start bots based on mode
+        if self.config.mono_process {
+            // Mono-process mode: start single unified bot
+            info!("🤖 Starting unified bot (mono-process)...");
+            let mut unified = self.unified_bot.write().await;
+            if let Some(ref mut bot) = *unified {
+                bot.start().await?;
+            }
+        } else {
+            // Multi-process mode: start individual bots
+            info!("🤖 Starting all bots (multi-process)...");
             let mut bots = self.bots.write().await;
             for (_, bot) in bots.iter_mut() {
                 bot.start().await?;
@@ -471,8 +675,14 @@ impl Supervisor {
         info!("🛑 Stopping all processes...");
 
         // Stop bots first
-        info!("🤖 Stopping all bots...");
-        {
+        if self.config.mono_process {
+            info!("🤖 Stopping unified bot...");
+            let mut unified = self.unified_bot.write().await;
+            if let Some(ref mut bot) = *unified {
+                bot.stop(10).await?;
+            }
+        } else {
+            info!("🤖 Stopping all bots...");
             let mut bots = self.bots.write().await;
             for (_, bot) in bots.iter_mut() {
                 bot.stop(10).await?;
@@ -518,7 +728,26 @@ impl Supervisor {
 
         // Bot statuses
         println!("🤖 Bots:");
-        {
+        
+        if self.config.mono_process {
+            // Mono-process mode: show unified bot
+            let mut unified = self.unified_bot.write().await;
+            if let Some(ref mut bot) = *unified {
+                let running = if bot.is_running() {
+                    "🟢 RUNNING"
+                } else {
+                    "🔴 STOPPED"
+                };
+                let pid = bot.pid().map(|p| format!("PID {}", p)).unwrap_or_else(|| "N/A".to_string());
+                let uptime = bot.uptime().map(|d| format!("{}s", d.as_secs())).unwrap_or_else(|| "N/A".to_string());
+                let channels_str = self.channels.join(", ");
+
+                println!("     [UNIFIED] {:15} {:12} Uptime: {:8} Restarts: {}", 
+                    running, pid, uptime, bot.restart_count);
+                println!("     Channels: {}", channels_str);
+            }
+        } else {
+            // Multi-process mode: show individual bots
             let mut bots = self.bots.write().await;
             for (channel, bot) in bots.iter_mut() {
                 let running = if bot.is_running() {
@@ -564,8 +793,16 @@ impl Supervisor {
                 }
             }
 
-            // Check bots
-            {
+            // Check bots based on mode
+            if self.config.mono_process {
+                let mut unified = self.unified_bot.write().await;
+                if let Some(ref mut bot) = *unified {
+                    if !bot.is_running() {
+                        error!("🚨 Unified Bot CRASHED! Auto-restarting...");
+                        bot.restart().await?;
+                    }
+                }
+            } else {
                 let mut bots = self.bots.write().await;
                 for (channel, bot) in bots.iter_mut() {
                     if !bot.is_running() {
@@ -584,17 +821,29 @@ impl Supervisor {
         println!("{}", "=".repeat(90));
         println!("KissBot Supervisor (Rust) - Interactive CLI");
         println!("{}", "=".repeat(90));
-        println!("Commands:");
-        println!("  status              - Show status of all processes");
-        println!("  start <channel>     - Start a specific bot");
-        println!("  stop <channel>      - Stop a specific bot");
-        println!("  restart <channel>   - Restart a specific bot");
-        println!("  start-all           - Start all processes (Hub + Bots)");
-        println!("  stop-all            - Stop all processes");
-        println!("  restart-all         - Restart all processes");
-        println!("  hub-status          - Show Hub status");
-        println!("  hub-restart         - Restart EventSub Hub");
-        println!("  quit / exit         - Stop all and exit");
+        
+        if self.config.mono_process {
+            println!("Mode: MONO-PROCESS (all channels in single process)");
+            println!("Commands:");
+            println!("  status              - Show status of all processes");
+            println!("  restart             - Restart the bot");
+            println!("  hub-status          - Show Hub status");
+            println!("  hub-restart         - Restart EventSub Hub");
+            println!("  quit / exit         - Stop all and exit");
+        } else {
+            println!("Mode: MULTI-PROCESS (one process per channel)");
+            println!("Commands:");
+            println!("  status              - Show status of all processes");
+            println!("  start <channel>     - Start a specific bot");
+            println!("  stop <channel>      - Stop a specific bot");
+            println!("  restart <channel>   - Restart a specific bot");
+            println!("  start-all           - Start all processes (Hub + Bots)");
+            println!("  stop-all            - Stop all processes");
+            println!("  restart-all         - Restart all processes");
+            println!("  hub-status          - Show Hub status");
+            println!("  hub-restart         - Restart EventSub Hub");
+            println!("  quit / exit         - Stop all and exit");
+        }
         println!("{}", "=".repeat(90));
         println!();
 
@@ -966,6 +1215,7 @@ async fn main() -> Result<()> {
     let mut enable_hub = false;
     let mut hub_socket = PathBuf::from("/tmp/kissbot_hub.sock");
     let mut interactive = false;
+    let mut mono_process = false;
 
     // Simple arg parsing
     let mut i = 1;
@@ -995,6 +1245,10 @@ async fn main() -> Result<()> {
                 interactive = true;
                 i += 1;
             }
+            "--mono" => {
+                mono_process = true;
+                i += 1;
+            }
             _ => i += 1,
         }
     }
@@ -1017,6 +1271,7 @@ async fn main() -> Result<()> {
     if enable_hub {
         println!("Hub Socket: {}", hub_socket.display());
     }
+    println!("Process Mode: {}", if mono_process { "MONO (single process for all channels)" } else { "MULTI (one process per channel)" });
     println!("Interactive: {}", if interactive { "YES" } else { "NO (daemon mode)" });
     println!("{}", "=".repeat(90));
 
@@ -1027,6 +1282,7 @@ async fn main() -> Result<()> {
         enable_hub,
         hub_socket,
         health_check_interval: Duration::from_secs(30),
+        mono_process,
     };
 
     let supervisor = Supervisor::new(config).await?;
