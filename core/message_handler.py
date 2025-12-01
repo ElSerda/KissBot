@@ -250,6 +250,8 @@ class MessageHandler:
             await self._cmd_decoherence(msg, args)
         elif command == "!kisscharity":
             await self._cmd_kisscharity(msg, args)
+        elif command == "!kbupdate":
+            await self._cmd_kbupdate(msg, args)
         # ═══════════════════════════════════════════════════════════════════
         # 🚫 BANWORD COMMANDS (Mod/Broadcaster only)
         # ═══════════════════════════════════════════════════════════════════
@@ -1402,6 +1404,49 @@ Réponds en te basant sur ces informations factuelles."""
         
         # Appeler le handler de broadcast
         response_text = await cmd_kisscharity(
+            msg=msg,
+            args=args_list,
+            bus=self.bus,
+            irc_client=self.irc_client
+        )
+        
+        # Envoyer la réponse
+        if response_text:
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+    
+    async def _cmd_kbupdate(self, msg: ChatMessage, args: str) -> None:
+        """
+        !kbupdate <message> - Notifier tous les channels d'une MAJ du bot
+        
+        Owner only (el_serda) - Pas de cooldown
+        Parfait pour annoncer:
+        - Nouvelles fonctionnalités
+        - Maintenance prévue
+        - Corrections de bugs
+        """
+        from modules.classic_commands.bot_commands.broadcast import cmd_kbupdate
+        
+        # Check si IRC client est disponible
+        if not self.irc_client:
+            response_text = f"@{msg.user_login} ❌ Erreur système : IRC client non disponible"
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            return
+        
+        # Parser les arguments
+        args_list = args.split() if args else []
+        
+        # Appeler le handler
+        response_text = await cmd_kbupdate(
             msg=msg,
             args=args_list,
             bus=self.bus,

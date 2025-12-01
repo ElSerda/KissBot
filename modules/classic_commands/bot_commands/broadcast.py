@@ -123,7 +123,94 @@ async def cmd_kisscharity(msg: ChatMessage, args: list[str], bus: MessageBus, ir
         return f"@{msg.user_login} ❌ Erreur technique lors du broadcast"
 
 
+# ============================================================================
+# !kbupdate - Notification de mise à jour pour les testeurs
+# ============================================================================
+
+# Owner only (el_serda user_id)
+OWNER_USER_ID = "44456636"  # el_serda
+
+async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_client) -> Optional[str]:
+    """
+    !kbupdate <message> - Notifier tous les channels d'une mise à jour du bot
+    
+    Usage:
+        !kbupdate Nouvelle commande !wiki disponible ! 🎉
+        !kbupdate Maintenance en cours, redémarrage dans 5 min ⚙️
+    
+    Permissions:
+        - Owner only (el_serda uniquement)
+    
+    Cooldown:
+        - Aucun (owner peut spammer s'il veut 😎)
+    
+    Args:
+        msg: Message d'origine
+        args: Liste des arguments (le message de mise à jour)
+        bus: MessageBus
+        irc_client: Instance IRCClient pour broadcaster
+        
+    Returns:
+        Message de confirmation
+    """
+    # 1. Permission check: Owner only
+    if msg.user_id != OWNER_USER_ID:
+        LOGGER.warning(f"⚠️ !kbupdate refusé: {msg.user_login} (id={msg.user_id}) n'est pas owner")
+        return f"@{msg.user_login} ❌ Seul el_serda peut utiliser !kbupdate"
+    
+    # 2. Validation: message non-vide
+    if not args:
+        return f"@{msg.user_login} ❌ Usage: !kbupdate <message>"
+    
+    # 3. Construire le message
+    update_msg = " ".join(args)
+    
+    # 4. Validation: max 400 chars (on garde de la marge pour le préfixe)
+    if len(update_msg) > 400:
+        return (
+            f"@{msg.user_login} ❌ Message trop long ! "
+            f"Max 400 caractères (actuellement: {len(update_msg)})"
+        )
+    
+    # 5. Format du message broadcast
+    broadcast_msg = f"🤖 [KissBot Update] {update_msg}"
+    
+    # 6. Log
+    LOGGER.info(
+        f"🔧 UPDATE BROADCAST | "
+        f"user={msg.user_login} | "
+        f"message={update_msg[:100]}..."
+    )
+    
+    # 7. Écrire dans le fichier broadcast pour le Supervisor
+    try:
+        now = datetime.now()
+        broadcast_file = "pids/supervisor.broadcast"
+        
+        # Format: timestamp|source_channel|message
+        broadcast_data = f"{int(now.timestamp())}|{msg.channel}|{broadcast_msg}\n"
+        
+        os.makedirs("pids", exist_ok=True)
+        with open(broadcast_file, "w") as f:
+            f.write(broadcast_data)
+        
+        LOGGER.info(
+            f"✅ UPDATE BROADCAST SENT | "
+            f"message={broadcast_msg[:50]}..."
+        )
+        
+        return (
+            f"@{msg.user_login} 🔧 Notification envoyée sur tous les channels ! "
+            f"\"[KissBot Update] {update_msg[:50]}...\""
+        )
+            
+    except Exception as e:
+        LOGGER.error(f"❌ Erreur kbupdate: {e}", exc_info=True)
+        return f"@{msg.user_login} ❌ Erreur technique lors de l'envoi"
+
+
 # Export de la commande pour le registry
 COMMANDS = {
-    "kisscharity": cmd_kisscharity
+    "kisscharity": cmd_kisscharity,
+    "kbupdate": cmd_kbupdate
 }
