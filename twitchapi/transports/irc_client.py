@@ -520,7 +520,7 @@ class IRCClient:
             try:
                 await asyncio.sleep(240)  # 4 minutes
                 
-                if self.chat and self.chat._running:
+                if self.chat and self._running:
                     # Ping via le WebSocket interne de pyTwitchAPI
                     # pyTwitchAPI gère le PONG automatiquement
                     try:
