@@ -231,3 +231,15 @@ logging:
 #   token: "oauth:xyz789uvw012"  # Token du compte bot
 #   bot_id: "987654321"         # User ID du compte bot
 #   channels: ["mon_pseudo_principal"]
+
+# ========================================
+# MODÉRATION AUTOMATIQUE
+# ========================================
+moderation:
+  banword:
+    # Mode dry-run : NE PAS BANNIR, juste notifier
+    # Mettre à false uniquement en production avec bot mod !
+    dry_run: true
+    
+    # Notifier dans le chat quand un banword est détecté
+    notify_chat: true

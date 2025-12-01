@@ -1162,6 +1162,8 @@ Réponds en te basant sur ces informations factuelles."""
         """
         Exécute un ban automatique suite à un banword détecté
         
+        Mode dry-run en dev: ne ban pas vraiment, juste log + message
+        
         Args:
             msg: Message contenant le banword
             matched_word: Le mot interdit qui a déclenché le ban
@@ -1174,26 +1176,55 @@ Réponds en te basant sur ces informations factuelles."""
             f"in #{msg.channel} - Message: '{msg.text[:50]}...'"
         )
         
+        # ═══════════════════════════════════════════════════════════════════
+        # MODE DRY-RUN : Vérifier si on peut vraiment bannir
+        # ═══════════════════════════════════════════════════════════════════
+        
+        # Config: activer le vrai ban uniquement si explicitement configuré
+        banword_config = self.config.get("moderation", {}).get("banword", {})
+        dry_run = banword_config.get("dry_run", True)  # Par défaut: dry-run activé !
+        
+        # Vérifier si le bot est mod sur ce channel (via les tags du message)
+        bot_is_mod = getattr(msg, 'bot_is_mod', False)  # TODO: récupérer cette info
+        
+        # Pour l'instant, on considère qu'on ne sait pas si on est mod
+        # On utilise une heuristique: si on a reçu des messages avec badges, etc.
+        
         try:
-            # Envoyer la commande /ban via IRC
-            ban_command = f"/ban {msg.user_login} {ban_reason}"
-            
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=ban_command,
-                prefer="irc"
-            ))
-            
-            LOGGER.info(f"✅ Ban sent for {msg.user_login}: {ban_reason}")
-            
-            # Optionnel: Notifier les mods via un message
-            # await self.bus.publish("chat.outbound", OutboundMessage(
-            #     channel=msg.channel,
-            #     channel_id=msg.channel_id,
-            #     text=f"🚫 {msg.user_login} auto-banni (banword: {matched_word})",
-            #     prefer="irc"
-            # ))
+            if dry_run:
+                # MODE DRY-RUN: Juste notifier, ne pas bannir
+                if bot_is_mod:
+                    notify_msg = (
+                        f"🚫 [DRY-RUN] Banword '{matched_word}' détecté! "
+                        f"Je POURRAIS ban {msg.user_login} (je suis mod)"
+                    )
+                else:
+                    notify_msg = (
+                        f"🚫 [DRY-RUN] Banword '{matched_word}' détecté! "
+                        f"User: {msg.user_login} — ⚠️ Je ne suis pas mod, ban impossible"
+                    )
+                
+                await self.bus.publish("chat.outbound", OutboundMessage(
+                    channel=msg.channel,
+                    channel_id=msg.channel_id,
+                    text=notify_msg,
+                    prefer="irc"
+                ))
+                
+                LOGGER.info(f"🔒 DRY-RUN: Would ban {msg.user_login} for '{matched_word}'")
+                
+            else:
+                # MODE PRODUCTION: Vraiment bannir
+                ban_command = f"/ban {msg.user_login} {ban_reason}"
+                
+                await self.bus.publish("chat.outbound", OutboundMessage(
+                    channel=msg.channel,
+                    channel_id=msg.channel_id,
+                    text=ban_command,
+                    prefer="irc"
+                ))
+                
+                LOGGER.info(f"✅ Ban EXECUTED for {msg.user_login}: {ban_reason}")
             
         except Exception as e:
             LOGGER.error(f"❌ Error executing banword ban for {msg.user_login}: {e}", exc_info=True)

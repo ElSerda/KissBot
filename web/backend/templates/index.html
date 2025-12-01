@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}KissBot - Connectez votre chaîne{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto text-center py-12">
+    
+    <!-- Hero -->
+    <div class="mb-12">
+        <h1 class="text-4xl font-bold mb-4">
+            🤖 KissBot
+        </h1>
+        <p class="text-xl text-gray-400 mb-2">
+            Bot Twitch intelligent avec modération automatique
+        </p>
+        <p class="text-gray-500">
+            Commandes personnalisées • Anti-spam • Intégration LLM
+        </p>
+    </div>
+    
+    <!-- Login Button -->
+    <div class="mb-12">
+        <a href="/auth/twitch" 
+           class="inline-flex items-center space-x-3 bg-twitch hover:bg-twitch-dark px-8 py-4 rounded-lg text-lg font-semibold transition-colors">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+            </svg>
+            <span>Se connecter avec Twitch</span>
+        </a>
+    </div>
+    
+    <!-- Scopes Info -->
+    <div class="bg-gray-800 rounded-lg p-6 text-left">
+        <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">🔐</span>
+            Permissions demandées
+        </h2>
+        
+        <div class="space-y-3 text-sm">
+            <div class="flex items-start space-x-3">
+                <span class="text-green-400">✓</span>
+                <div>
+                    <span class="text-gray-200">Modération</span>
+                    <p class="text-gray-500">Ban/timeout des utilisateurs, suppression de messages</p>
+                </div>
+            </div>
+            
+            <div class="flex items-start space-x-3">
+                <span class="text-green-400">✓</span>
+                <div>
+                    <span class="text-gray-200">Lecture du chat</span>
+                    <p class="text-gray-500">Lire et envoyer des messages dans votre chat</p>
+                </div>
+            </div>
+            
+            <div class="flex items-start space-x-3">
+                <span class="text-green-400">✓</span>
+                <div>
+                    <span class="text-gray-200">Infos chaîne</span>
+                    <p class="text-gray-500">Titre, catégorie, statut du stream</p>
+                </div>
+            </div>
+        </div>
+        
+        <p class="mt-4 text-xs text-gray-500">
+            Ces permissions sont nécessaires pour que le bot fonctionne sur votre chaîne.
+            Vous pouvez les révoquer à tout moment depuis les paramètres Twitch.
+        </p>
+    </div>
+    
+</div>
+{% endblock %}
