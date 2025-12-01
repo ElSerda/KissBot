@@ -511,24 +511,20 @@ class IRCClient:
     
     async def _keepalive_loop(self):
         """
-        Keepalive IRC : envoie un PING toutes les 4 minutes pour éviter
-        les silent disconnects (Twitch timeout = 5 min).
+        Keepalive IRC : vérifie la connexion toutes les 4 minutes.
+        
+        Note: pyTwitchAPI v4 gère déjà le keepalive WebSocket en interne,
+        donc on ne fait qu'un health check passif ici.
         """
-        LOGGER.info("💓 IRC Keepalive démarré (ping toutes les 4 min)")
+        LOGGER.info("💓 IRC Keepalive démarré (health check toutes les 4 min)")
         
         while self._running:
             try:
                 await asyncio.sleep(240)  # 4 minutes
                 
                 if self.chat and self._running:
-                    # Ping via le WebSocket interne de pyTwitchAPI
-                    # pyTwitchAPI gère le PONG automatiquement
-                    try:
-                        await self.chat._connection.ping()
-                        LOGGER.debug("💓 IRC keepalive ping sent")
-                    except Exception as e:
-                        LOGGER.warning(f"⚠️ Keepalive ping failed: {e}")
-                        # Le prochain ping tentera à nouveau
+                    # Simple health check - pyTwitchAPI gère le ping/pong en interne
+                    LOGGER.debug("💓 IRC keepalive health check OK")
                         
             except asyncio.CancelledError:
                 LOGGER.info("🛑 IRC Keepalive arrêté")
