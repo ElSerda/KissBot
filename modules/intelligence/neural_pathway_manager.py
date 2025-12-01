@@ -199,6 +199,11 @@ class NeuralPathwayManager:
             return "reflex", self.synapses["reflex"]
 
         ucb_scores = self.calculate_ucb_scores(stimulus_class)
+        
+        # 🚫 Exclure reflex pour gen_short/gen_long (il retourne None pour ces classes)
+        # Le reflex ne gère que les pings/tests, pas les vraies questions
+        if stimulus_class in ("gen_short", "gen_long"):
+            ucb_scores.pop("reflex", None)
 
         # Tri par score UCB décroissant
         sorted_synapses = sorted(ucb_scores.items(), key=lambda x: x[1], reverse=True)
