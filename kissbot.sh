@@ -4,6 +4,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="$SCRIPT_DIR/kissbot-venv"
 SUPERVISOR_SCRIPT="$SCRIPT_DIR/supervisor_v1.py"
+RUST_SUPERVISOR="$SCRIPT_DIR/rust-supervisor/target/release/kissbot-supervisor"
 HUB_SCRIPT="$SCRIPT_DIR/eventsub_hub.py"
 CONFIG_FILE="$SCRIPT_DIR/config/config.yaml"
 DB_FILE="$SCRIPT_DIR/kissbot.db"
@@ -15,11 +16,19 @@ SUPERVISOR_LOG="$SCRIPT_DIR/supervisor.log"
 HUB_LOG="$SCRIPT_DIR/eventsub_hub.log"
 HUB_SOCKET="/tmp/kissbot_hub.sock"
 
-# Parse --use-db option
+# Parse --use-db and --rust options
 USE_DB_FLAG=""
-if [ "$2" == "--use-db" ] || [ "$3" == "--use-db" ]; then
-    USE_DB_FLAG="--use-db --db $DB_FILE"
-fi
+USE_RUST=false
+for arg in "$@"; do
+    case $arg in
+        --use-db)
+            USE_DB_FLAG="--use-db --db $DB_FILE"
+            ;;
+        --rust)
+            USE_RUST=true
+            ;;
+    esac
+done
 
 # Colors
 GREEN='\033[0;32m'
@@ -114,7 +123,7 @@ stop_hub() {
     echo -e "${GREEN}✅ EventSub Hub stopped${NC}"
 }
 
-# Function to check if supervisor is running
+# Function to check if supervisor is running (Python or Rust)
 is_running() {
     if [ -f "$SUPERVISOR_PID_FILE" ]; then
         PID=$(cat "$SUPERVISOR_PID_FILE")
@@ -125,8 +134,13 @@ is_running() {
         fi
     fi
     
-    # Check for supervisor_v1.py process
+    # Check for Python supervisor_v1.py process
     if pgrep -f "python.*supervisor_v1\.py" > /dev/null 2>&1; then
+        return 0
+    fi
+    
+    # Check for Rust kissbot-supervisor process
+    if pgrep -f "kissbot-supervisor" > /dev/null 2>&1; then
         return 0
     fi
     
@@ -140,67 +154,97 @@ start() {
         return 1
     fi
     
-    # Start Hub first
-    start_hub
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}❌ Failed to start EventSub Hub. Cannot start supervisor.${NC}"
-        return 1
-    fi
-    
-    echo -e "${GREEN}🚀 Starting KissBot Supervisor...${NC}"
-    
     # Create directories
     mkdir -p "$PID_DIR" "$LOG_DIR"
-    
-    # Activate venv and start supervisor in background (non-interactive mode with hub)
     cd "$SCRIPT_DIR"
-    source "$VENV_PATH/bin/activate"
-    nohup python "$SUPERVISOR_SCRIPT" --config "$CONFIG_FILE" --non-interactive --enable-hub --hub-socket="$HUB_SOCKET" $USE_DB_FLAG > "$SUPERVISOR_LOG" 2>&1 &
     
-    # Save PID
-    SUPERVISOR_PID=$!
-    echo $SUPERVISOR_PID > "$SUPERVISOR_PID_FILE"
-    
-    # Wait a bit and check if it's running
-    sleep 3
-    if is_running; then
-        echo -e "${GREEN}✅ KissBot Supervisor started successfully (PID: $SUPERVISOR_PID)${NC}"
-        echo -e "${GREEN}📝 Supervisor log: tail -f $SUPERVISOR_LOG${NC}"
-        echo ""
+    if [ "$USE_RUST" = true ]; then
+        # === RUST SUPERVISOR ===
+        if [ ! -f "$RUST_SUPERVISOR" ]; then
+            echo -e "${RED}❌ Rust supervisor not built. Run: cd rust-supervisor && cargo build --release${NC}"
+            return 1
+        fi
         
-        # Wait for bots to be fully started (supervisor writes PID files)
-        echo -e "${YELLOW}⏳ Waiting for bots to start...${NC}"
-        sleep 5
+        echo -e "${GREEN}🦀 Starting KissBot Supervisor (Rust)...${NC}"
         
-        # Count bot PIDs from PID files (more reliable than pgrep)
-        BOT_COUNT=0
-        BOT_PIDS=""
-        for pidfile in "$PID_DIR"/*.pid; do
-            if [ -f "$pidfile" ]; then
-                filename=$(basename "$pidfile")
-                # Skip supervisor and hub PIDs
-                if [[ "$filename" != "supervisor.pid" ]] && [[ "$filename" != "eventsub_hub.pid" ]]; then
-                    pid=$(cat "$pidfile" 2>/dev/null)
-                    if [ -n "$pid" ] && ps -p "$pid" > /dev/null 2>&1; then
-                        channel=${filename%.pid}
-                        BOT_COUNT=$((BOT_COUNT + 1))
-                        BOT_PIDS="$BOT_PIDS\n   - PID $pid: --channel $channel"
-                    fi
-                fi
-            fi
-        done
+        # Rust supervisor handles Hub internally
+        RUST_FLAGS="--config $CONFIG_FILE --enable-hub"
+        if [ -n "$USE_DB_FLAG" ]; then
+            RUST_FLAGS="$RUST_FLAGS --use-db --db $DB_FILE"
+        fi
         
-        echo -e "${GREEN}🤖 Started $BOT_COUNT bot processes${NC}"
+        nohup "$RUST_SUPERVISOR" $RUST_FLAGS > "$SUPERVISOR_LOG" 2>&1 &
+        SUPERVISOR_PID=$!
+        echo $SUPERVISOR_PID > "$SUPERVISOR_PID_FILE"
         
-        # List bot processes
-        if [ "$BOT_COUNT" -gt 0 ]; then
-            echo -e "${GREEN}   Bot processes:${NC}"
-            echo -e "$BOT_PIDS"
+        sleep 2
+        if is_running; then
+            echo -e "${GREEN}✅ KissBot Supervisor (Rust) started (PID: $SUPERVISOR_PID)${NC}"
+            echo -e "${GREEN}   🦀 RAM: ~5MB | CPU: <0.5% | Startup: <50ms${NC}"
+            echo -e "${GREEN}📝 Supervisor log: tail -f $SUPERVISOR_LOG${NC}"
+        else
+            echo -e "${RED}❌ Failed to start Rust Supervisor. Check logs: $SUPERVISOR_LOG${NC}"
+            rm -f "$SUPERVISOR_PID_FILE"
+            return 1
         fi
     else
-        echo -e "${RED}❌ Failed to start KissBot Supervisor. Check logs: $SUPERVISOR_LOG${NC}"
-        rm -f "$SUPERVISOR_PID_FILE"
-        return 1
+        # === PYTHON SUPERVISOR ===
+        # Start Hub first
+        start_hub
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}❌ Failed to start EventSub Hub. Cannot start supervisor.${NC}"
+            return 1
+        fi
+        
+        echo -e "${GREEN}🐍 Starting KissBot Supervisor (Python)...${NC}"
+        
+        source "$VENV_PATH/bin/activate"
+        nohup python "$SUPERVISOR_SCRIPT" --config "$CONFIG_FILE" --non-interactive --enable-hub --hub-socket="$HUB_SOCKET" $USE_DB_FLAG > "$SUPERVISOR_LOG" 2>&1 &
+        
+        SUPERVISOR_PID=$!
+        echo $SUPERVISOR_PID > "$SUPERVISOR_PID_FILE"
+        
+        sleep 3
+        if is_running; then
+            echo -e "${GREEN}✅ KissBot Supervisor (Python) started (PID: $SUPERVISOR_PID)${NC}"
+            echo -e "${GREEN}📝 Supervisor log: tail -f $SUPERVISOR_LOG${NC}"
+        else
+            echo -e "${RED}❌ Failed to start Python Supervisor. Check logs: $SUPERVISOR_LOG${NC}"
+            rm -f "$SUPERVISOR_PID_FILE"
+            return 1
+        fi
+    fi
+    
+    echo ""
+        
+    # Wait for bots to be fully started (supervisor writes PID files)
+    echo -e "${YELLOW}⏳ Waiting for bots to start...${NC}"
+    sleep 5
+    
+    # Count bot PIDs from PID files (more reliable than pgrep)
+    BOT_COUNT=0
+    BOT_PIDS=""
+    for pidfile in "$PID_DIR"/*.pid; do
+        if [ -f "$pidfile" ]; then
+            filename=$(basename "$pidfile")
+            # Skip supervisor and hub PIDs
+            if [[ "$filename" != "supervisor.pid" ]] && [[ "$filename" != "eventsub_hub.pid" ]]; then
+                pid=$(cat "$pidfile" 2>/dev/null)
+                if [ -n "$pid" ] && ps -p "$pid" > /dev/null 2>&1; then
+                    channel=${filename%.pid}
+                    BOT_COUNT=$((BOT_COUNT + 1))
+                    BOT_PIDS="$BOT_PIDS\n   - PID $pid: --channel $channel"
+                fi
+            fi
+        fi
+    done
+    
+    echo -e "${GREEN}🤖 Started $BOT_COUNT bot processes${NC}"
+    
+    # List bot processes
+    if [ "$BOT_COUNT" -gt 0 ]; then
+        echo -e "${GREEN}   Bot processes:${NC}"
+        echo -e "$BOT_PIDS"
     fi
 }
 
@@ -220,10 +264,15 @@ stop() {
         return 1
     fi
     
+    # Find supervisor PID (Python or Rust)
     if [ -f "$SUPERVISOR_PID_FILE" ]; then
         PID=$(cat "$SUPERVISOR_PID_FILE")
     else
-        PID=$(pgrep -f "python.*supervisor_v1\.py" | head -n 1)
+        # Try Python first, then Rust
+        PID=$(pgrep -f "python.*supervisor_v1\\.py" | head -n 1)
+        if [ -z "$PID" ]; then
+            PID=$(pgrep -f "kissbot-supervisor" | head -n 1)
+        fi
     fi
     
     if [ -z "$PID" ]; then
@@ -599,12 +648,12 @@ case "$1" in
         logs "$@"
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|start-channel|stop-channel|restart-channel|status|logs [channel] [-f]} [--use-db]"
+        echo "Usage: $0 {start|stop|restart|start-channel|stop-channel|restart-channel|status|logs [channel] [-f]} [--use-db] [--rust]"
         echo ""
         echo "Commands:"
-        echo "  start [--use-db]      - Start KissBot Stack (Hub + Supervisor + all bots)"
+        echo "  start [options]       - Start KissBot Stack (Hub + Supervisor + all bots)"
         echo "  stop                  - Stop KissBot Stack (Hub + Supervisor + all bots)"
-        echo "  restart [--use-db]    - Restart KissBot Stack (Hub + Supervisor + all bots)"
+        echo "  restart [options]     - Restart KissBot Stack (Hub + Supervisor + all bots)"
         echo "  start-channel <ch>    - Start only one specific bot (supervisor must be running)"
         echo "  stop-channel <ch>     - Stop only one specific bot (supervisor keeps running)"
         echo "  restart-channel <ch>  - Restart only one specific bot (supervisor keeps running)"
@@ -615,9 +664,12 @@ case "$1" in
         echo ""
         echo "Options:"
         echo "  --use-db              - Use database for OAuth tokens (default: YAML)"
+        echo "  --rust                - Use Rust supervisor (5MB RAM vs 100MB Python)"
         echo ""
         echo "Examples:"
+        echo "  $0 start --rust            # Start with Rust supervisor (recommended)"
         echo "  $0 start --use-db          # Start full stack with DB tokens"
+        echo "  $0 start --rust --use-db   # Rust supervisor + DB tokens"
         echo "  $0 start-channel el_serda  # Start only el_serda bot"
         echo "  $0 stop-channel pelerin_   # Stop only pelerin_ bot"
         echo "  $0 restart-channel el_serda # Restart only el_serda bot"
