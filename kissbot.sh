@@ -16,6 +16,12 @@ SUPERVISOR_LOG="$SCRIPT_DIR/supervisor.log"
 HUB_LOG="$SCRIPT_DIR/eventsub_hub.log"
 HUB_SOCKET="/tmp/kissbot_hub.sock"
 
+# Web Backend
+WEB_DIR="$SCRIPT_DIR/web/backend"
+WEB_PID_FILE="$PID_DIR/web.pid"
+WEB_LOG="$SCRIPT_DIR/web.log"
+WEB_PORT="${WEB_PORT:-3000}"
+
 # Parse --use-db, --rust, and --mono options
 USE_DB_FLAG=""
 USE_RUST=false
@@ -127,7 +133,125 @@ stop_hub() {
     echo -e "${GREEN}✅ EventSub Hub stopped${NC}"
 }
 
-# Function to check if supervisor is running (Python or Rust)
+# ============================================================
+# WEB BACKEND FUNCTIONS
+# ============================================================
+
+# Function to check if Web is running
+is_web_running() {
+    if [ -f "$WEB_PID_FILE" ]; then
+        PID=$(cat "$WEB_PID_FILE")
+        if ps -p "$PID" > /dev/null 2>&1; then
+            return 0
+        else
+            rm -f "$WEB_PID_FILE"
+        fi
+    fi
+    
+    # Check for uvicorn process
+    if pgrep -f "uvicorn.*web\.backend\.main" > /dev/null 2>&1; then
+        return 0
+    fi
+    if pgrep -f "uvicorn main:app.*--port $WEB_PORT" > /dev/null 2>&1; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function to start Web Backend
+start_web() {
+    if is_web_running; then
+        echo -e "${YELLOW}⚠️  Web Backend already running (PID: $(cat $WEB_PID_FILE 2>/dev/null || echo 'unknown'))${NC}"
+        return 0
+    fi
+    
+    # Check if web directory exists
+    if [ ! -d "$WEB_DIR" ]; then
+        echo -e "${RED}❌ Web backend not found: $WEB_DIR${NC}"
+        return 1
+    fi
+    
+    # Check if .env exists
+    if [ ! -f "$WEB_DIR/.env" ]; then
+        echo -e "${RED}❌ Web backend .env not found. Copy .env.example and configure it.${NC}"
+        echo "   cp $WEB_DIR/.env.example $WEB_DIR/.env"
+        return 1
+    fi
+    
+    echo -e "${GREEN}🌐 Starting Web Backend (port $WEB_PORT)...${NC}"
+    
+    # Create directories
+    mkdir -p "$PID_DIR" "$LOG_DIR"
+    
+    # Activate venv and start web in background
+    cd "$SCRIPT_DIR"
+    source "$VENV_PATH/bin/activate"
+    
+    # Set PYTHONPATH and start uvicorn
+    PYTHONPATH="$WEB_DIR:$SCRIPT_DIR" nohup python -m uvicorn web.backend.main:app \
+        --host 0.0.0.0 \
+        --port "$WEB_PORT" \
+        --workers 1 \
+        > "$WEB_LOG" 2>&1 &
+    
+    # Save PID
+    WEB_PID=$!
+    echo $WEB_PID > "$WEB_PID_FILE"
+    
+    # Wait and check
+    sleep 2
+    if is_web_running; then
+        echo -e "${GREEN}✅ Web Backend started successfully (PID: $WEB_PID)${NC}"
+        echo -e "${GREEN}   🌐 URL: http://localhost:$WEB_PORT${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Failed to start Web Backend. Check logs: $WEB_LOG${NC}"
+        rm -f "$WEB_PID_FILE"
+        return 1
+    fi
+}
+
+# Function to stop Web Backend
+stop_web() {
+    if ! is_web_running; then
+        echo -e "${YELLOW}⚠️  Web Backend is not running${NC}"
+        return 1
+    fi
+    
+    if [ -f "$WEB_PID_FILE" ]; then
+        PID=$(cat "$WEB_PID_FILE")
+    else
+        PID=$(pgrep -f "uvicorn.*web\.backend\.main" | head -n 1)
+        if [ -z "$PID" ]; then
+            PID=$(pgrep -f "uvicorn main:app.*--port $WEB_PORT" | head -n 1)
+        fi
+    fi
+    
+    if [ -z "$PID" ]; then
+        echo -e "${RED}❌ Could not find Web Backend process${NC}"
+        return 1
+    fi
+    
+    echo -e "${YELLOW}🛑 Stopping Web Backend (PID: $PID)...${NC}"
+    kill -TERM "$PID" 2>/dev/null || true
+    
+    # Wait for graceful shutdown
+    sleep 2
+    
+    # Force kill if still running
+    if ps -p "$PID" > /dev/null 2>&1; then
+        kill -9 "$PID" 2>/dev/null || true
+        sleep 1
+    fi
+    
+    rm -f "$WEB_PID_FILE"
+    echo -e "${GREEN}✅ Web Backend stopped${NC}"
+}
+
+# ============================================================
+# SUPERVISOR FUNCTIONS
+# ============================================================
 is_running() {
     if [ -f "$SUPERVISOR_PID_FILE" ]; then
         PID=$(cat "$SUPERVISOR_PID_FILE")
@@ -529,8 +653,57 @@ stop_channel() {
 # Function to show status
 status() {
     echo "========================================================================"
-    echo " KissBot Supervisor Status"
+    echo " KissBot Stack Status"
     echo "========================================================================"
+    echo ""
+    
+    # Check Web Backend
+    if is_web_running; then
+        if [ -f "$WEB_PID_FILE" ]; then
+            WEB_PID=$(cat "$WEB_PID_FILE")
+        else
+            WEB_PID=$(pgrep -f "uvicorn.*web\.backend\.main" | head -n 1)
+        fi
+        
+        if [ -n "$WEB_PID" ] && ps -p "$WEB_PID" > /dev/null 2>&1; then
+            UPTIME=$(ps -p "$WEB_PID" -o etime= | tr -d ' ')
+            MEM=$(ps -p "$WEB_PID" -o rss= | awk '{printf "%.1f MB", $1/1024}')
+            echo -e "${GREEN}✅ Web Backend: RUNNING${NC}"
+            echo -e "   PID:    $WEB_PID"
+            echo -e "   URL:    http://localhost:$WEB_PORT"
+            echo -e "   Uptime: $UPTIME"
+            echo -e "   Memory: $MEM"
+        else
+            echo -e "${RED}❌ Web Backend: NOT RUNNING${NC}"
+        fi
+    else
+        echo -e "${RED}❌ Web Backend: NOT RUNNING${NC}"
+    fi
+    
+    echo ""
+    
+    # Check Hub
+    if is_hub_running; then
+        if [ -f "$HUB_PID_FILE" ]; then
+            HUB_PID=$(cat "$HUB_PID_FILE")
+        else
+            HUB_PID=$(pgrep -f "python.*eventsub_hub\.py" | head -n 1)
+        fi
+        
+        if [ -n "$HUB_PID" ] && ps -p "$HUB_PID" > /dev/null 2>&1; then
+            UPTIME=$(ps -p "$HUB_PID" -o etime= | tr -d ' ')
+            MEM=$(ps -p "$HUB_PID" -o rss= | awk '{printf "%.1f MB", $1/1024}')
+            echo -e "${GREEN}✅ EventSub Hub: RUNNING${NC}"
+            echo -e "   PID:    $HUB_PID"
+            echo -e "   Uptime: $UPTIME"
+            echo -e "   Memory: $MEM"
+        else
+            echo -e "${RED}❌ EventSub Hub: NOT RUNNING${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  EventSub Hub: NOT RUNNING (optional)${NC}"
+    fi
+    
     echo ""
     
     # Check supervisor
@@ -654,44 +827,87 @@ case "$1" in
     restart-channel)
         restart_channel "$2"
         ;;
+    start-web)
+        start_web
+        ;;
+    stop-web)
+        stop_web
+        ;;
+    restart-web)
+        stop_web
+        sleep 1
+        start_web
+        ;;
+    start-all)
+        echo -e "${GREEN}🚀 Starting full KissBot Stack...${NC}"
+        start_web
+        start
+        echo ""
+        echo -e "${GREEN}🎉 Full stack started!${NC}"
+        status
+        ;;
+    stop-all)
+        echo -e "${YELLOW}🛑 Stopping full KissBot Stack...${NC}"
+        stop
+        stop_web
+        echo -e "${GREEN}✅ Full stack stopped${NC}"
+        ;;
     status)
         status
         ;;
     logs)
         logs "$@"
         ;;
+    logs-web)
+        if [ "$2" = "-f" ] || [ "$2" = "--follow" ]; then
+            echo -e "${GREEN}📝 Following Web Backend logs (Ctrl+C to stop)...${NC}"
+            tail -f "$WEB_LOG"
+        else
+            echo -e "${GREEN}📝 Last 50 lines of Web Backend logs:${NC}"
+            tail -n 50 "$WEB_LOG"
+        fi
+        ;;
     *)
-        echo "Usage: $0 {start|stop|restart|start-channel|stop-channel|restart-channel|status|logs [channel] [-f]} [options]"
+        echo "Usage: $0 {command} [options]"
         echo ""
-        echo "Commands:"
+        echo "🤖 Bot Commands:"
         echo "  start [options]       - Start KissBot Stack (Hub + Supervisor + all bots)"
         echo "  stop                  - Stop KissBot Stack (Hub + Supervisor + all bots)"
-        echo "  restart [options]     - Restart KissBot Stack (Hub + Supervisor + all bots)"
-        echo "  start-channel <ch>    - Start only one specific bot (multi-process mode only)"
-        echo "  stop-channel <ch>     - Stop only one specific bot (multi-process mode only)"
-        echo "  restart-channel <ch>  - Restart only one specific bot (multi-process mode only)"
-        echo "  status                - Show supervisor and bot status"
-        echo "  logs                  - Show last 50 supervisor log lines"
-        echo "  logs <channel>        - Show last 50 lines for a specific channel"
-        echo "  logs [channel] -f     - Follow logs in real-time"
+        echo "  restart [options]     - Restart KissBot Stack"
+        echo "  start-channel <ch>    - Start only one specific bot"
+        echo "  stop-channel <ch>     - Stop only one specific bot"
+        echo "  restart-channel <ch>  - Restart only one specific bot"
         echo ""
-        echo "Options:"
-        echo "  --use-db              - Use database for OAuth tokens (default: YAML)"
-        echo "  --rust                - Use Rust supervisor (5MB RAM vs 100MB Python)"
-        echo "  --mono                - Mono-process mode: all channels in 1 process (saves RAM)"
+        echo "🌐 Web Dashboard Commands:"
+        echo "  start-web             - Start Web Dashboard (OAuth + API)"
+        echo "  stop-web              - Stop Web Dashboard"
+        echo "  restart-web           - Restart Web Dashboard"
+        echo "  logs-web [-f]         - Show Web Dashboard logs"
         echo ""
-        echo "Examples:"
-        echo "  $0 start --rust --mono     # Recommended: Rust + mono-process (minimal RAM)"
-        echo "  $0 start --rust            # Rust supervisor, multi-process (1 per channel)"
-        echo "  $0 start --use-db          # Python supervisor with DB tokens"
-        echo "  $0 start --rust --use-db   # Rust supervisor + DB tokens"
-        echo "  $0 start-channel el_serda  # Start only el_serda bot (multi-process only)"
-        echo "  $0 status"
-        echo "  $0 logs el_serda -f"
+        echo "📦 Full Stack Commands:"
+        echo "  start-all             - Start everything (Web + Bot)"
+        echo "  stop-all              - Stop everything"
+        echo "  status                - Show status of all components"
         echo ""
-        echo "RAM comparison (5 channels):"
-        echo "  Multi-process (default): ~5MB + 83MB × 5 = ~420MB"
-        echo "  Mono-process (--mono):   ~5MB + ~95MB    = ~100MB"
+        echo "📝 Log Commands:"
+        echo "  logs                  - Show supervisor log"
+        echo "  logs <channel>        - Show channel log"
+        echo "  logs [-f]             - Follow logs in real-time"
+        echo "  logs-web [-f]         - Web dashboard logs"
+        echo ""
+        echo "⚙️  Options:"
+        echo "  --use-db              - Use database for OAuth tokens"
+        echo "  --rust                - Use Rust supervisor (5MB RAM)"
+        echo "  --mono                - Mono-process mode (saves RAM)"
+        echo ""
+        echo "📌 Examples:"
+        echo "  $0 start-all               # Start full stack (Web + Bot)"
+        echo "  $0 start --rust --mono     # Bot only, Rust mono-process"
+        echo "  $0 start-web               # Web dashboard only"
+        echo "  $0 status                  # Check all components"
+        echo "  $0 logs-web -f             # Follow web logs"
+        echo ""
+        echo "🌐 Web Dashboard: http://localhost:${WEB_PORT}"
         exit 1
         ;;
 esac
