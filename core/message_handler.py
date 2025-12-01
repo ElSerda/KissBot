@@ -941,9 +941,16 @@ Réponds en te basant sur ces informations factuelles."""
         try:
             LOGGER.info(f"😄 Joke request from {msg.user_login}")
             
+            # Utiliser le prompt dynamique pour plus de variété
+            from modules.intelligence.joke_cache import get_dynamic_prompt
+            base_prompt = "Raconte-moi une blague courte et drôle"
+            dynamic_prompt = get_dynamic_prompt(base_prompt)
+            
+            LOGGER.debug(f"🎭 Dynamic joke prompt: {dynamic_prompt}")
+            
             # Demander une blague au LLM
             llm_response = await self.llm_handler.ask(
-                question="Raconte-moi une blague courte et drôle",
+                question=dynamic_prompt,
                 user_name=msg.user_login,
                 channel=msg.channel
             )
