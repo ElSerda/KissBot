@@ -40,7 +40,8 @@ class LLMHandler:
         question: str,
         user_name: str,
         channel: str,
-        game_cache=None
+        game_cache=None,
+        channel_id: str = ""
     ) -> Optional[str]:
         """
         Pose une question au LLM.
@@ -50,6 +51,7 @@ class LLMHandler:
             user_name: Nom de l'utilisateur
             channel: Nom du channel
             game_cache: Cache des jeux (optionnel, pour contexte)
+            channel_id: ID du channel pour personnalité custom
             
         Returns:
             Réponse du LLM ou None si erreur
@@ -68,7 +70,8 @@ class LLMHandler:
                 context="ask",  # Context pour !ask
                 user_name=user_name,
                 game_cache=game_cache,
-                pre_optimized=False  # User input brut
+                pre_optimized=False,  # User input brut
+                channel_id=channel_id  # 🎭 Personnalité par channel
             )
             
             if response:

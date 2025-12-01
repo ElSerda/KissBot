@@ -57,7 +57,8 @@ async def process_llm_request(
     user_name: str,
     game_cache=None,
     pre_optimized: bool = False,  # Nouveau param: prompt déjà optimisé ?
-    stimulus_class: str = "gen_short"  # Classe de stimulus pour prompts pré-optimisés
+    stimulus_class: str = "gen_short",  # Classe de stimulus pour prompts pré-optimisés
+    channel_id: str = ""  # ID du channel pour personnalité custom
 ) -> str | None:
     """
     Traite une requête LLM - Logique métier pure.
@@ -118,7 +119,7 @@ async def process_llm_request(
             )
 
             response = await llm_handler.process_stimulus(
-                stimulus=enriched_prompt, context=context
+                stimulus=enriched_prompt, context=context, channel_id=channel_id
             )
 
         if not response:

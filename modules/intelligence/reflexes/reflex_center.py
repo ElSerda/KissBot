@@ -80,6 +80,7 @@ class ReflexCenter:
         context: str = "general",
         stimulus_class: str = "gen_short",
         correlation_id: str = "",
+        channel_id: str = "",  # Pour compatibilité avec CloudSynapse
     ) -> str | None:
         """🔥 RÉFLEXE NEURAL INSTANTANÉ (ping uniquement)"""
         start_time = time.time()

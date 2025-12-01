@@ -218,16 +218,21 @@ class NeuralPathwayManager:
         self.logger.warning("⚠️ Aucune synapse disponible")
         return None, None
 
-    async def process_stimulus(self, stimulus: str, context: str = "general") -> str | None:
+    async def process_stimulus(self, stimulus: str, context: str = "general", channel_id: str = "") -> str | None:
         """
         🔥 TRAITEMENT STIMULUS PRINCIPAL V2.0
 
         Pipeline neuronal complet avec UCB bandit et observabilité
+        
+        Args:
+            stimulus: Le texte à traiter
+            context: Le contexte (ask, mention, etc.)
+            channel_id: L'ID du channel pour personnalité custom
         """
         correlation_id = str(uuid.uuid4())[:8]
         stimulus_class = self.classify_stimulus(stimulus, context)
 
-        self.logger.info(f"🧠 [{correlation_id}] Stimulus: {stimulus_class} | Context: {context}")
+        self.logger.info(f"🧠 [{correlation_id}] Stimulus: {stimulus_class} | Context: {context} | Channel: {channel_id or 'default'}")
 
         # Métriques Prometheus - Début requête
         neural_prometheus_metrics.record_neural_request(stimulus_class)
@@ -269,6 +274,7 @@ class NeuralPathwayManager:
                 context=context,
                 stimulus_class=stimulus_class,
                 correlation_id=correlation_id,
+                channel_id=channel_id,
             )
 
             latency = time.time() - start_time

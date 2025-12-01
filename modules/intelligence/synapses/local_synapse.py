@@ -178,6 +178,7 @@ class LocalSynapse:
         context: str = "general",
         stimulus_class: str = "gen_short",
         correlation_id: str = "",
+        channel_id: str = "",  # Pour compatibilité avec CloudSynapse
     ) -> str | None:
         """🔥 TRANSMISSION SYNAPTIQUE LOCALE V2.0"""
         if not self.can_execute():
