@@ -251,13 +251,13 @@ class CloudSynapse:
         if context == "ask":
             if use_personality_ask and channel_personality_prompt:
                 # Utiliser la personnalité du channel
-                system_prompt = channel_personality_prompt + "\nMax 450 caractères, réponds de façon complète."
+                system_prompt = channel_personality_prompt + "\nRéponds en 350-420 caractères, complète tes phrases."
             elif use_personality_ask:
                 system_prompt = (
                     f"Tu es {bot_name}. {default_personality}\n"
                     f"Réponds naturellement avec TON opinion et TON style. "
                     f"N'hésite pas à clasher, être drôle, prendre position. "
-                    f"Pas de langue de bois. Max 400 caractères."
+                    f"Pas de langue de bois. Réponds en 350-420 caractères."
                 )
             else:
                 system_prompt = (
@@ -267,7 +267,7 @@ class CloudSynapse:
                     f"- Donne des exemples concrets si pertinent\n"
                     f"- Ton accessible mais précis, style vulgarisation scientifique\n"
                     f"- Si théorie du complot : démonte avec FACTS, mais reste sympa\n"
-                    f"Max 450 caractères. Sois instructif ET engageant."
+                    f"Réponds en 350-420 caractères. Termine toujours ta dernière phrase."
                 )
         else:
             # Mentions et autres contextes
@@ -307,8 +307,8 @@ class CloudSynapse:
         
         # context == "ask" ou stimulus_class == "gen_long" → réponse détaillée
         if context == "ask":
-            # 300 tokens ≈ 400-500 chars FR, truncation intelligente à 450 chars
-            max_tokens = cloud_config.get("max_tokens_long", 300)
+            # 450 tokens ≈ 400-500 chars FR, cible 425 chars (15% marge sur 500)
+            max_tokens = cloud_config.get("max_tokens_long", 450)
             temperature = cloud_config.get("temperature_long", 0.7)
         else:
             # gen_short ou mention standard
@@ -353,8 +353,9 @@ class CloudSynapse:
                     cleaned = raw_response.strip() if raw_response else ""
 
                     if cleaned and len(cleaned) >= 3:
-                        # ✂️ Truncation intelligente pour Twitch (450 chars max, marge de sécurité)
-                        truncated = self._smart_truncate(cleaned, max_chars=450)
+                        # ✂️ Truncation intelligente: 419 chars max (425 - 6 pour "[ASK] ")
+                        # 425 chars = 85% de 500 → 15% de marge de sécurité Twitch
+                        truncated = self._smart_truncate(cleaned, max_chars=419)
                         if len(truncated) < len(cleaned):
                             self.logger.info(f"☁️✂️ Response truncated: {len(cleaned)} → {len(truncated)} chars")
                         self.logger.warning(f"☁️ DEBUG: Returning response: {truncated[:50]}...")
