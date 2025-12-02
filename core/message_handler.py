@@ -231,9 +231,13 @@ class MessageHandler:
         elif command == "!perftrace":
             await self._cmd_perftrace(msg, args)
         elif command == "!ask":
-            await self._cmd_ask(msg, args)
+            # Déléguer à modules/classic_commands/
+            from modules.classic_commands.user_commands.intelligence_v2 import handle_ask
+            await handle_ask(self, msg, args)
         elif command == "!joke":
-            await self._cmd_joke(msg)
+            # Déléguer à modules/classic_commands/
+            from modules.classic_commands.user_commands.intelligence_v2 import handle_joke
+            await handle_joke(self, msg, args)
         elif command == "!wiki":
             await self._cmd_wiki(msg, args)
         elif command == "!trad":
