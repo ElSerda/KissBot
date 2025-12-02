@@ -9,6 +9,7 @@ Où:
     - msg: ChatMessage avec user_login, channel, channel_id, etc.
     - args: Arguments après la commande (ex: "question" pour "!ask question")
 """
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -57,25 +58,45 @@ async def handle_ask(handler: "MessageHandler", msg: "ChatMessage", question: st
         return
     
     try:
-        LOGGER.info(f"🧠 Processing !ask from {msg.user_login}: {question[:50]}...")
+        LOGGER.info(f"🧠 LLM request from {msg.user_login}: {question[:50]}...")
         
-        # Enrichissement RAG (Wikipedia) si activé
-        enhanced_question = question
-        if handler._rag_enabled:
-            from backends.wikipedia_handler import search_wikipedia
-            wiki_context = await search_wikipedia(question, lang="fr", max_length=300)
-            if wiki_context and "❌" not in wiki_context:
-                enhanced_question = f"""Contexte Wikipedia:
-{wiki_context}
+        # 🔥 RAG: Tentative Wikipedia pour contexte factuel (best-effort)
+        wiki_context = None
+        try:
+            from modules.integrations.wikipedia.wikipedia_handler import search_wikipedia
+            
+            LOGGER.debug(f"🔍 Attempting Wikipedia lookup for RAG: {question[:30]}...")
+            wiki_lang = handler.config.get("wikipedia", {}).get("lang", "fr") if hasattr(handler, 'config') else "fr"
+            wiki_context = await asyncio.wait_for(
+                search_wikipedia(question, lang=wiki_lang),
+                timeout=2.0  # Max 2s pour ne pas bloquer
+            )
+            
+            if wiki_context:
+                LOGGER.info(f"✅ Wikipedia context retrieved: {wiki_context['title']}")
+            else:
+                LOGGER.debug(f"⚠️ No Wikipedia result for: {question[:30]}")
+                
+        except asyncio.TimeoutError:
+            LOGGER.warning(f"⏰ Wikipedia timeout (>2s) for: {question[:30]}")
+        except Exception as e:
+            LOGGER.warning(f"⚠️ Wikipedia error: {e}")
+        
+        # Construire la query pour le LLM (avec ou sans contexte Wikipedia)
+        if wiki_context:
+            # RAG: Injecter le contexte Wikipedia dans le prompt
+            enhanced_question = f"""[Contexte factuel Wikipedia: {wiki_context['summary']}]
 
 Question utilisateur: {question}
 
 Réponds en te basant sur ces informations factuelles."""
-                LOGGER.debug(f"📚 RAG enabled: Query enhanced with Wikipedia context")
-            else:
-                LOGGER.debug(f"🤷 RAG disabled: No Wikipedia context available")
+            LOGGER.debug(f"📚 RAG enabled: Query enhanced with Wikipedia context")
+        else:
+            # Pas de contexte: prompt normal
+            enhanced_question = question
+            LOGGER.debug(f"🤷 RAG disabled: No Wikipedia context available")
         
-        # Appeler le LLM
+        # Appeler le LLM avec la query (enrichie ou non)
         llm_response = await handler.llm_handler.ask(
             question=enhanced_question,
             user_name=msg.user_login,
