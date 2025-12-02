@@ -286,97 +286,24 @@ class MessageHandler:
         })
     
     async def _cmd_ping(self, msg: ChatMessage) -> None:
-        """Commande !ping - Test de réponse du bot"""
-        response = OutboundMessage(
-            channel=msg.channel,
-            channel_id=msg.channel_id,
-            text=f"@{msg.user_login} Pong! 🏓",
-            prefer="irc"
-        )
-        
-        await self.bus.publish("chat.outbound", response)
-        LOGGER.info(f"✅ Response queued: Pong to {msg.user_login}")
+        """Commande !ping - Déléguée à modules/"""
+        from modules.classic_commands.user_commands.system import handle_ping
+        await handle_ping(self, msg)
     
     async def _cmd_uptime(self, msg: ChatMessage) -> None:
-        """Commande !uptime - Temps depuis le démarrage du bot"""
-        uptime_seconds = int(time.time() - self.start_time)
-        hours = uptime_seconds // 3600
-        minutes = (uptime_seconds % 3600) // 60
-        seconds = uptime_seconds % 60
-        
-        uptime_str = f"{hours}h {minutes}m {seconds}s"
-        
-        response = OutboundMessage(
-            channel=msg.channel,
-            channel_id=msg.channel_id,
-            text=f"@{msg.user_login} Bot uptime: {uptime_str} ⏱️ | Commands: {self.command_count}",
-            prefer="irc"
-        )
-        
-        await self.bus.publish("chat.outbound", response)
-        LOGGER.info(f"✅ Response queued: Uptime to {msg.user_login}")
+        """Commande !uptime - Déléguée à modules/"""
+        from modules.classic_commands.user_commands.system import handle_uptime
+        await handle_uptime(self, msg)
     
     async def _cmd_stats(self, msg: ChatMessage) -> None:
-        """
-        Commande !stats - Statistiques système (CPU/RAM/Threads)
-        
-        Affiche les métriques système en temps réel:
-        - CPU%: Utilisation CPU du process bot
-        - RAM: Mémoire utilisée en MB
-        - Threads: Nombre de threads actifs
-        - Uptime: Temps depuis démarrage du monitoring
-        - Alerts: ⚠️ si seuils dépassés (CPU > 50%, RAM > 500MB)
-        """
-        if not self.system_monitor:
-            # Monitoring pas disponible
-            response = OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=f"@{msg.user_login} ❌ System monitoring not available",
-                prefer="irc"
-            )
-            await self.bus.publish("chat.outbound", response)
-            LOGGER.warning("⚠️ !stats called but SystemMonitor not injected")
-            return
-        
-        # Récupérer et formater les stats
-        stats_text = self.system_monitor.format_stats_message()
-        
-        response = OutboundMessage(
-            channel=msg.channel,
-            channel_id=msg.channel_id,
-            text=f"@{msg.user_login} {stats_text}",
-            prefer="irc"
-        )
-        
-        await self.bus.publish("chat.outbound", response)
-        LOGGER.info(f"✅ Response queued: Stats to {msg.user_login}")
+        """Commande !stats - Déléguée à modules/"""
+        from modules.classic_commands.user_commands.system import handle_stats
+        await handle_stats(self, msg)
     
     async def _cmd_help(self, msg: ChatMessage) -> None:
-        """Commande !help - Liste des commandes disponibles"""
-        commands_list = "!ping !uptime !stats !help"
-        
-        # Ajouter game commands si disponibles
-        if self.game_lookup:
-            commands_list += " !gi <game> !gs <game> !gc"
-        
-        # Ajouter LLM command si disponible
-        if self.llm_handler and self.llm_handler.is_available():
-            commands_list += " !ask <question> | Mention @bot_name <message>"
-        
-        # Ajouter broadcast command (broadcaster only)
-        if msg.is_broadcaster:
-            commands_list += " !kisscharity <message> (broadcaster)"
-        
-        response = OutboundMessage(
-            channel=msg.channel,
-            channel_id=msg.channel_id,
-            text=f"@{msg.user_login} Commands: {commands_list}",
-            prefer="irc"
-        )
-        
-        await self.bus.publish("chat.outbound", response)
-        LOGGER.info(f"✅ Response queued: Help to {msg.user_login}")
+        """Commande !help - Déléguée à modules/"""
+        from modules.classic_commands.user_commands.system import handle_help
+        await handle_help(self, msg)
     
     async def _cmd_game_info(self, msg: ChatMessage, game_name: str) -> None:
         """
@@ -1393,51 +1320,9 @@ Réponds en te basant sur ces informations factuelles."""
         LOGGER.info(f"✅ Specific decoherence completed: {deleted_count} deleted")
     
     async def _cmd_kisscharity(self, msg: ChatMessage, args: str) -> None:
-        """
-        !kisscharity <message> - Broadcaster un message sur tous les channels
-        
-        Commande KILLER FEATURE pour annonces multi-channels:
-        - Events charity
-        - Raids communautaires
-        - Collaborations multi-streamers
-        
-        Restrictions:
-        - Broadcaster only
-        - Cooldown 5 minutes global
-        - Max 500 caractères
-        """
-        from modules.classic_commands.bot_commands.broadcast import cmd_kisscharity
-        
-        # Check si IRC client est disponible
-        if not self.irc_client:
-            response_text = f"@{msg.user_login} ❌ Erreur système : IRC client non disponible"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            return
-        
-        # Parser les arguments
-        args_list = args.split() if args else []
-        
-        # Appeler le handler de broadcast
-        response_text = await cmd_kisscharity(
-            msg=msg,
-            args=args_list,
-            bus=self.bus,
-            irc_client=self.irc_client
-        )
-        
-        # Envoyer la réponse
-        if response_text:
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
+        """!kisscharity - Délégué à modules/"""
+        from modules.classic_commands.user_commands.promo import handle_kisscharity
+        await handle_kisscharity(self, msg, args)
     
     async def _cmd_kbupdate(self, msg: ChatMessage, args: str) -> None:
         """
@@ -1483,16 +1368,9 @@ Réponds en te basant sur ces informations factuelles."""
             ))
     
     async def _cmd_kbkofi(self, msg: ChatMessage) -> None:
-        """
-        !kbkofi - Affiche le lien Ko-fi pour soutenir le développement de KissBot
-        """
-        response_text = "☕ Soutenez KissBot ! → https://ko-fi.com/el_serda 💜"
-        await self.bus.publish("chat.outbound", OutboundMessage(
-            channel=msg.channel,
-            channel_id=msg.channel_id,
-            text=response_text,
-            prefer="irc"
-        ))
+        """!kbkofi - Délégué à modules/"""
+        from modules.classic_commands.user_commands.promo import handle_kbkofi
+        await handle_kbkofi(self, msg)
     
     async def _cmd_kbpersona(self, msg: ChatMessage, args: str) -> None:
         """
