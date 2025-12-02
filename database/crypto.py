@@ -160,12 +160,10 @@ def test_encryptor():
     import tempfile
     import os
     
-    # Use temp key file for testing (delete first if exists)
-    key_file = tempfile.mktemp(suffix='.key')
-    
-    # Ensure clean state
-    if os.path.exists(key_file):
-        os.unlink(key_file)
+    # Use temp key file for testing (secure method)
+    fd, key_file = tempfile.mkstemp(suffix='.key')
+    os.close(fd)  # Close the file descriptor, we just need the path
+    os.unlink(key_file)  # Remove the empty file, TokenEncryptor will create it
     
     try:
         # Create encryptor

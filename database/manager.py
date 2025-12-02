@@ -236,6 +236,9 @@ class DatabaseManager:
         updates = []
         params = []
         
+        # Whitelist of allowed columns to update (security: prevent SQL injection)
+        ALLOWED_COLUMNS = {"display_name", "is_bot"}
+        
         if display_name is not None:
             updates.append("display_name = ?")
             params.append(display_name)
@@ -249,11 +252,12 @@ class DatabaseManager:
         
         params.append(user_id)
         
+        # Build query safely - columns are from whitelist, values use placeholders
+        set_clause = ", ".join(updates)  # Safe: only hardcoded column names
+        query = f"UPDATE users SET {set_clause} WHERE id = ?"  # nosec B608
+        
         with self._get_connection() as conn:
-            cursor = conn.execute(
-                f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
-                params
-            )
+            cursor = conn.execute(query, params)
             
             if cursor.rowcount > 0:
                 self._log_audit(
@@ -1162,7 +1166,11 @@ if __name__ == "__main__":
     
     # Initialiser
     print("\n1. Initializing database...")
-    os.system(f"python database/init_db.py --db {test_db}")
+    import subprocess
+    subprocess.run(
+        ["python", "database/init_db.py", "--db", test_db],
+        check=True
+    )
     
     # Créer manager
     print("\n2. Creating DatabaseManager...")

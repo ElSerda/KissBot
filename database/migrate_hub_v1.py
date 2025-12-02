@@ -167,6 +167,7 @@ def verify_migration(conn: sqlite3.Connection) -> bool:
     cursor = conn.cursor()
     
     # Check all 3 tables exist
+    # nosec B608 - Safe: 'table' comes from hardcoded whitelist, value bound via ?
     tables = ['desired_subscriptions', 'active_subscriptions', 'hub_state']
     for table in tables:
         cursor.execute(f"""
