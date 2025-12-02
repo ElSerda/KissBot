@@ -231,13 +231,9 @@ class MessageHandler:
         elif command == "!perftrace":
             await self._cmd_perftrace(msg, args)
         elif command == "!ask":
-            # Déléguer à modules/classic_commands/
-            from modules.classic_commands.user_commands.intelligence import handle_ask
-            await handle_ask(self, msg, args)
+            await self._cmd_ask(msg, args)
         elif command == "!joke":
-            # Déléguer à modules/classic_commands/
-            from modules.classic_commands.user_commands.intelligence import handle_joke
-            await handle_joke(self, msg, args)
+            await self._cmd_joke(msg, args)
         elif command == "!wiki":
             await self._cmd_wiki(msg, args)
         elif command == "!trad":
@@ -331,77 +327,20 @@ class MessageHandler:
         from modules.classic_commands.user_commands.game import handle_gc
         await handle_gc(self, msg)
     
+    async def _cmd_ask(self, msg: ChatMessage, args: str) -> None:
+        """Commande !ask - Déléguée à modules/"""
+        from modules.classic_commands.user_commands.intelligence import handle_ask
+        await handle_ask(self, msg, args)
+    
+    async def _cmd_joke(self, msg: ChatMessage, args: str) -> None:
+        """Commande !joke - Déléguée à modules/"""
+        from modules.classic_commands.user_commands.intelligence import handle_joke
+        await handle_joke(self, msg, args)
+    
     async def _cmd_wiki(self, msg: ChatMessage, query: str) -> None:
-        """
-        Commande !wiki - Recherche Wikipedia sans LLM
-        
-        Args:
-            msg: Message entrant
-            query: Requête de recherche (args après !wiki)
-        """
-        if not query or len(query.strip()) == 0:
-            response_text = f"@{msg.user_login} 📚 Usage: !wiki <sujet>"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            return
-        
-        try:
-            from modules.integrations.wikipedia.wikipedia_handler import search_wikipedia
-            
-            # Basic validation
-            if not query or len(query.strip()) < 2:
-                response_text = f"@{msg.user_login} ❌ Requête trop courte"
-                await self.bus.publish("chat.outbound", OutboundMessage(
-                    channel=msg.channel,
-                    channel_id=msg.channel_id,
-                    text=response_text,
-                    prefer="irc"
-                ))
-                LOGGER.debug(f"❌ Invalid wiki query from {msg.user_login}: {query}")
-                return
-            
-            LOGGER.info(f"📚 Wikipedia request from {msg.user_login}: {query[:50]}...")
-            
-            # Récupérer la langue depuis config
-            wiki_lang = self.config.get("wikipedia", {}).get("lang", "en")
-            
-            # Rechercher sur Wikipedia (retourne dict ou None)
-            result = await search_wikipedia(query, lang=wiki_lang, max_length=350)
-            
-            # Formater la réponse
-            if result:
-                summary = result['summary']
-                if len(summary) > 350:
-                    summary = summary[:347] + "..."
-                response_text = f"@{msg.user_login} 📚 {result['title']}: {summary} {result['url']}"
-            else:
-                response_text = f"@{msg.user_login} ❌ Aucune page Wikipedia trouvée pour '{query}'"
-            
-            # Tronquer si trop long (limite Twitch 500 chars)
-            if len(response_text) > 500:
-                response_text = response_text[:497] + "..."
-            
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            LOGGER.info(f"✅ Wikipedia response sent to {msg.user_login}")
-                
-        except Exception as e:
-            LOGGER.error(f"❌ Error processing !wiki: {e}", exc_info=True)
-            response_text = f"@{msg.user_login} ❌ Erreur lors de la recherche Wikipedia"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
+        """Commande !wiki - Déléguée à modules/"""
+        from modules.classic_commands.user_commands.wiki import handle_wiki
+        await handle_wiki(self, msg, query)
     
     async def _cmd_kbanniv(self, msg: ChatMessage, args: str) -> None:
         """Commande !kbanniv - Déléguée à modules/"""
@@ -662,54 +601,9 @@ class MessageHandler:
         LOGGER.info(f"✅ Auto-translated {msg.user_login}: {source_lang} → fr")
     
     async def _cmd_trad(self, msg: ChatMessage, args: str) -> None:
-        """Commande !trad <message> - Traduction manuelle"""
-        if not args:
-            response_text = f"@{msg.user_login} Usage: !trad <message>"
-            await self.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text
-            ))
-            return
-        
-        # Rate limiting: 30s cooldown SAUF pour whitelistés
-        is_whitelisted = self.dev_whitelist.is_dev(msg.user_login)
-        
-        if not is_whitelisted:
-            current_time = time.time()
-            last_time = self._trad_last_time.get(msg.user_id, 0)
-            
-            if current_time - last_time < self._trad_cooldown:
-                cooldown_remaining = int(self._trad_cooldown - (current_time - last_time))
-                response_text = f"@{msg.user_login} ⏰ Cooldown: {cooldown_remaining}s restants"
-                await self.bus.publish("chat.outbound", OutboundMessage(
-                    channel=msg.channel,
-                    channel_id=msg.channel_id,
-                    text=response_text
-                ))
-                LOGGER.debug(f"🔇 !trad de {msg.user_login} en cooldown ({cooldown_remaining}s restants)")
-                return
-            
-            # Update cooldown
-            self._trad_last_time[msg.user_id] = current_time
-        
-        result = await self.translator.translate(args, target_lang='fr')
-        
-        if not result:
-            response_text = f"@{msg.user_login} ❌ Translation failed"
-        else:
-            source_lang, translation = result
-            
-            if source_lang == 'fr':
-                response_text = f"@{msg.user_login} 🇫🇷 Already in French!"
-            else:
-                response_text = f"[TRAD] {msg.user_login} a dit: {translation}"
-        
-        await self.bus.publish("chat.outbound", OutboundMessage(
-            channel=msg.channel,
-            channel_id=msg.channel_id,
-            text=response_text
-        ))
+        """Commande !trad - Déléguée à modules/"""
+        from modules.classic_commands.user_commands.trad import handle_trad
+        await handle_trad(self, msg, args)
     
     async def _cmd_adddev(self, msg: ChatMessage, args: str) -> None:
         """Commande !adddev - Déléguée à modules/"""

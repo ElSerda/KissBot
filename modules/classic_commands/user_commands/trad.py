@@ -1,49 +1,78 @@
-#!/usr/bin/env python3
 """
-Commande !trad - Traduction manuelle
-Usage: !trad <message>
-"""
+Commande !trad - Traduction manuelle.
 
+Handler pour la commande !trad qui traduit un message
+vers le français avec rate limiting (sauf pour les whitelistés).
+"""
 import logging
-from twitchAPI.chat import ChatCommand
-from backends.translator import get_translator
+import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.message_handler import MessageHandler
+    from core.message_types import ChatMessage
 
 LOGGER = logging.getLogger(__name__)
 
 
-async def handle_trad(bot, cmd: ChatCommand):
+async def handle_trad(handler: "MessageHandler", msg: "ChatMessage", args: str) -> None:
     """
-    !trad <message> - Traduit un message en français
+    !trad <message> - Traduction manuelle vers le français
     
-    Exemples:
-        !trad Hello world
-        !trad ¿Cómo estás?
-        !trad Guten Tag
+    Args:
+        handler: Instance MessageHandler
+        msg: Message chat entrant
+        args: Message à traduire
     """
-    if not cmd.parameter:
-        await cmd.reply("Usage: !trad <message>")
+    from core.message_types import OutboundMessage
+    
+    if not args:
+        response_text = f"@{msg.user_login} Usage: !trad <message>"
+        await handler.bus.publish("chat.outbound", OutboundMessage(
+            channel=msg.channel,
+            channel_id=msg.channel_id,
+            text=response_text,
+            prefer="irc"
+        ))
         return
     
-    translator = get_translator()
+    # Rate limiting: 30s cooldown SAUF pour whitelistés
+    is_whitelisted = handler.dev_whitelist.is_dev(msg.user_login)
     
-    # Traduire vers français
-    result = await translator.translate(cmd.parameter, target_lang='fr')
+    if not is_whitelisted:
+        current_time = time.time()
+        last_time = handler._trad_last_time.get(msg.user_id, 0)
+        
+        if current_time - last_time < handler._trad_cooldown:
+            cooldown_remaining = int(handler._trad_cooldown - (current_time - last_time))
+            response_text = f"@{msg.user_login} ⏰ Cooldown: {cooldown_remaining}s restants"
+            await handler.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=response_text,
+                prefer="irc"
+            ))
+            LOGGER.debug(f"🔇 !trad de {msg.user_login} en cooldown ({cooldown_remaining}s restants)")
+            return
+        
+        # Update cooldown
+        handler._trad_last_time[msg.user_id] = current_time
+    
+    result = await handler.translator.translate(args, target_lang='fr')
     
     if not result:
-        await cmd.reply(f"@{cmd.user.name} ❌ Translation failed")
-        return
+        response_text = f"@{msg.user_login} ❌ Translation failed"
+    else:
+        source_lang, translation = result
+        
+        if source_lang == 'fr':
+            response_text = f"@{msg.user_login} 🇫🇷 Already in French!"
+        else:
+            response_text = f"[TRAD] {msg.user_login} a dit: {translation}"
     
-    source_lang, translation = result
-    lang_name = translator.get_language_name(source_lang)
-    
-    # Si déjà en français
-    if source_lang == 'fr':
-        await cmd.reply(f"@{cmd.user.name} 🇫🇷 Already in French!")
-        return
-    
-    # Réponse avec traduction
-    await cmd.reply(
-        f"@{cmd.user.name} 🌍 [{lang_name.upper()}] → 🇫🇷 {translation}"
-    )
-    
-    LOGGER.info(f"📝 Translated for {cmd.user.name}: {source_lang} → fr")
+    await handler.bus.publish("chat.outbound", OutboundMessage(
+        channel=msg.channel,
+        channel_id=msg.channel_id,
+        text=response_text,
+        prefer="irc"
+    ))
