@@ -1,5 +1,5 @@
 """
-Tests unitaires pour modules/classic_commands/user_commands/intelligence_v2.py
+Tests unitaires pour modules/classic_commands/user_commands/intelligence.py
 
 Valide que:
 1. handle_ask utilise le préfixe [ASK]
@@ -66,20 +66,20 @@ class MockMessage:
 class TestImports:
     """Tests d'import des modules"""
     
-    def test_import_intelligence_v2(self):
-        """Vérifie que intelligence_v2.py est importable"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_ask, handle_joke
+    def test_import_intelligence(self):
+        """Vérifie que intelligence.py est importable"""
+        from modules.classic_commands.user_commands.intelligence import handle_ask, handle_joke
         assert callable(handle_ask)
         assert callable(handle_joke)
     
     def test_handle_ask_is_async(self):
         """Vérifie que handle_ask est une fonction async"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_ask
+        from modules.classic_commands.user_commands.intelligence import handle_ask
         assert asyncio.iscoroutinefunction(handle_ask)
     
     def test_handle_joke_is_async(self):
         """Vérifie que handle_joke est une fonction async"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_joke
+        from modules.classic_commands.user_commands.intelligence import handle_joke
         assert asyncio.iscoroutinefunction(handle_joke)
 
 
@@ -92,13 +92,13 @@ class TestAskPrefix:
     
     def test_source_contains_ask_prefix(self):
         """Vérifie que le code source contient [ASK]"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_ask
+        from modules.classic_commands.user_commands.intelligence import handle_ask
         source = inspect.getsource(handle_ask)
         assert '[ASK]' in source, "Le préfixe [ASK] doit être dans le code source"
     
     def test_source_has_correct_format(self):
         """Vérifie le format exact f'[ASK] {llm_response}'"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_ask
+        from modules.classic_commands.user_commands.intelligence import handle_ask
         source = inspect.getsource(handle_ask)
         assert 'f"[ASK] {llm_response}"' in source or "f'[ASK] {llm_response}'" in source
 
@@ -113,7 +113,7 @@ class TestHandleAsk:
     @pytest.mark.asyncio
     async def test_ask_success_with_prefix(self):
         """Test que !ask réussit et utilise le préfixe [ASK]"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_ask
+        from modules.classic_commands.user_commands.intelligence import handle_ask
         
         handler = MockHandler(llm_response="La correspondance AdS/CFT est une conjecture...")
         msg = MockMessage()
@@ -134,7 +134,7 @@ class TestHandleAsk:
     @pytest.mark.asyncio
     async def test_ask_empty_question(self):
         """Test !ask sans question affiche usage"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_ask
+        from modules.classic_commands.user_commands.intelligence import handle_ask
         
         handler = MockHandler()
         msg = MockMessage()
@@ -149,7 +149,7 @@ class TestHandleAsk:
     @pytest.mark.asyncio
     async def test_ask_no_llm(self):
         """Test !ask sans LLM retourne erreur"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_ask
+        from modules.classic_commands.user_commands.intelligence import handle_ask
         
         handler = MockHandler(llm_available=False)
         msg = MockMessage()
@@ -164,7 +164,7 @@ class TestHandleAsk:
     @pytest.mark.asyncio
     async def test_ask_truncation(self):
         """Test que les réponses longues sont tronquées à 500 chars"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_ask
+        from modules.classic_commands.user_commands.intelligence import handle_ask
         
         # Réponse très longue
         long_response = "A" * 600
@@ -190,7 +190,7 @@ class TestHandleJoke:
     @pytest.mark.asyncio
     async def test_joke_success(self):
         """Test que !joke réussit"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_joke
+        from modules.classic_commands.user_commands.intelligence import handle_joke
         
         handler = MockHandler(llm_response="Pourquoi les plongeurs plongent-ils en arrière ?")
         msg = MockMessage()
@@ -205,7 +205,7 @@ class TestHandleJoke:
     @pytest.mark.asyncio
     async def test_joke_no_llm(self):
         """Test !joke sans LLM retourne erreur"""
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_joke
+        from modules.classic_commands.user_commands.intelligence import handle_joke
         
         handler = MockHandler(llm_available=False)
         msg = MockMessage()
@@ -227,7 +227,7 @@ class TestIntegration:
     def test_message_handler_imports_correctly(self):
         """Vérifie que message_handler.py importe correctement les handlers"""
         # Simuler l'import comme le fait message_handler.py
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_ask, handle_joke
+        from modules.classic_commands.user_commands.intelligence import handle_ask, handle_joke
         
         # Vérifier les signatures
         sig_ask = inspect.signature(handle_ask)

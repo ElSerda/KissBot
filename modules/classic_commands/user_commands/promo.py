@@ -47,7 +47,7 @@ async def handle_kisscharity(handler: "MessageHandler", msg: "ChatMessage", args
     - Cooldown 5 minutes global
     - Max 500 caractères
     """
-    from modules.classic_commands.bot_commands.broadcast import cmd_kisscharity
+    from modules.classic_commands.broadcaster_commands.broadcast import cmd_kisscharity
     
     # Check si IRC client est disponible
     if not handler.irc_client:

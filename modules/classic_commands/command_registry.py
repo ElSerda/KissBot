@@ -189,7 +189,7 @@ class CommandRegistry:
     def _register_bot_commands(self) -> None:
         """Enregistre les commandes système du bot"""
         try:
-            from modules.classic_commands.bot_commands.system import handle_ping, handle_uptime, handle_stats
+            from modules.classic_commands.user_commands.system import handle_ping, handle_uptime, handle_stats
             self.register("ping", handle_ping, CommandCategory.BOT,
                          description="Vérifie que le bot est en ligne")
             self.register("uptime", handle_uptime, CommandCategory.BOT,
@@ -200,7 +200,7 @@ class CommandRegistry:
             LOGGER.warning(f"⚠️ Could not load bot commands: {e}")
         
         try:
-            from modules.classic_commands.bot_commands.broadcast import cmd_kisscharity, cmd_kbupdate
+            from modules.classic_commands.broadcaster_commands.broadcast import cmd_kisscharity, cmd_kbupdate
             self.register("kisscharity", cmd_kisscharity, CommandCategory.BOT,
                          description="Annonce charity")
             self.register("kbupdate", cmd_kbupdate, CommandCategory.BOT,

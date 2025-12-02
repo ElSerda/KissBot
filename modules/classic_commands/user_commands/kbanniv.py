@@ -1,27 +1,31 @@
 """
-🎂 Commande !anniv - Souhaiter un joyeux anniversaire
+🎂 Commande !kbanniv - Souhaiter un joyeux anniversaire
 
 Commande simple pour célébrer les anniversaires dans le chat !
+Pattern: handler(MessageHandler, ChatMessage, args: str) -> None
 """
 
 import random
-from core.message_types import ChatMessage, OutboundMessage
-from core.message_bus import MessageBus
+import logging
+from twitchAPI.chat import ChatMessage
+
+LOGGER = logging.getLogger("kissbot.commands.kbanniv")
 
 
-async def cmd_anniv(msg: ChatMessage, args: str, bus: MessageBus, config: dict) -> None:
+async def handle_kbanniv(handler, msg: ChatMessage, args: str = "") -> None:
     """
-    Commande !anniv <name> - Souhaiter un joyeux anniversaire
+    !kbanniv <name> - Souhaiter un joyeux anniversaire
     
     Args:
-        msg: Message original
+        handler: Instance de MessageHandler
+        msg: Message Twitch
         args: Nom de la personne (ex: "Serda" ou "@Serda")
-        bus: Message bus pour publier
-        config: Configuration bot
     """
+    from core.message_types import OutboundMessage
+    
     if not args or len(args.strip()) == 0:
-        response_text = f"@{msg.user_login} 🎂 Usage: !anniv <nom>"
-        await bus.publish("chat.outbound", OutboundMessage(
+        response_text = f"@{msg.user_login} 🎂 Usage: !kbanniv <nom>"
+        await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
             channel_id=msg.channel_id,
             text=response_text,
@@ -47,13 +51,11 @@ async def cmd_anniv(msg: ChatMessage, args: str, bus: MessageBus, config: dict) 
     # Choisir un message aléatoire
     response_text = random.choice(messages)
     
-    await bus.publish("chat.outbound", OutboundMessage(
+    await handler.bus.publish("chat.outbound", OutboundMessage(
         channel=msg.channel,
         channel_id=msg.channel_id,
         text=response_text,
         prefer="irc"
     ))
-
-
-# Export for registry
-__all__ = ['cmd_anniv']
+    
+    LOGGER.info(f"🎂 {msg.user_login} wished happy birthday to {name}")

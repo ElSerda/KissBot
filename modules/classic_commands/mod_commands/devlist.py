@@ -1,92 +1,94 @@
-#!/usr/bin/env python3
 """
-Commandes de gestion de la whitelist dev
-!adddev <username> - Ajoute un dev (mod/broadcaster only)
-!rmdev <username> - Retire un dev (mod/broadcaster only)
-!listdevs - Liste les devs whitelistés
+Dev Whitelist Commands Module - !adddev, !rmdev, !listdevs
+==========================================================
+Gestion de la whitelist développeurs (auto-trad).
+
+Pattern: handler(MessageHandler, ChatMessage, args: str) -> None
 """
 
 import logging
-from twitchAPI.chat import ChatCommand
-from backends.translator import get_dev_whitelist
+from twitchAPI.chat import ChatMessage
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("kissbot.commands.devlist")
 
 
-async def handle_adddev(bot, cmd: ChatCommand):
+async def handle_adddev(handler, msg: ChatMessage, args: str = "") -> None:
     """
-    !adddev <username> - Ajoute un développeur à la whitelist auto-trad
+    !adddev <username> - Ajoute dev à whitelist (mod only)
     
-    Mod/Broadcaster only
+    Les devs ont accès à la traduction automatique sans cooldown.
     """
-    # Check permissions
-    if not (cmd.user.mod or cmd.room.name == cmd.user.name.lower()):
+    from core.message_types import OutboundMessage
+    
+    if not (msg.is_mod or msg.is_broadcaster):
         return  # Silently ignore
     
-    if not cmd.parameter:
-        await cmd.reply(f"@{cmd.user.name} Usage: !adddev <username>")
-        return
-    
-    username = cmd.parameter.strip().lstrip('@')
-    whitelist = get_dev_whitelist()
-    
-    added = whitelist.add_dev(username)
-    
-    if added:
-        await cmd.reply(
-            f"@{cmd.user.name} ✅ {username} added to dev whitelist (auto-trad enabled)"
-        )
-        LOGGER.info(f"👥 {cmd.user.name} added {username} to dev whitelist")
+    if not args:
+        response_text = f"@{msg.user_login} Usage: !adddev <username>"
     else:
-        await cmd.reply(
-            f"@{cmd.user.name} ℹ️ {username} already in dev whitelist"
-        )
-
-
-async def handle_rmdev(bot, cmd: ChatCommand):
-    """
-    !rmdev <username> - Retire un développeur de la whitelist
+        username = args.strip().lstrip('@')
+        added = handler.dev_whitelist.add_dev(username)
+        
+        if added:
+            response_text = f"@{msg.user_login} ✅ {username} added to dev whitelist (auto-trad enabled)"
+            LOGGER.info(f"👥 {msg.user_login} added {username} to dev whitelist")
+        else:
+            response_text = f"@{msg.user_login} ℹ️ {username} already in dev whitelist"
     
-    Mod/Broadcaster only
+    await handler.bus.publish("chat.outbound", OutboundMessage(
+        channel=msg.channel,
+        channel_id=msg.channel_id,
+        text=response_text
+    ))
+
+
+async def handle_rmdev(handler, msg: ChatMessage, args: str = "") -> None:
     """
-    # Check permissions
-    if not (cmd.user.mod or cmd.room.name == cmd.user.name.lower()):
+    !rmdev <username> - Retire dev de whitelist (mod only)
+    """
+    from core.message_types import OutboundMessage
+    
+    if not (msg.is_mod or msg.is_broadcaster):
         return  # Silently ignore
     
-    if not cmd.parameter:
-        await cmd.reply(f"@{cmd.user.name} Usage: !rmdev <username>")
-        return
-    
-    username = cmd.parameter.strip().lstrip('@')
-    whitelist = get_dev_whitelist()
-    
-    removed = whitelist.remove_dev(username)
-    
-    if removed:
-        await cmd.reply(
-            f"@{cmd.user.name} ✅ {username} removed from dev whitelist"
-        )
-        LOGGER.info(f"👥 {cmd.user.name} removed {username} from dev whitelist")
+    if not args:
+        response_text = f"@{msg.user_login} Usage: !rmdev <username>"
     else:
-        await cmd.reply(
-            f"@{cmd.user.name} ℹ️ {username} not in dev whitelist"
-        )
-
-
-async def handle_listdevs(bot, cmd: ChatCommand):
-    """
-    !listdevs - Liste les développeurs whitelistés pour auto-trad
+        username = args.strip().lstrip('@')
+        removed = handler.dev_whitelist.remove_dev(username)
+        
+        if removed:
+            response_text = f"@{msg.user_login} ✅ {username} removed from dev whitelist"
+            LOGGER.info(f"👥 {msg.user_login} removed {username} from dev whitelist")
+        else:
+            response_text = f"@{msg.user_login} ℹ️ {username} not in dev whitelist"
     
-    Public command
+    await handler.bus.publish("chat.outbound", OutboundMessage(
+        channel=msg.channel,
+        channel_id=msg.channel_id,
+        text=response_text
+    ))
+
+
+async def handle_listdevs(handler, msg: ChatMessage, args: str = "") -> None:
     """
-    whitelist = get_dev_whitelist()
-    devs = whitelist.list_devs()
+    !listdevs - Liste les devs whitelistés (mod only)
+    """
+    from core.message_types import OutboundMessage
+    
+    if not (msg.is_mod or msg.is_broadcaster):
+        return  # Silently ignore
+    
+    devs = handler.dev_whitelist.list_devs()
     
     if not devs:
-        await cmd.reply(f"@{cmd.user.name} ℹ️ No devs in whitelist")
-        return
+        response_text = f"@{msg.user_login} ℹ️ No devs in whitelist"
+    else:
+        dev_list = ", ".join(devs)
+        response_text = f"@{msg.user_login} 👥 Devs (auto-trad): {dev_list}"
     
-    dev_list = ", ".join(devs)
-    await cmd.reply(
-        f"@{cmd.user.name} 👥 Devs (auto-trad): {dev_list}"
-    )
+    await handler.bus.publish("chat.outbound", OutboundMessage(
+        channel=msg.channel,
+        channel_id=msg.channel_id,
+        text=response_text
+    ))
