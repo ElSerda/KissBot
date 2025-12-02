@@ -871,10 +871,10 @@ Réponds en te basant sur ces informations factuelles."""
             )
             
             if llm_response:
-                # Formatter la réponse pour Twitch (limite 500 chars)
-                response_text = f"@{msg.user_login} {llm_response}"
+                # [ASK] prefix pour maximiser l'espace (vs @username qui prend plus de chars)
+                response_text = f"[ASK] {llm_response}"
                 
-                # Tronquer si trop long
+                # Tronquer si trop long (Twitch limit 500 chars)
                 if len(response_text) > 500:
                     response_text = response_text[:497] + "..."
                 
