@@ -1,6 +1,0 @@
-🦀 "If it compiles, it works" - Anonymous Rustacean
-
-Sometimes the best proof of clean architecture is portability.
-
-$ cargo test
-$ cargo bench

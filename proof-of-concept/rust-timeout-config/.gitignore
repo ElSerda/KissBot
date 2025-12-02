@@ -1,5 +1,0 @@
-# Rust artifacts
-target/
-Cargo.lock
-**/*.rs.bk
-*.pdb

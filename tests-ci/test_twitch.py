@@ -1,6 +1,6 @@
 """
-Tests pour le module twitch/ (EventSub, tokens, handlers)
-Vérifie les intégrations TwitchIO 3.x
+Tests pour le module twitchapi/ (IRC, EventSub, transports)
+Vérifie les intégrations pyTwitchAPI 4.x
 """
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
@@ -9,55 +9,47 @@ import os
 
 
 @pytest.mark.integration
-class TestTwitchModule:
-    """Tests du module twitch"""
+class TestTwitchAPIModule:
+    """Tests du module twitchapi"""
     
-    def test_twitch_module_imports(self):
-        """Vérifie que le module twitch s'importe"""
+    def test_twitchapi_module_imports(self):
+        """Vérifie que le module twitchapi s'importe"""
         try:
-            import twitch
-            assert twitch is not None
+            import twitchapi
+            assert twitchapi is not None
         except ImportError:
-            pytest.skip("Module twitch n'existe pas")
+            pytest.skip("Module twitchapi n'existe pas")
     
-    def test_twitch_module_structure(self):
-        """Vérifie la structure du module twitch"""
+    def test_twitchapi_module_structure(self):
+        """Vérifie la structure du module twitchapi"""
         try:
-            import twitch
+            import twitchapi
             
             # Devrait avoir au moins __init__.py
-            assert hasattr(twitch, '__file__')
+            assert hasattr(twitchapi, '__file__')
         except ImportError:
-            pytest.skip("Module twitch n'existe pas")
+            pytest.skip("Module twitchapi n'existe pas")
 
 
 @pytest.mark.integration
-class TestEventSub:
-    """Tests EventSub (si implémenté dans twitch/)"""
+class TestIRCTransport:
+    """Tests IRC Transport (twitchapi/transports/)"""
     
-    def test_eventsub_imports(self):
-        """Vérifie que EventSub s'importe"""
+    def test_irc_client_imports(self):
+        """Vérifie que IRCClient s'importe"""
         try:
-            from twitch.eventsub import EventSubHandler
-            assert EventSubHandler is not None
+            from twitchapi.transports.irc_client import IRCClient
+            assert IRCClient is not None
         except ImportError:
-            pytest.skip("EventSub non implémenté dans twitch/")
+            pytest.skip("IRCClient non implémenté dans twitchapi/")
     
-    @pytest.mark.asyncio
-    async def test_eventsub_setup(self):
-        """Test le setup d'EventSub"""
+    def test_hub_eventsub_client_imports(self):
+        """Vérifie que HubEventSubClient s'importe"""
         try:
-            from twitch.eventsub import setup_eventsub
-            
-            mock_bot = Mock()
-            
-            # Setup devrait accepter bot et config
-            result = await setup_eventsub(mock_bot, {})
-            
-            # Test réussi si pas d'exception
-            assert True
+            from twitchapi.transports.hub_eventsub_client import HubEventSubClient
+            assert HubEventSubClient is not None
         except ImportError:
-            pytest.skip("EventSub non implémenté")
+            pytest.skip("HubEventSubClient non implémenté")
 
 
 @pytest.mark.integration
@@ -67,16 +59,16 @@ class TestTokenManagement:
     def test_token_manager_imports(self):
         """Vérifie que le token manager s'importe"""
         try:
-            from twitch.token_manager import TokenManager
+            from twitchapi.auth import TokenManager
             assert TokenManager is not None
         except ImportError:
-            pytest.skip("TokenManager non implémenté dans twitch/")
+            pytest.skip("TokenManager non implémenté dans twitchapi/")
     
     @pytest.mark.asyncio
     async def test_token_refresh(self):
         """Test le refresh de token"""
         try:
-            from twitch.token_manager import refresh_token
+            from twitchapi.auth import refresh_token
             
             # Mock de la requête
             with patch('aiohttp.ClientSession.post') as mock_post:
@@ -102,7 +94,7 @@ class TestTwitchHandlers:
     def test_twitch_handlers_imports(self):
         """Vérifie que les handlers Twitch s'importent"""
         try:
-            from twitch.handlers import setup_handlers
+            from twitchapi.handlers import setup_handlers
             assert setup_handlers is not None
         except ImportError:
             # Peut être dans core/handlers
