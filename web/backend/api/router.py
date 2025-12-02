@@ -18,6 +18,7 @@ from slowapi.util import get_remote_address
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from modules.moderation import get_banword_manager
+from dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -51,20 +52,6 @@ class BanwordCreate(BaseModel):
             raise ValueError('Caractères non autorisés dans le mot')
         
         return v
-
-
-def get_current_user(session: Optional[str] = Cookie(None)) -> dict:
-    """Dépendance pour vérifier l'authentification."""
-    if not session:
-        raise HTTPException(401, "Not authenticated")
-    
-    try:
-        parts = session.split(":")
-        if len(parts) >= 2:
-            return {"id": parts[0], "login": parts[1]}
-        raise HTTPException(401, "Invalid session format")
-    except ValueError:
-        raise HTTPException(401, "Invalid session")
 
 
 # ============================================================

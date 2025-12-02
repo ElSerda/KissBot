@@ -216,21 +216,16 @@ async def oauth_callback(
 
 
 @router.get("/me")
-async def get_current_user(session: Optional[str] = Cookie(None)):
+async def get_me(session: Optional[str] = Cookie(None)):
     """
     Retourne les infos de l'utilisateur connecté.
     """
-    if not session:
-        raise HTTPException(401, "Not authenticated")
-    
-    try:
-        user_id, user_login = session.split(":", 1)
-    except ValueError:
-        raise HTTPException(401, "Invalid session")
-    
+    from dependencies import get_current_user as _get_user
+    user = _get_user(session)
     return {
-        "id": user_id,
-        "login": user_login,
+        "id": user["id"],
+        "login": user["login"],
+        "display_name": user.get("display_name", user["login"]),
         "authenticated": True
     }
 
