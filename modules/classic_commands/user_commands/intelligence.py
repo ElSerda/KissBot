@@ -43,7 +43,8 @@ async def handle_ask(bot, cmd: ChatCommand):
         if not response:
             await bot.send_message(cmd.room.name, f"@{cmd.user.name} ❌ Erreur IA, réessaye plus tard")
         else:
-            await bot.send_message(cmd.room.name, f"@{cmd.user.name} {response}")
+            # [ASK] prefix pour maximiser l'espace (vs @username qui prend plus de chars)
+            await bot.send_message(cmd.room.name, f"[ASK] {response}")
 
     except Exception as e:
         LOGGER.error(f"❌ Erreur handle_ask: {e}")

@@ -251,13 +251,13 @@ class CloudSynapse:
         if context == "ask":
             if use_personality_ask and channel_personality_prompt:
                 # Utiliser la personnalité du channel
-                system_prompt = channel_personality_prompt + "\nMax 200 caractères."
+                system_prompt = channel_personality_prompt + "\nMax 450 caractères, réponds de façon complète."
             elif use_personality_ask:
                 system_prompt = (
                     f"Tu es {bot_name}. {default_personality}\n"
                     f"Réponds naturellement avec TON opinion et TON style. "
                     f"N'hésite pas à clasher, être drôle, prendre position. "
-                    f"Pas de langue de bois. Max 200 caractères."
+                    f"Pas de langue de bois. Max 400 caractères."
                 )
             else:
                 system_prompt = (
@@ -267,7 +267,7 @@ class CloudSynapse:
                     f"- Donne des exemples concrets si pertinent\n"
                     f"- Ton accessible mais précis, style vulgarisation scientifique\n"
                     f"- Si théorie du complot : démonte avec FACTS, mais reste sympa\n"
-                    f"Max 250 caractères. Sois instructif ET engageant."
+                    f"Max 450 caractères. Sois instructif ET engageant."
                 )
         else:
             # Mentions et autres contextes
@@ -307,8 +307,9 @@ class CloudSynapse:
         
         # context == "ask" ou stimulus_class == "gen_long" → réponse détaillée
         if context == "ask":
-            max_tokens = cloud_config.get("max_tokens_long", 150)
-            temperature = cloud_config.get("temperature_long", 0.8)
+            # 300 tokens ≈ 400-500 chars FR, truncation intelligente à 450 chars
+            max_tokens = cloud_config.get("max_tokens_long", 300)
+            temperature = cloud_config.get("temperature_long", 0.7)
         else:
             # gen_short ou mention standard
             max_tokens = cloud_config.get("max_tokens_short", 90)
@@ -352,14 +353,47 @@ class CloudSynapse:
                     cleaned = raw_response.strip() if raw_response else ""
 
                     if cleaned and len(cleaned) >= 3:
-                        self.logger.warning(f"☁️ DEBUG: Returning response: {cleaned[:50]}...")
-                        return cleaned
+                        # ✂️ Truncation intelligente pour Twitch (450 chars max, marge de sécurité)
+                        truncated = self._smart_truncate(cleaned, max_chars=450)
+                        if len(truncated) < len(cleaned):
+                            self.logger.info(f"☁️✂️ Response truncated: {len(cleaned)} → {len(truncated)} chars")
+                        self.logger.warning(f"☁️ DEBUG: Returning response: {truncated[:50]}...")
+                        return truncated
 
             self.logger.warning(f"☁️ DEBUG: No valid response found, returning None")
             return None
         except Exception as e:
             self.logger.error(f"☁️❌ _transmit_cloud_signal exception: {e}", exc_info=True)
             raise
+
+    def _smart_truncate(self, text: str, max_chars: int = 450) -> str:
+        """✂️ TRUNCATION INTELLIGENTE pour Twitch (500 chars max)
+        
+        Coupe le texte proprement à une frontière de phrase si possible,
+        sinon à un espace, avec indicateur de continuation.
+        """
+        if len(text) <= max_chars:
+            return text
+        
+        # Chercher une fin de phrase propre
+        truncated = text[:max_chars]
+        
+        # Priorité: fin de phrase (. ! ?)
+        last_period = truncated.rfind('.')
+        last_exclamation = truncated.rfind('!')
+        last_question = truncated.rfind('?')
+        last_punct = max(last_period, last_exclamation, last_question)
+        
+        if last_punct > max_chars * 0.6:  # Au moins 60% du texte conservé
+            return truncated[:last_punct + 1]
+        
+        # Sinon: couper à un espace
+        last_space = truncated.rfind(' ')
+        if last_space > max_chars * 0.7:
+            return truncated[:last_space] + "..."
+        
+        # Dernier recours: coupe brute
+        return truncated.rstrip() + "..."
 
     def _is_valid_response(self, response: str, stimulus: str) -> bool:
         """🎖️ VALIDATION RÉPONSE CLOUD"""
