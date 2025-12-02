@@ -50,7 +50,6 @@ class MessageHandler:
             config: Configuration du bot (pour GameLookup, LLM)
         """
         self.bus = bus
-        self.command_count = 0
         self.start_time = time.time()
         self.config = config or {}
         
@@ -209,8 +208,7 @@ class MessageHandler:
         args = parts[1] if len(parts) > 1 else ""
         
         LOGGER.info(f"🤖 Command: {command} from {msg.user_login} in #{msg.channel}")
-        self.command_count += 1
-        
+
         # Router vers le handler approprié
         if command == "!ping":
             await self._cmd_ping(msg)
@@ -556,12 +554,9 @@ class MessageHandler:
         from modules.classic_commands.broadcaster_commands.personality import handle_kbnsfw
         await handle_kbnsfw(self, msg, args)
     
-    def get_stats(self) -> dict:
-        """Retourne les stats du handler"""
-        return {
-            "commands_processed": self.command_count,
-            "uptime_seconds": int(time.time() - self.start_time)
-        }
+    def get_uptime_seconds(self) -> int:
+        """Retourne l'uptime en secondes"""
+        return int(time.time() - self.start_time)
     
     async def _handle_auto_translation(self, msg: ChatMessage) -> None:
         """

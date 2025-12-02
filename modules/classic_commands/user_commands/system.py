@@ -54,7 +54,7 @@ async def handle_uptime(handler: "MessageHandler", msg: "ChatMessage", args: str
     response = OutboundMessage(
         channel=msg.channel,
         channel_id=msg.channel_id,
-        text=f"@{msg.user_login} Bot uptime: {uptime_str} ⏱️ | Commands: {handler.command_count}",
+        text=f"@{msg.user_login} Bot uptime: {uptime_str} ⏱️",
         prefer="irc"
     )
     

@@ -99,7 +99,6 @@ class MockHandler:
         self.banword_manager.remove_banword.return_value = True
         self.banword_manager.list_banwords.return_value = ["word1", "word2"]
         self.start_time = 0
-        self.command_count = 42
         self.system_monitor = MagicMock()
         self.system_monitor.get_stats.return_value = {
             'cpu_percent': 25.0, 'memory_mb': 150.0, 'thread_count': 10

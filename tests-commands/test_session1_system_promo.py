@@ -51,7 +51,6 @@ class TestSystemCommands:
         handler.bus = MagicMock()
         handler.bus.publish = AsyncMock()
         handler.start_time = time.time() - 3661  # 1h 1m 1s
-        handler.command_count = 42
         
         msg = MagicMock()
         msg.channel = "test_channel"
@@ -65,7 +64,6 @@ class TestSystemCommands:
         text = call_args[0][1].text
         assert "uptime:" in text.lower()
         assert "1h" in text
-        assert "Commands: 42" in text
     
     @pytest.mark.asyncio
     async def test_handle_stats_no_monitor(self):

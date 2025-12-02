@@ -40,7 +40,6 @@ class MockHandler:
         self.dev_whitelist = MagicMock()
         self.banword_manager = MagicMock()
         self.start_time = 0
-        self.command_count = 42
 
 
 # ════════════════════════════════════════════════════════════════════════
