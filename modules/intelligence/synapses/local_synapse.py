@@ -13,6 +13,11 @@ from typing import Any
 import httpx
 
 from modules.intelligence.synapses.timeout_config import TimeoutConfig
+from modules.intelligence.synapses.constants import (
+    ASK_TARGET_CHARS, ASK_MAX_TOKENS_LOCAL, ASK_PROMPT_RANGE,
+    MENTION_MAX_CHARS, MENTION_MAX_TOKENS, GEN_LONG_MAX_CHARS,
+    GEN_LONG_MAX_TOKENS, JOKE_MAX_TOKENS
+)
 
 
 class LocalSynapse:
@@ -130,7 +135,7 @@ class LocalSynapse:
             return True
         return False
 
-    def _hard_truncate(self, response: str, max_chars: int = 400) -> str:
+    def _hard_truncate(self, response: str, max_chars: int = GEN_LONG_MAX_CHARS) -> str:
         """
         🔪 TRONCATURE BRUTALE - Coupe à la dernière phrase complète avant limite
 
@@ -261,12 +266,12 @@ class LocalSynapse:
                 system_prompt = (
                     f"Tu es {bot_name}. {personality}\n"
                     f"Réponds {lang_directive} avec TON opinion, sans te brider. "
-                    f"Vannes, clash, opinions tranchées = OK. Max 250 chars : {stimulus}"
+                    f"Vannes, clash, opinions tranchées = OK. Réponds en {ASK_PROMPT_RANGE} chars : {stimulus}"
                 )
             else:
                 system_prompt = (
                     f"Réponds {lang_directive} directement, avec ton expertise gaming. "
-                    f"Pas de langue de bois. Max 250 chars : {stimulus}"
+                    f"Pas de langue de bois. Réponds en {ASK_PROMPT_RANGE} chars : {stimulus}"
                 )
         else:
             # Mentions : différencier gen_short vs gen_long
@@ -300,14 +305,14 @@ class LocalSynapse:
                         f"- Sarcasme second degré assumé\n"
                         f"- INTERDIT: gentillesse, politesse, générique\n"
                         f"- Comparaisons osées et métaphores trash = OK\n"
-                        f"- 1-2 phrases qui MARQUENT (max 200 chars)\n"
+                        f"- 1-2 phrases qui MARQUENT (max {MENTION_MAX_CHARS} chars)\n"
                         f"Question: {stimulus}\n"
                         f"Réponse:"
                     )
                 else:
                     system_prompt = (
                         f"Réponds {lang_directive} avec sarcasme MORDANT et vannes CASH. "
-                        f"Zéro filtre, humour noir OK. Max 200 chars : {stimulus}"
+                        f"Zéro filtre, humour noir OK. Max {MENTION_MAX_CHARS} chars : {stimulus}"
                     )
 
         # Format user-only avec prompt intégré (pas de séparation system/user)
@@ -332,7 +337,7 @@ class LocalSynapse:
             # 🎯 CONFIG OPTIMALE !ask (Mistral 7B Instruct v0.3)
             # Tests : 30/30 réussis (tech + sciences), 0% dépassements, longueur moy: 140 chars
             ask_config = inference_config.get("ask", {})
-            max_tokens = ask_config.get("max_tokens", 200)
+            max_tokens = ask_config.get("max_tokens", ASK_MAX_TOKENS_LOCAL)
             temperature = ask_config.get("temperature", 0.3)
             repeat_penalty = ask_config.get("repeat_penalty", 1.1)
             stop_tokens = ask_config.get("stop_tokens", ["\n", "🔚"])
@@ -340,7 +345,7 @@ class LocalSynapse:
             # 🔥 GEN_LONG OPTIMAL (Mistral 7B Instruct v0.3)
             # Tests : 5/5 réussis, 0% dépassements >400 chars, ~130 chars moy
             gen_long_config = inference_config.get("gen_long", {})
-            max_tokens = gen_long_config.get("max_tokens", 100)
+            max_tokens = gen_long_config.get("max_tokens", GEN_LONG_MAX_TOKENS)
             temperature = gen_long_config.get("temperature", 0.4)
             repeat_penalty = gen_long_config.get("repeat_penalty", 1.2)
             stop_tokens = gen_long_config.get("stop_tokens", ["🔚", "\n", "400.", "Exemple :", "En résumé,"])
@@ -348,20 +353,20 @@ class LocalSynapse:
             # 🎯 GEN_SHORT OPTIMAL (Mistral 7B Instruct v0.3)
             # Tests : 45/45 réussis, 0% dépassements >200 chars, 55 chars moy, 95.6% emojis
             mention_config = inference_config.get("mention", {})
-            max_tokens = mention_config.get("max_tokens", 200)
+            max_tokens = mention_config.get("max_tokens", MENTION_MAX_TOKENS)
             temperature = mention_config.get("temperature", 0.7)
             repeat_penalty = mention_config.get("repeat_penalty", 1.1)
             stop_tokens = mention_config.get("stop_tokens", ["\n"])
         elif stimulus_class == "gen_long":
             gen_long_config = inference_config.get("gen_long", {})
-            max_tokens = gen_long_config.get("max_tokens", 100)
+            max_tokens = gen_long_config.get("max_tokens", GEN_LONG_MAX_TOKENS)
             temperature = gen_long_config.get("temperature", 0.4)
             repeat_penalty = gen_long_config.get("repeat_penalty", 1.2)
             stop_tokens = gen_long_config.get("stop_tokens", ["🔚", "\n"])
         else:
             # Fallback: joke ou gen_short
             joke_config = inference_config.get("joke", {})
-            max_tokens = joke_config.get("max_tokens", 150)
+            max_tokens = joke_config.get("max_tokens", JOKE_MAX_TOKENS)
             temperature = joke_config.get("temperature", 0.7)
             repeat_penalty = joke_config.get("repeat_penalty", 1.1)
             stop_tokens = joke_config.get("stop_tokens", ["\n"])
@@ -542,14 +547,14 @@ class LocalSynapse:
             # OBLIGATOIRE pour gen_long car Mistral 7B dépasse parfois les limites
             if stimulus_class == "gen_long":
                 cleaned = self._remove_derives(cleaned)  # Coupe les divagations
-                cleaned = self._hard_truncate(cleaned, max_chars=400)  # Force ≤400 chars
+                cleaned = self._hard_truncate(cleaned, max_chars=GEN_LONG_MAX_CHARS)  # Force ≤400 chars
 
             # 🎯 SYSTÈME À DOUBLE SÉCURITÉ POUR !ask (Mistral 7B Instruct v0.3)
-            # - Limite souple (guidage) : max_tokens=200 guide le modèle (voir ligne ~313)
-            # - Limite brute (hard-cut) : 250 chars (200 + 25% marge) coupe brutalement
-            # Tests prouvés : 30/30 réussis, 0% dépassements (tech: 138.8 chars, sciences: 142.0 chars)
+            # - Limite souple (guidage) : max_tokens guide le modèle
+            # - Limite brute (hard-cut) : ASK_TARGET_CHARS coupe proprement
+            # Tests prouvés : 30/30 réussis, 0% dépassements
             elif context == "ask":
-                cleaned = self._hard_truncate(cleaned, max_chars=250)  # 200 + 25% marge
+                cleaned = self._hard_truncate(cleaned, max_chars=ASK_TARGET_CHARS)
 
             # Ajouter ellipse si tronqué
             if finish_reason == "length" and cleaned and not cleaned.endswith("..."):

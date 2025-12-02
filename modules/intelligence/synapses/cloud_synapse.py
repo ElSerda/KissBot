@@ -12,6 +12,11 @@ from typing import Any
 
 import httpx
 
+from modules.intelligence.synapses.constants import (
+    TWITCH_MAX_CHARS, ASK_PREFIX_LEN, ASK_TARGET_CHARS,
+    ASK_PROMPT_RANGE, ASK_MAX_TOKENS_CLOUD, MENTION_MAX_CHARS
+)
+
 
 class CloudSynapse:
     """
@@ -251,13 +256,13 @@ class CloudSynapse:
         if context == "ask":
             if use_personality_ask and channel_personality_prompt:
                 # Utiliser la personnalité du channel
-                system_prompt = channel_personality_prompt + "\nRéponds en 350-420 caractères, complète tes phrases."
+                system_prompt = channel_personality_prompt + f"\nRéponds en {ASK_PROMPT_RANGE} caractères, complète tes phrases."
             elif use_personality_ask:
                 system_prompt = (
                     f"Tu es {bot_name}. {default_personality}\n"
                     f"Réponds naturellement avec TON opinion et TON style. "
                     f"N'hésite pas à clasher, être drôle, prendre position. "
-                    f"Pas de langue de bois. Réponds en 350-420 caractères."
+                    f"Pas de langue de bois. Réponds en {ASK_PROMPT_RANGE} caractères."
                 )
             else:
                 system_prompt = (
@@ -267,7 +272,7 @@ class CloudSynapse:
                     f"- Donne des exemples concrets si pertinent\n"
                     f"- Ton accessible mais précis, style vulgarisation scientifique\n"
                     f"- Si théorie du complot : démonte avec FACTS, mais reste sympa\n"
-                    f"Réponds en 350-420 caractères. Termine toujours ta dernière phrase."
+                    f"Réponds en {ASK_PROMPT_RANGE} caractères. Termine toujours ta dernière phrase."
                 )
         else:
             # Mentions et autres contextes
@@ -307,8 +312,9 @@ class CloudSynapse:
         
         # context == "ask" ou stimulus_class == "gen_long" → réponse détaillée
         if context == "ask":
-            # 450 tokens ≈ 400-500 chars FR, cible 425 chars (15% marge sur 500)
-            max_tokens = cloud_config.get("max_tokens_long", 450)
+            # ASK_MAX_TOKENS_CLOUD tokens → cible ASK_TARGET_CHARS chars (15% marge sur 500)
+            max_tokens = cloud_config.get("max_tokens_long", ASK_MAX_TOKENS_CLOUD)
+            self.logger.debug(f"☁️📏 ASK mode: max_tokens={max_tokens}, target={ASK_TARGET_CHARS} chars")
             temperature = cloud_config.get("temperature_long", 0.7)
         else:
             # gen_short ou mention standard
@@ -353,9 +359,9 @@ class CloudSynapse:
                     cleaned = raw_response.strip() if raw_response else ""
 
                     if cleaned and len(cleaned) >= 3:
-                        # ✂️ Truncation intelligente: 419 chars max (425 - 6 pour "[ASK] ")
-                        # 425 chars = 85% de 500 → 15% de marge de sécurité Twitch
-                        truncated = self._smart_truncate(cleaned, max_chars=419)
+                        # ✂️ Truncation intelligente: ASK_TARGET_CHARS max
+                        truncated = self._smart_truncate(cleaned, max_chars=ASK_TARGET_CHARS)
+                        self.logger.debug(f"☁️📏 Raw: {len(cleaned)} chars → Truncated: {len(truncated)} chars (limit: {ASK_TARGET_CHARS})")
                         if len(truncated) < len(cleaned):
                             self.logger.info(f"☁️✂️ Response truncated: {len(cleaned)} → {len(truncated)} chars")
                         self.logger.warning(f"☁️ DEBUG: Returning response: {truncated[:50]}...")
@@ -367,8 +373,8 @@ class CloudSynapse:
             self.logger.error(f"☁️❌ _transmit_cloud_signal exception: {e}", exc_info=True)
             raise
 
-    def _smart_truncate(self, text: str, max_chars: int = 450) -> str:
-        """✂️ TRUNCATION INTELLIGENTE pour Twitch (500 chars max)
+    def _smart_truncate(self, text: str, max_chars: int = ASK_TARGET_CHARS) -> str:
+        """✂️ TRUNCATION INTELLIGENTE pour Twitch (TWITCH_MAX_CHARS chars max)
         
         Coupe le texte proprement à une frontière de phrase si possible,
         sinon à un espace, avec indicateur de continuation.
