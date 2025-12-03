@@ -3,14 +3,13 @@ Commande !trad - Traduction manuelle.
 
 Handler pour la commande !trad avec plusieurs modes:
 - !trad <message>           → Traduit vers le français
-- !trad <lang>:<message>    → Traduit vers la langue spécifiée (es, en, pt...)
-- !trad auto:@user <msg>    → Traduit vers la dernière langue connue de @user
+- !trad <lang>: <message>   → Traduit vers la langue spécifiée (es, en, pt...)
+- !trad auto: @user <msg>   → Traduit vers la dernière langue connue de @user
 
-Rate limiting (sauf pour les whitelistés).
+Pas de cooldown - Google Translate est gratuit via deep-translator.
 """
 import logging
 import re
-import time
 from typing import TYPE_CHECKING, Optional, Tuple
 
 if TYPE_CHECKING:
@@ -81,7 +80,7 @@ async def handle_trad(handler: "MessageHandler", msg: "ChatMessage", args: str) 
     if not args:
         usage = (
             f"@{msg.user_login} Usage: !trad <message> | "
-            f"!trad <lang>:<message> | !trad auto:@user <message>"
+            f"!trad <lang>: <message> | !trad auto: @user <message>"
         )
         await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
@@ -90,27 +89,6 @@ async def handle_trad(handler: "MessageHandler", msg: "ChatMessage", args: str) 
             prefer="irc"
         ))
         return
-    
-    # Rate limiting: 30s cooldown SAUF pour whitelistés
-    is_whitelisted = handler.dev_whitelist.is_dev(msg.user_login)
-    
-    if not is_whitelisted:
-        current_time = time.time()
-        last_time = handler._trad_last_time.get(msg.user_id, 0)
-        
-        if current_time - last_time < handler._trad_cooldown:
-            cooldown_remaining = int(handler._trad_cooldown - (current_time - last_time))
-            response_text = f"@{msg.user_login} ⏰ Cooldown: {cooldown_remaining}s restants"
-            await handler.bus.publish("chat.outbound", OutboundMessage(
-                channel=msg.channel,
-                channel_id=msg.channel_id,
-                text=response_text,
-                prefer="irc"
-            ))
-            return
-        
-        # Update cooldown
-        handler._trad_last_time[msg.user_id] = current_time
     
     # Parser les arguments
     target_lang, mention_user, message = parse_trad_args(args)
