@@ -112,8 +112,9 @@ def migrate_tokens(config: dict, manager: DatabaseManager, dry_run: bool = False
             access_token = token_data['access_token']
             refresh_token = token_data['refresh_token']
             
-            # Déterminer si c'est un bot
-            is_bot = (twitch_login.endswith('_bot') or twitch_login == 'serda_bot')
+            # Déterminer si c'est un bot (basé sur le nom ou le flag is_bot dans le YAML)
+            is_bot = token_data.get('is_bot', False) or twitch_login.endswith('_bot') or twitch_login == 'serda_bot'
+            token_type = 'bot' if is_bot else 'broadcaster'
             
             if dry_run:
                 print(f"   [DRY RUN] Would create/update user: {twitch_login} (ID: {twitch_user_id})")
@@ -148,15 +149,16 @@ def migrate_tokens(config: dict, manager: DatabaseManager, dry_run: bool = False
                 print(f"   ✓ User created: ID={user_id}")
                 stats['users_created'] += 1
             
-            # Stocker les tokens (chiffrés)
+            # Stocker les tokens (chiffrés) avec le bon type
             manager.store_tokens(
                 user_id=user_id,
                 access_token=access_token,
                 refresh_token=refresh_token,
                 expires_in=14400,  # 4 heures par défaut (sera mis à jour par le bot)
-                scopes=None  # Les scopes seront récupérés via validate token
+                scopes=None,  # Les scopes seront récupérés via validate token
+                token_type=token_type  # 'bot' ou 'broadcaster'
             )
-            print(f"   ✓ Tokens stored (encrypted)")
+            print(f"   ✓ Tokens stored (encrypted, type={token_type})")
             stats['tokens_stored'] += 1
             
             print()
