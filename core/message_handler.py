@@ -560,18 +560,27 @@ class MessageHandler:
     
     async def _handle_auto_translation(self, msg: ChatMessage) -> None:
         """
-        Auto-traduction pour les devs whitelistés
-        Détecte si le message est en français, sinon traduit
+        Auto-traduction et mémorisation de langue.
+        
+        - Détecte la langue de TOUS les messages non-français
+        - Mémorise la langue pour le mode !trad auto:@user
+        - Traduit et affiche seulement pour les devs whitelistés
         """
-        # Check whitelist
+        # Détect language pour TOUS les utilisateurs (pas seulement whitelistés)
+        # Ceci permet de mémoriser la langue pour !trad auto:
+        detected_lang = await self.translator.detect_language(msg.text)
+        
+        if detected_lang and detected_lang != 'fr':
+            # Mémoriser la langue de cet utilisateur
+            self.translator.remember_user_language(msg.channel, msg.user_login, detected_lang)
+        
+        # Auto-traduction visible seulement pour les devs whitelistés
         if not self.dev_whitelist.is_dev(msg.user_login):
             return
         
-        # Détect language
-        is_french = await self.translator.is_french(msg.text)
-        
-        if is_french:
-            return  # Déjà en français, rien à faire
+        # Si français, rien à afficher
+        if detected_lang == 'fr' or not detected_lang:
+            return
         
         # Translate
         result = await self.translator.translate(msg.text, target_lang='fr')

@@ -17,9 +17,32 @@ logger = logging.getLogger(__name__)
 class TranslationService:
     """Service de traduction avec détection automatique de langue"""
     
+    # Langues supportées (code ISO → nom)
+    SUPPORTED_LANGUAGES = {
+        'en': 'English',
+        'fr': 'Français',
+        'es': 'Español',
+        'de': 'Deutsch',
+        'it': 'Italiano',
+        'pt': 'Português',
+        'ru': 'Русский',
+        'ja': '日本語',
+        'zh-cn': '中文',
+        'ko': '한국어',
+        'ar': 'العربية',
+        'nl': 'Nederlands',
+        'pl': 'Polski',
+        'tr': 'Türkçe',
+        'sv': 'Svenska',
+        'da': 'Dansk',
+        'no': 'Norsk',
+        'fi': 'Suomi'
+    }
+    
     def __init__(self):
         self.translator = GoogleTranslator(source='auto', target='fr')
         self._cache = {}  # Cache simple {text: (lang, translation)}
+        self._user_languages = {}  # Cache {channel:username: lang_code} pour !trad auto:
         logger.info("🌍 TranslationService initialized (deep-translator)")
     
     async def detect_language(self, text: str) -> Optional[str]:
@@ -97,27 +120,42 @@ class TranslationService:
     
     def get_language_name(self, lang_code: str) -> str:
         """Retourne le nom complet de la langue"""
-        lang_names = {
-            'en': 'English',
-            'fr': 'Français',
-            'es': 'Español',
-            'de': 'Deutsch',
-            'it': 'Italiano',
-            'pt': 'Português',
-            'ru': 'Русский',
-            'ja': '日本語',
-            'zh-cn': '中文',
-            'ko': '한국어',
-            'ar': 'العربية',
-            'nl': 'Nederlands',
-            'pl': 'Polski',
-            'tr': 'Türkçe',
-            'sv': 'Svenska',
-            'da': 'Dansk',
-            'no': 'Norsk',
-            'fi': 'Suomi'
-        }
-        return lang_names.get(lang_code, lang_code.upper())
+        return self.SUPPORTED_LANGUAGES.get(lang_code, lang_code.upper())
+    
+    def is_supported_language(self, lang_code: str) -> bool:
+        """Vérifie si un code langue est supporté"""
+        return lang_code.lower() in self.SUPPORTED_LANGUAGES
+    
+    def remember_user_language(self, channel: str, username: str, lang_code: str) -> None:
+        """
+        Mémorise la dernière langue détectée pour un utilisateur
+        
+        Args:
+            channel: Nom du channel (sans #)
+            username: Login Twitch de l'utilisateur
+            lang_code: Code ISO de la langue (en, es, pt, etc.)
+        """
+        key = f"{channel.lower()}:{username.lower()}"
+        self._user_languages[key] = lang_code
+        logger.debug(f"💾 Remembered language for {username} in #{channel}: {lang_code}")
+    
+    def get_user_language(self, channel: str, username: str) -> Optional[str]:
+        """
+        Récupère la dernière langue connue d'un utilisateur
+        
+        Args:
+            channel: Nom du channel
+            username: Login Twitch de l'utilisateur
+        
+        Returns:
+            Code langue ISO ou None si inconnu
+        """
+        key = f"{channel.lower()}:{username.lower()}"
+        return self._user_languages.get(key)
+    
+    def list_supported_languages(self) -> str:
+        """Retourne la liste des codes langues supportés"""
+        return ", ".join(sorted(self.SUPPORTED_LANGUAGES.keys()))
 
 
 class DevWhitelist:
