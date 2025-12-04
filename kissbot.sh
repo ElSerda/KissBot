@@ -22,6 +22,13 @@ WEB_PID_FILE="$PID_DIR/web.pid"
 WEB_LOG="$SCRIPT_DIR/web.log"
 WEB_PORT="${WEB_PORT:-3000}"
 
+# Monitor
+MONITOR_SCRIPT="$SCRIPT_DIR/core/monitor.py"
+MONITOR_PID_FILE="$PID_DIR/monitor.pid"
+MONITOR_LOG="$LOG_DIR/monitor.log"
+MONITOR_SOCKET="/tmp/kissbot_monitor.sock"
+MONITOR_DB="$SCRIPT_DIR/kissbot_monitor.db"
+
 # Parse --use-db, --rust, and --mono options
 USE_DB_FLAG=""
 USE_RUST=false
@@ -250,6 +257,99 @@ stop_web() {
 }
 
 # ============================================================
+# MONITOR FUNCTIONS
+# ============================================================
+
+# Function to check if Monitor is running
+is_monitor_running() {
+    if [ -f "$MONITOR_PID_FILE" ]; then
+        PID=$(cat "$MONITOR_PID_FILE")
+        if ps -p "$PID" > /dev/null 2>&1; then
+            return 0
+        else
+            rm -f "$MONITOR_PID_FILE"
+        fi
+    fi
+    
+    # Check for monitor process
+    if pgrep -f "python.*-m core\.monitor" > /dev/null 2>&1; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function to start Monitor
+start_monitor() {
+    if is_monitor_running; then
+        echo -e "${YELLOW}⚠️  Monitor already running (PID: $(cat $MONITOR_PID_FILE 2>/dev/null || echo 'unknown'))${NC}"
+        return 0
+    fi
+    
+    echo -e "${GREEN}🎛️  Starting Monitor...${NC}"
+    
+    # Create directories
+    mkdir -p "$PID_DIR" "$LOG_DIR"
+    
+    # Activate venv and start monitor in background
+    cd "$SCRIPT_DIR"
+    source "$VENV_PATH/bin/activate"
+    nohup python -m core.monitor > "$MONITOR_LOG" 2>&1 &
+    
+    # Save PID
+    MONITOR_PID=$!
+    echo $MONITOR_PID > "$MONITOR_PID_FILE"
+    
+    # Wait and check
+    sleep 2
+    if is_monitor_running; then
+        echo -e "${GREEN}✅ Monitor started successfully (PID: $MONITOR_PID)${NC}"
+        echo -e "${GREEN}   📊 Socket: $MONITOR_SOCKET${NC}"
+        echo -e "${GREEN}   📦 DB: $MONITOR_DB${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Failed to start Monitor. Check logs: $MONITOR_LOG${NC}"
+        rm -f "$MONITOR_PID_FILE"
+        return 1
+    fi
+}
+
+# Function to stop Monitor
+stop_monitor() {
+    if ! is_monitor_running; then
+        echo -e "${YELLOW}⚠️  Monitor is not running${NC}"
+        return 1
+    fi
+    
+    if [ -f "$MONITOR_PID_FILE" ]; then
+        PID=$(cat "$MONITOR_PID_FILE")
+    else
+        PID=$(pgrep -f "python.*-m core\.monitor" | head -n 1)
+    fi
+    
+    if [ -z "$PID" ]; then
+        echo -e "${RED}❌ Could not find Monitor process${NC}"
+        return 1
+    fi
+    
+    echo -e "${YELLOW}🛑 Stopping Monitor (PID: $PID)...${NC}"
+    kill -TERM "$PID" 2>/dev/null || true
+    
+    # Wait for graceful shutdown
+    sleep 2
+    
+    # Force kill if still running
+    if ps -p "$PID" > /dev/null 2>&1; then
+        kill -9 "$PID" 2>/dev/null || true
+        sleep 1
+    fi
+    
+    rm -f "$MONITOR_PID_FILE"
+    rm -f "$MONITOR_SOCKET"
+    echo -e "${GREEN}✅ Monitor stopped${NC}"
+}
+
+# ============================================================
 # SUPERVISOR FUNCTIONS
 # ============================================================
 is_running() {
@@ -285,6 +385,9 @@ start() {
     # Create directories
     mkdir -p "$PID_DIR" "$LOG_DIR"
     cd "$SCRIPT_DIR"
+    
+    # Start Monitor first (for metrics collection)
+    start_monitor
     
     if [ "$USE_RUST" = true ]; then
         # === RUST SUPERVISOR ===
@@ -450,11 +553,14 @@ stop() {
     
     # Stop Hub
     stop_hub
+    
+    # Stop Monitor
+    stop_monitor
 }
 
 # Function to restart the supervisor
 restart() {
-    echo -e "${YELLOW}🔄 Restarting KissBot Stack (Hub + Supervisor + Bots)...${NC}"
+    echo -e "${YELLOW}🔄 Restarting KissBot Stack (Monitor + Hub + Supervisor + Bots)...${NC}"
     stop
     sleep 2
     start
@@ -706,6 +812,31 @@ status() {
     
     echo ""
     
+    # Check Monitor
+    if is_monitor_running; then
+        if [ -f "$MONITOR_PID_FILE" ]; then
+            MON_PID=$(cat "$MONITOR_PID_FILE")
+        else
+            MON_PID=$(pgrep -f "python.*-m core\.monitor" | head -n 1)
+        fi
+        
+        if [ -n "$MON_PID" ] && ps -p "$MON_PID" > /dev/null 2>&1; then
+            UPTIME=$(ps -p "$MON_PID" -o etime= | tr -d ' ')
+            MEM=$(ps -p "$MON_PID" -o rss= | awk '{printf "%.1f MB", $1/1024}')
+            echo -e "${GREEN}✅ Monitor: RUNNING${NC}"
+            echo -e "   PID:    $MON_PID"
+            echo -e "   Socket: $MONITOR_SOCKET"
+            echo -e "   Uptime: $UPTIME"
+            echo -e "   Memory: $MEM"
+        else
+            echo -e "${YELLOW}⚠️  Monitor: NOT RUNNING (optional)${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Monitor: NOT RUNNING (optional)${NC}"
+    fi
+    
+    echo ""
+    
     # Check supervisor
     if is_running; then
         if [ -f "$SUPERVISOR_PID_FILE" ]; then
@@ -838,6 +969,26 @@ case "$1" in
         sleep 1
         start_web
         ;;
+    start-monitor)
+        start_monitor
+        ;;
+    stop-monitor)
+        stop_monitor
+        ;;
+    restart-monitor)
+        stop_monitor
+        sleep 1
+        start_monitor
+        ;;
+    logs-monitor)
+        if [ "$2" = "-f" ] || [ "$2" = "--follow" ]; then
+            echo -e "${GREEN}📝 Following Monitor logs (Ctrl+C to stop)...${NC}"
+            tail -f "$MONITOR_LOG"
+        else
+            echo -e "${GREEN}📝 Last 50 lines of Monitor logs:${NC}"
+            tail -n 50 "$MONITOR_LOG"
+        fi
+        ;;
     start-all)
         echo -e "${GREEN}🚀 Starting full KissBot Stack...${NC}"
         start_web
@@ -871,8 +1022,8 @@ case "$1" in
         echo "Usage: $0 {command} [options]"
         echo ""
         echo "🤖 Bot Commands:"
-        echo "  start [options]       - Start KissBot Stack (Hub + Supervisor + all bots)"
-        echo "  stop                  - Stop KissBot Stack (Hub + Supervisor + all bots)"
+        echo "  start [options]       - Start KissBot Stack (Monitor + Hub + Supervisor + all bots)"
+        echo "  stop                  - Stop KissBot Stack (Monitor + Hub + Supervisor + all bots)"
         echo "  restart [options]     - Restart KissBot Stack"
         echo "  start-channel <ch>    - Start only one specific bot"
         echo "  stop-channel <ch>     - Stop only one specific bot"
@@ -884,8 +1035,14 @@ case "$1" in
         echo "  restart-web           - Restart Web Dashboard"
         echo "  logs-web [-f]         - Show Web Dashboard logs"
         echo ""
+        echo "🎛️  Monitor Commands:"
+        echo "  start-monitor         - Start Monitor (metrics + LLM tracking)"
+        echo "  stop-monitor          - Stop Monitor"
+        echo "  restart-monitor       - Restart Monitor"
+        echo "  logs-monitor [-f]     - Show Monitor logs"
+        echo ""
         echo "📦 Full Stack Commands:"
-        echo "  start-all             - Start everything (Web + Bot)"
+        echo "  start-all             - Start everything (Web + Monitor + Hub + Bot)"
         echo "  stop-all              - Stop everything"
         echo "  status                - Show status of all components"
         echo ""
@@ -894,6 +1051,7 @@ case "$1" in
         echo "  logs <channel>        - Show channel log"
         echo "  logs [-f]             - Follow logs in real-time"
         echo "  logs-web [-f]         - Web dashboard logs"
+        echo "  logs-monitor [-f]     - Monitor logs"
         echo ""
         echo "⚙️  Options:"
         echo "  --use-db              - Use database for OAuth tokens"
@@ -904,8 +1062,9 @@ case "$1" in
         echo "  $0 start-all               # Start full stack (Web + Bot)"
         echo "  $0 start --rust --mono     # Bot only, Rust mono-process"
         echo "  $0 start-web               # Web dashboard only"
+        echo "  $0 start-monitor           # Monitor only"
         echo "  $0 status                  # Check all components"
-        echo "  $0 logs-web -f             # Follow web logs"
+        echo "  $0 logs-monitor -f         # Follow monitor logs"
         echo ""
         echo "🌐 Web Dashboard: http://localhost:${WEB_PORT}"
         exit 1

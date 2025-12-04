@@ -27,6 +27,14 @@ from twitchAPI.type import AuthScope
 
 from core.message_bus import MessageBus
 from core.registry import Registry
+from core.feature_manager import FeatureManager, Feature, init_feature_manager
+from core.memory_profiler import init_profiler, log_feature_mem, get_profiler
+from core.monitor_client import (
+    register_with_monitor, 
+    unregister_from_monitor,
+    HeartbeatTask,
+    features_to_dict
+)
 
 
 def convert_scope_strings_to_enums(scope_strings: list[str]) -> list[AuthScope]:
@@ -329,6 +337,47 @@ async def main():
     # Inject log paths into config for components
     config['_log_paths'] = log_paths
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🎛️ Feature Manager & Memory Profiler Initialization
+    # ═══════════════════════════════════════════════════════════════════════
+    features = init_feature_manager(config)
+    
+    # Initialize profiler if feature is enabled
+    profiler_enabled = features.is_enabled(Feature.MEMORY_PROFILER)
+    profiler = init_profiler(enabled=profiler_enabled)
+    
+    if profiler_enabled:
+        LOGGER.info("📊 Memory Profiler: ENABLED")
+        print(f"📊 Memory Profiler: ENABLED")
+    
+    # Log feature status
+    enabled_count = features.get_enabled_count()
+    total_count = len(Feature)
+    estimated_mem = features.estimate_memory_usage()
+    LOGGER.info(f"🎛️ Features: {enabled_count}/{total_count} enabled (~{estimated_mem:.0f}MB estimated)")
+    
+    # Warn about heavy features
+    heavy = features.get_heavy_features()
+    if heavy:
+        LOGGER.warning(f"⚠️ Heavy features enabled: {[f.config_key for f in heavy]}")
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # 📡 Register with Monitor (non-blocking, fail-safe)
+    # ═══════════════════════════════════════════════════════════════════════
+    # Déterminer le channel principal pour l'enregistrement
+    monitor_channel = args.channel or (channels_list[0] if channels_list else "unknown")
+    monitor_pid = os.getpid()
+    
+    # Enregistrer auprès du Monitor (ne crashe jamais si absent)
+    register_with_monitor(
+        channel=monitor_channel,
+        pid=monitor_pid,
+        features=features_to_dict(features)
+    )
+    
+    # Heartbeat task (sera démarrée après l'event loop)
+    heartbeat_task: HeartbeatTask = None
+    
     twitch_config = config.get("twitch", {})
     bot_config = config.get("bot", {})
     
@@ -528,27 +577,44 @@ async def main():
     except Exception as e:
         LOGGER.error(f"Erreur test API: {e}")
     
-    # Initialize message bus architecture
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🏗️ Core Components Initialization (with Feature Flags)
+    # ═══════════════════════════════════════════════════════════════════════
+    from core.memory_profiler import profile_block
+    
+    # Initialize message bus architecture (always needed)
     bus = MessageBus()
     registry = Registry()
     rate_limiter = RateLimiter()
     
-    # Analytics Handler
-    analytics = AnalyticsHandler(bus)
+    # Analytics Handler (conditional)
+    analytics = None
+    if features.is_enabled(Feature.ANALYTICS):
+        with profile_block("analytics"):
+            analytics = AnalyticsHandler(bus)
     
-    # Chat Logger (log IRC messages)
-    chat_logger = ChatLogger(bus, config)
+    # Chat Logger (conditional)
+    chat_logger = None
+    if features.is_enabled(Feature.CHAT_LOGGER):
+        with profile_block("chat_logger"):
+            chat_logger = ChatLogger(bus, config)
     
-    # Command Logger (log command executions)
-    from core.command_logger import CommandLogger
-    command_logger = CommandLogger(bus, config)
+    # Command Logger (conditional)
+    command_logger = None
+    if features.is_enabled(Feature.COMMANDS):
+        with profile_block("command_logger"):
+            from core.command_logger import CommandLogger
+            command_logger = CommandLogger(bus, config)
     
-    # Message Handler (with config for GameLookup, LLM, etc.)
-    message_handler = MessageHandler(bus, config)
+    # Message Handler (always needed for IRC routing, but features inside are conditional)
+    with profile_block("message_handler"):
+        message_handler = MessageHandler(bus, config)
     
     # Configure MessageBus pour game_lookup_rust (métriques)
-    from modules.integrations.game_engine.rust_wrapper import set_message_bus
-    set_message_bus(bus)
+    if features.is_enabled(Feature.GAME_ENGINE):
+        with profile_block("game_engine_bus"):
+            from modules.integrations.game_engine.rust_wrapper import set_message_bus
+            set_message_bus(bus)
     
     # Outbound Logger (DISABLED - real IRC send enabled)
     # outbound_logger = OutboundLogger(bus)
@@ -559,7 +625,9 @@ async def main():
     # Inject Helix into MessageHandler (for !gc command)
     message_handler.set_helix(helix)
     
-    # Stream Announcer (auto-announce stream online/offline)
+    # ═══════════════════════════════════════════════════════════════════════
+    # 📡 Stream Monitoring (with Feature Flags)
+    # ═══════════════════════════════════════════════════════════════════════
     announcements_config = config.get("announcements", {})
     monitoring_enabled = announcements_config.get("monitoring", {}).get("enabled", True)
     
@@ -567,9 +635,16 @@ async def main():
     stream_monitor = None
     eventsub_client = None
     
-    if monitoring_enabled:
+    # Check feature flags for monitoring
+    stream_monitor_enabled = features.is_enabled(Feature.STREAM_MONITOR) and monitoring_enabled
+    eventsub_enabled = features.is_enabled(Feature.EVENTSUB) and monitoring_enabled
+    announcer_enabled = features.is_enabled(Feature.STREAM_ANNOUNCER) and monitoring_enabled
+    
+    if stream_monitor_enabled or eventsub_enabled:
         # Créer StreamAnnouncer (écoute system.event sur bus)
-        stream_announcer = StreamAnnouncer(bus, config)
+        if announcer_enabled:
+            with profile_block("stream_announcer"):
+                stream_announcer = StreamAnnouncer(bus, config)
         
         # Déterminer méthode de monitoring
         monitoring_method = announcements_config.get("monitoring", {}).get("method", "auto")
@@ -589,27 +664,30 @@ async def main():
         # NEW: Support pour --eventsub=hub mode
         eventsub_mode = args.eventsub if hasattr(args, 'eventsub') else 'direct'
         
-        if eventsub_mode == 'disabled':
+        if eventsub_mode == 'disabled' or not eventsub_enabled:
             # Force polling only
-            LOGGER.info("🎯 EventSub disabled via --eventsub=disabled, using polling")
-            stream_monitor = StreamMonitor(
-                helix=helix,
-                bus=bus,
-                channels=irc_channels,
-                interval=polling_interval
-            )
+            LOGGER.info("🎯 EventSub disabled, using polling")
+            if stream_monitor_enabled:
+                with profile_block("stream_monitor"):
+                    stream_monitor = StreamMonitor(
+                        helix=helix,
+                        bus=bus,
+                        channels=irc_channels,
+                        interval=polling_interval
+                    )
         
         elif eventsub_mode == 'hub':
             # Connect to EventSub Hub via IPC
             LOGGER.info("🎯 EventSub mode: hub (connecting to centralized Hub via IPC)")
             try:
                 hub_socket = args.hub_socket if hasattr(args, 'hub_socket') else '/tmp/kissbot_hub.sock'
-                eventsub_client = HubEventSubClient(
-                    bus=bus,
-                    channels=irc_channels,
-                    broadcaster_ids=broadcaster_ids,
-                    hub_socket_path=hub_socket
-                )
+                with profile_block("eventsub_hub"):
+                    eventsub_client = HubEventSubClient(
+                        bus=bus,
+                        channels=irc_channels,
+                        broadcaster_ids=broadcaster_ids,
+                        hub_socket_path=hub_socket
+                    )
                 LOGGER.info(f"✅ Hub client created (socket: {hub_socket})")
             except Exception as e:
                 LOGGER.error(f"❌ Failed to create Hub client: {e}")
@@ -774,24 +852,37 @@ async def main():
     # Attendre que toutes les tasks Analytics finissent
     await asyncio.sleep(0.1)  # Petite pause pour laisser les tasks se terminer
     
-    # System Monitoring (CPU/RAM metrics)
-    system_monitor = SystemMonitor(
-        config=config,
-        interval=60,  # Log toutes les 60s
-        cpu_threshold=50.0,  # Alerte si CPU > 50%
-        ram_threshold_mb=500  # Alerte si RAM > 500MB
-    )
-    asyncio.create_task(system_monitor.start())
-    LOGGER.info("📊 System monitoring started (dedicated system.log)")
+    # ═══════════════════════════════════════════════════════════════════════
+    # 📊 System Monitoring (with Feature Flags)
+    # ═══════════════════════════════════════════════════════════════════════
+    system_monitor = None
+    if features.is_enabled(Feature.SYSTEM_MONITOR):
+        with profile_block("system_monitor"):
+            system_monitor = SystemMonitor(
+                config=config,
+                interval=60,  # Log toutes les 60s
+                cpu_threshold=50.0,  # Alerte si CPU > 50%
+                ram_threshold_mb=500  # Alerte si RAM > 500MB
+            )
+        asyncio.create_task(system_monitor.start())
+        LOGGER.info("📊 System monitoring started (dedicated system.log)")
     
     # Inject SystemMonitor into MessageHandler (for !stats command)
-    message_handler.set_system_monitor(system_monitor)
+    if system_monitor:
+        message_handler.set_system_monitor(system_monitor)
     
-    # Stats Analytics
-    stats = analytics.get_stats()
-    chat_count = chat_logger.get_message_count()
-    print(f"\n📊 Analytics: {stats['total_events']} événements traités")
-    print(f"💬 Chat Logger: {chat_count} messages reçus")
+    # ═══════════════════════════════════════════════════════════════════════
+    # 📈 Startup Summary
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    # Stats Analytics (if enabled)
+    if analytics:
+        stats = analytics.get_stats()
+        print(f"\n📊 Analytics: {stats['total_events']} événements traités")
+    
+    if chat_logger:
+        chat_count = chat_logger.get_message_count()
+        print(f"💬 Chat Logger: {chat_count} messages reçus")
     
     # Info monitoring
     if eventsub_client or stream_monitor:
@@ -806,6 +897,11 @@ async def main():
     else:
         print("📡 Stream Monitoring: DÉSACTIVÉ")
     
+    # Memory Profiler Report (if enabled)
+    if features.is_enabled(Feature.MEMORY_PROFILER):
+        profiler = get_profiler()
+        print(f"\n{profiler.get_report()}")
+    
     print('\n' + '=' * 70)
     print('🚀 BOT OPERATIONAL - ALL SYSTEMS BOOTED')
     print('=' * 70)
@@ -813,6 +909,7 @@ async def main():
     print(f'💬 Commands: !ping !uptime !stats !help !gi !gc !ask @mention')
     print(f'📊 Monitoring: CPU/RAM metrics logged to metrics.json')
     print(f'🔌 Transport: IRC Client + EventSub WebSocket')
+    print(f'🎛️ Features: {features.get_enabled_count()}/{len(Feature)} enabled')
     print(f'\n💡 Ready to receive messages!')
     print(f'   Press CTRL+C to shutdown...\n')
     
@@ -870,6 +967,13 @@ async def main():
         asyncio.create_task(broadcast_listener())
         LOGGER.info("📡 Broadcast listener started")
     
+    # ═══════════════════════════════════════════════════════════════════════
+    # 💓 Start Heartbeat Task for Monitor
+    # ═══════════════════════════════════════════════════════════════════════
+    heartbeat_task = HeartbeatTask(channel=monitor_channel, pid=monitor_pid)
+    asyncio.create_task(heartbeat_task.start())
+    LOGGER.info("💓 Heartbeat task started")
+    
     try:
         # Boucle infinie qui répond bien à KeyboardInterrupt
         while True:
@@ -878,6 +982,13 @@ async def main():
         LOGGER.info("CTRL+C détecté, arrêt en cours...")
     finally:
         LOGGER.info("Arret...")
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 👋 Unregister from Monitor
+        # ═══════════════════════════════════════════════════════════════════
+        if heartbeat_task:
+            await heartbeat_task.stop()
+        unregister_from_monitor(channel=monitor_channel, pid=monitor_pid)
         
         # Remove all status flags (signal shutdown)
         if args.channel:

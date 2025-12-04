@@ -11,12 +11,9 @@ from typing import Any, Dict, Optional
 from core.message_bus import MessageBus
 from core.message_types import ChatMessage, OutboundMessage
 from core.registry import Registry
+from core.feature_manager import get_feature_manager, Feature
+from core.memory_profiler import log_feature_mem, profile_block
 from modules.moderation import get_banword_manager
-from modules.integrations.game_engine.rust_wrapper import get_game_lookup
-from modules.integrations.music.music_cache import MusicCache
-from modules.integrations.llm_provider.llm_handler import LLMHandler
-from modules.integrations.translator.translator import get_translator, get_dev_whitelist
-from modules.intelligence.core import extract_mention_message
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -78,38 +75,58 @@ class MessageHandler:
         # IRC Client (pour !kisscharity broadcast)
         self.irc_client = None
         
-        # Game Lookup (Rust Engine avec fallback Python)
+        # Get feature manager (already initialized in main.py)
+        self.features = get_feature_manager()
+        
+        # Game Lookup (Rust Engine avec fallback Python) - Conditional
         self.game_lookup = None
-        try:
-            db_path = config.get('db_path', 'kissbot.db')
-            self.game_lookup = get_game_lookup(db_path, config)
-            LOGGER.info("🦀 GameLookup initialisé (Rust Engine v0.1.0 + Python fallback)")
-        except Exception as e:
-            LOGGER.error(f"❌ GameLookup init failed: {e}")
-        
-        # Quantum Music Cache (POC)
-        self.music_cache: Optional[MusicCache] = None
-        try:
-            self.music_cache = MusicCache(config)
-            LOGGER.info("🎵 QuantumMusicCache initialisé (POC)")
-        except Exception as e:
-            LOGGER.error(f"❌ QuantumMusicCache init failed: {e}")
-        
-        # LLM Handler
-        self.llm_handler: Optional[LLMHandler] = None
-        if config and config.get("apis", {}).get("openai_key"):
+        if self.features and self.features.is_enabled(Feature.GAME_ENGINE):
             try:
-                self.llm_handler = LLMHandler(config)
-                LOGGER.info("✅ LLMHandler initialisé")
+                with profile_block("game_lookup_init"):
+                    from modules.integrations.game_engine.rust_wrapper import get_game_lookup
+                    db_path = config.get('db_path', 'kissbot.db')
+                    self.game_lookup = get_game_lookup(db_path, config)
+                LOGGER.info("🦀 GameLookup initialisé (Rust Engine + Python fallback)")
             except Exception as e:
-                LOGGER.error(f"❌ LLMHandler init failed: {e}")
+                LOGGER.error(f"❌ GameLookup init failed: {e}")
         
-        # Translation Service
-        self.translator = get_translator()
-        self.dev_whitelist = get_dev_whitelist(db_manager=None)  # Will set DB later
-        LOGGER.info("🌍 TranslationService initialisé")
+        # Quantum Music Cache (POC) - Conditional
+        self.music_cache = None
+        if self.features and self.features.is_enabled(Feature.MUSIC_CACHE):
+            try:
+                with profile_block("music_cache_init"):
+                    from modules.integrations.music.music_cache import MusicCache
+                    self.music_cache = MusicCache(config)
+                LOGGER.info("🎵 QuantumMusicCache initialisé (POC)")
+            except Exception as e:
+                LOGGER.error(f"❌ QuantumMusicCache init failed: {e}")
         
-        # BanWord Manager (auto-ban sur mots interdits)
+        # LLM Handler - Conditional (biggest memory saver if disabled)
+        self.llm_handler = None
+        if self.features and self.features.is_enabled(Feature.LLM):
+            if config and config.get("apis", {}).get("openai_key"):
+                try:
+                    with profile_block("llm_handler_init"):
+                        from modules.integrations.llm_provider.llm_handler import LLMHandler
+                        self.llm_handler = LLMHandler(config)
+                    LOGGER.info("✅ LLMHandler initialisé")
+                except Exception as e:
+                    LOGGER.error(f"❌ LLMHandler init failed: {e}")
+        
+        # Translation Service - Conditional (langdetect = ~57MB!)
+        self.translator = None
+        self.dev_whitelist = set()
+        if self.features and self.features.is_enabled(Feature.TRANSLATOR):
+            try:
+                with profile_block("translator_init"):
+                    from modules.integrations.translator.translator import get_translator, get_dev_whitelist
+                    self.translator = get_translator()
+                    self.dev_whitelist = get_dev_whitelist(db_manager=None)
+                LOGGER.info("🌍 TranslationService initialisé")
+            except Exception as e:
+                LOGGER.error(f"❌ TranslationService init failed: {e}")
+        
+        # BanWord Manager (auto-ban sur mots interdits) - Always enabled
         self.banword_manager = get_banword_manager()
         LOGGER.info("🚫 BanWordManager initialisé")
         
@@ -144,13 +161,26 @@ class MessageHandler:
     
     async def _handle_chat_message(self, msg: ChatMessage) -> None:
         """
-        Traite un message chat entrant
-        Détecte les commandes et publie les réponses
+        Traite un message chat entrant.
+        Pipeline en 3 niveaux :
+        - Niveau 1 : Filtres passifs (logs, analytics) - TOUJOURS exécutés
+        - Niveau 2 : Filtres bloquants (banword, spam, flood) - peuvent STOP
+        - Niveau 3 : Dispatch exclusif (commandes > mentions > reste)
         
         Args:
             msg: Message chat reçu
         """
-        # Ignorer les messages des autres bots
+        text = (msg.text or "").strip()
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 🔇 EARLY EXITS - Cas où on ignore silencieusement
+        # ═══════════════════════════════════════════════════════════════════
+        
+        # Message vide
+        if not text:
+            return
+        
+        # Ignorer les messages des autres bots connus
         KNOWN_BOTS = [
             'nightbot', 'streamelements', 'streamlabs', 'moobot', 'fossabot',
             'wizebot', 'botisimo', 'cloudbot', 'deepbot', 'ankhbot',
@@ -162,49 +192,68 @@ class MessageHandler:
             return
         
         # ═══════════════════════════════════════════════════════════════════
-        # 🚫 BANWORD CHECK - Auto-ban si mot interdit détecté
+        # 🔄 DEDUPLICATION - Éviter double traitement (AVANT tout)
         # ═══════════════════════════════════════════════════════════════════
-        matched_banword = self.banword_manager.check_message(msg.channel, msg.text)
-        if matched_banword:
-            await self._execute_banword_ban(msg, matched_banword)
-            return  # Ne pas traiter le message davantage
-        
-        # Auto-traduction pour devs whitelistés (avant deduplication)
-        if not msg.text.startswith("!"):
-            await self._handle_auto_translation(msg)
-        
-        # Deduplication - Créer ID unique basé sur user + text + timestamp (secondes)
-        # Timestamp en secondes pour éviter duplicates dans la même seconde uniquement
         msg_timestamp = int(time.time())
-        msg_id = f"{msg.user_id}:{msg.text}:{msg_timestamp}"
+        msg_id = f"{msg.user_id}:{text}:{msg_timestamp}"
         
         if msg_id in self._processed_messages:
-            LOGGER.debug(f"⏭️ Message déjà traité, skip: {msg.text[:30]}")
+            LOGGER.debug(f"⏭️ Message déjà traité, skip: {text[:30]}")
             return
         
         # Ajouter au cache (avec limite de taille)
         self._processed_messages.add(msg_id)
         if len(self._processed_messages) > self._cache_max_size:
-            # Vider la moitié du cache (FIFO approximatif)
             self._processed_messages = set(list(self._processed_messages)[50:])
         
-        # Détection des mentions (@bot_name ou bot_name)
-        # Prioritaire sur les commandes pour intercepter "@bot_name !ping"
-        bot_name = self.config.get("bot_login_name", "serda_bot")
-        mention_text = extract_mention_message(msg.text, bot_name)
+        # ═══════════════════════════════════════════════════════════════════
+        # 🚫 NIVEAU 2 : FILTRES BLOQUANTS (banword, spam, flood)
+        # ═══════════════════════════════════════════════════════════════════
         
-        if mention_text:
-            # Mention détectée, router vers LLM
-            await self._handle_mention(msg, mention_text)
-            return  # Ne pas traiter comme commande
-        
-        # Ignorer les messages qui ne commencent pas par !
-        if not msg.text.startswith("!"):
+        # Banword check - s'applique à TOUS les messages (commandes incluses)
+        matched_banword = self.banword_manager.check_message(msg.channel, text)
+        if matched_banword:
+            await self._execute_banword_ban(msg, matched_banword)
+            # TODO: analytics.mark_blocked(msg, "banword")
             return
         
-        # Parser la commande
-        parts = msg.text.split(maxsplit=1)
-        command = parts[0].lower()  # Ex: "!ping"
+        # TODO: Spam detection hook (à implémenter)
+        # if await self._is_spam(msg):
+        #     await self._handle_spam(msg)
+        #     return
+        
+        # TODO: Rate limit check (à injecter)
+        # if self._is_rate_limited(msg.user_id):
+        #     return
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 🎯 NIVEAU 3 : DISPATCH EXCLUSIF (commandes > mentions > passif)
+        # ═══════════════════════════════════════════════════════════════════
+        
+        # 1. COMMANDES - Priorité absolue (fixe le hack !trad & serda_bot)
+        if text.startswith("!"):
+            await self._handle_command(msg, text)
+            return
+        
+        # 2. MENTIONS - Seulement pour messages NON-commandes
+        bot_name = self.config.get("bot_login_name", "serda_bot")
+        from modules.intelligence.core import extract_mention_message
+        mention_text = extract_mention_message(text, bot_name)
+        
+        if mention_text:
+            await self._handle_mention(msg, mention_text)
+            return
+        
+        # 3. FEATURES PASSIVES - Messages normaux sans commande ni mention
+        await self._handle_passive_features(msg, text)
+    
+    async def _handle_command(self, msg: ChatMessage, text: str) -> None:
+        """
+        Route une commande ! vers le handler approprié.
+        Extrait du pipeline principal pour clarté.
+        """
+        parts = text.split(maxsplit=1)
+        command = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
         
         LOGGER.info(f"🤖 Command: {command} from {msg.user_login} in #{msg.channel}")
@@ -557,6 +606,23 @@ class MessageHandler:
     def get_uptime_seconds(self) -> int:
         """Retourne l'uptime en secondes"""
         return int(time.time() - self.start_time)
+    
+    async def _handle_passive_features(self, msg: ChatMessage, text: str) -> None:
+        """
+        Traite les features passives pour les messages normaux.
+        Appelé uniquement pour les messages qui ne sont ni commandes ni mentions.
+        
+        Args:
+            msg: Message chat reçu
+            text: Texte nettoyé du message
+        """
+        # Auto-traduction pour devs whitelistés
+        await self._handle_auto_translation(msg)
+        
+        # TODO: Autres features passives futures
+        # - Auto-persona (réponse contextuelle)
+        # - Détection de questions
+        # - Réactions automatiques
     
     async def _handle_auto_translation(self, msg: ChatMessage) -> None:
         """
