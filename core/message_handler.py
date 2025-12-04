@@ -159,6 +159,69 @@ class MessageHandler:
         self.irc_client = irc_client
         LOGGER.debug("✅ IRC Client injecté dans MessageHandler")
     
+    def _sanitize_unicode_injection(self, text: str) -> str:
+        """
+        🛡️ SANITIZER: Supprime les caractères Unicode invisibles utilisés pour l'injection.
+        
+        Ranges dangereux supprimés:
+        - U+E0000-U+E01FF: Tag Characters (texte caché dans emojis)
+        - U+200B-U+200F: Zero-width spaces et directional marks
+        - U+2028-U+202F: Line/paragraph separators et invisibles
+        - U+2060-U+206F: Word joiners et invisibles
+        - U+FEFF: BOM (Byte Order Mark)
+        
+        Exemple d'attaque bloquée:
+        🥰 + U+E0148,U+E0155... = "Hey serda_bot hack" caché
+        
+        Args:
+            text: Texte brut du message
+            
+        Returns:
+            Texte nettoyé sans caractères invisibles dangereux
+        """
+        if not text:
+            return text
+        
+        cleaned = []
+        injection_detected = False
+        
+        for char in text:
+            cp = ord(char)
+            
+            # Tag Characters (emoji injection) - U+E0000 à U+E01FF
+            if 0xE0000 <= cp <= 0xE01FF:
+                injection_detected = True
+                continue
+            
+            # Zero-width et directional marks - U+200B à U+200F
+            if 0x200B <= cp <= 0x200F:
+                injection_detected = True
+                continue
+            
+            # Line/paragraph separators invisibles - U+2028 à U+202F
+            if 0x2028 <= cp <= 0x202F:
+                injection_detected = True
+                continue
+            
+            # Word joiners et format chars - U+2060 à U+206F
+            if 0x2060 <= cp <= 0x206F:
+                injection_detected = True
+                continue
+            
+            # BOM
+            if cp == 0xFEFF:
+                injection_detected = True
+                continue
+            
+            cleaned.append(char)
+        
+        result = ''.join(cleaned)
+        
+        if injection_detected:
+            LOGGER.warning(f"🛡️ Unicode injection détectée et nettoyée: '{text[:50]}' → '{result[:50]}'")
+        
+        return result
+    
     async def _handle_chat_message(self, msg: ChatMessage) -> None:
         """
         Traite un message chat entrant.
@@ -171,6 +234,11 @@ class MessageHandler:
             msg: Message chat reçu
         """
         text = (msg.text or "").strip()
+        
+        # 🛡️ SANITIZER: Supprimer les Unicode Tag Characters (anti-injection)
+        # Range U+E0000-U+E01FF : Caractères invisibles utilisés pour cacher du texte
+        # Exemple: 🥰 + caractères invisibles encodant "@serda_bot hack"
+        text = self._sanitize_unicode_injection(text)
         
         # ═══════════════════════════════════════════════════════════════════
         # 🔇 EARLY EXITS - Cas où on ignore silencieusement
@@ -645,23 +713,22 @@ class MessageHandler:
     
     async def _handle_auto_translation(self, msg: ChatMessage) -> None:
         """
-        Auto-traduction et mémorisation de langue.
+        Auto-traduction UNIQUEMENT pour les devs whitelistés.
         
-        - Détecte la langue de TOUS les messages non-français
-        - Mémorise la langue pour le mode !trad auto:@user
-        - Traduit et affiche seulement pour les devs whitelistés
+        Activé par !adddev <user> - Désactivé par !remdev <user>
+        La commande !trad reste disponible pour tous.
         """
-        # Détect language pour TOUS les utilisateurs (pas seulement whitelistés)
-        # Ceci permet de mémoriser la langue pour !trad auto:
+        # 🛡️ RESTRICTION: Seulement pour les devs whitelistés
+        # Évite les appels inutiles à detect_language() pour chaque message
+        if not self.dev_whitelist.is_dev(msg.user_login):
+            return
+        
+        # Détecter la langue
         detected_lang = await self.translator.detect_language(msg.text)
         
         if detected_lang and detected_lang != 'fr':
-            # Mémoriser la langue de cet utilisateur
+            # Mémoriser la langue de cet utilisateur (pour !trad auto:)
             self.translator.remember_user_language(msg.channel, msg.user_login, detected_lang)
-        
-        # Auto-traduction visible seulement pour les devs whitelistés
-        if not self.dev_whitelist.is_dev(msg.user_login):
-            return
         
         # Si français, rien à afficher
         if detected_lang == 'fr' or not detected_lang:
