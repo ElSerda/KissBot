@@ -16,6 +16,7 @@ from modules.intelligence.synapses.constants import (
     TWITCH_MAX_CHARS, ASK_PREFIX_LEN, ASK_TARGET_CHARS,
     ASK_PROMPT_RANGE, ASK_MAX_TOKENS_CLOUD, MENTION_MAX_CHARS
 )
+from core.llm_usage_logger import increment_llm_tokens
 
 
 class CloudSynapse:
@@ -354,6 +355,19 @@ class CloudSynapse:
                 response.raise_for_status()
 
                 data = response.json()
+                
+                # 📊 LOG TOKENS USAGE + SAVE TO DB
+                usage = data.get("usage", {})
+                tokens_in = usage.get("prompt_tokens", 0)
+                tokens_out = usage.get("completion_tokens", 0)
+                if tokens_in or tokens_out:
+                    self.logger.info(f"☁️📊 Tokens: {tokens_in} in / {tokens_out} out (total: {tokens_in + tokens_out})")
+                    # Incrémenter en DB
+                    try:
+                        increment_llm_tokens(tokens_in, tokens_out)
+                    except Exception as e:
+                        self.logger.debug(f"Failed to log tokens to DB: {e}")
+                
                 if "choices" in data and data["choices"]:
                     raw_response = data["choices"][0]["message"]["content"]
                     cleaned = raw_response.strip() if raw_response else ""

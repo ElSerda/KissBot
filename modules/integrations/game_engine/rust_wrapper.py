@@ -379,11 +379,21 @@ class GameLookup:
         
         # Description (summary) si disponible - SEULEMENT en mode non-compact
         if not compact and result.summary:
-            # Limiter à 150 caractères pour Twitch
-            summary_short = result.summary[:150].strip()
-            if len(result.summary) > 150:
-                summary_short += "..."
-            output += f" | {summary_short}"
+            # Calculer espace restant (450 - prefix actuel)
+            current_len = len(output)
+            max_summary = 450 - current_len - 3  # -3 pour " | "
+            if max_summary > 50:  # Au moins 50 chars de résumé
+                summary_short = result.summary[:max_summary].strip()
+                if len(result.summary) > max_summary:
+                    last_dot = summary_short.rfind('. ')
+                    last_space = summary_short.rfind(' ')
+                    if last_dot > max_summary * 0.7:
+                        summary_short = summary_short[:last_dot + 1]
+                    elif last_space > max_summary * 0.8:
+                        summary_short = summary_short[:last_space] + "..."
+                    else:
+                        summary_short += "..."
+                output += f" | {summary_short}"
         
         # Version compacte : pas de confidence/sources
         if compact:

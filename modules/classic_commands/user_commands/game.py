@@ -25,7 +25,7 @@ async def handle_gi(handler, msg: ChatMessage, args: str = "") -> None:
     from core.message_types import OutboundMessage
     
     if not handler.game_lookup:
-        response_text = f"@{msg.user_login} ❌ Game lookup not available"
+        response_text = "❌ Game lookup not available"
         await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
             channel_id=msg.channel_id,
@@ -36,7 +36,7 @@ async def handle_gi(handler, msg: ChatMessage, args: str = "") -> None:
     
     game_name = args.strip()
     if not game_name:
-        response_text = f"@{msg.user_login} Usage: !gi <game name>"
+        response_text = "Usage: !gi <game name>"
         await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
             channel_id=msg.channel_id,
@@ -61,13 +61,13 @@ async def handle_gi(handler, msg: ChatMessage, args: str = "") -> None:
         
         if not game:
             elapsed_total_ms = (time.perf_counter() - start_total) * 1000
-            response_text = f"@{msg.user_login} ❌ Game not found: {game_name}"
+            response_text = f"❌ Game not found: {game_name}"
             LOGGER.info(f"❌ Game not found: {game_name} | ⏱️ Total: {elapsed_total_ms:.1f}ms")
         else:
             start_format = time.perf_counter()
             # Utiliser format_result() en mode complet (pas compact)
             game_info = handler.game_lookup.format_result(game, compact=False)
-            response_text = f"@{msg.user_login} {game_info}"
+            response_text = game_info
             
             elapsed_format_us = (time.perf_counter() - start_format) * 1_000_000
             elapsed_total_ms = (time.perf_counter() - start_total) * 1000
@@ -85,7 +85,7 @@ async def handle_gi(handler, msg: ChatMessage, args: str = "") -> None:
         
     except Exception as e:
         LOGGER.error(f"❌ Error searching game: {e}", exc_info=True)
-        response_text = f"@{msg.user_login} ❌ Error searching game"
+        response_text = "❌ Error searching game"
         await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
             channel_id=msg.channel_id,
@@ -106,7 +106,7 @@ async def handle_gs(handler, msg: ChatMessage, args: str = "") -> None:
     from core.message_types import OutboundMessage
     
     if not handler.game_lookup:
-        response_text = f"@{msg.user_login} ❌ Game lookup not available"
+        response_text = "❌ Game lookup not available"
         await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
             channel_id=msg.channel_id,
@@ -117,7 +117,7 @@ async def handle_gs(handler, msg: ChatMessage, args: str = "") -> None:
     
     game_name = args.strip()
     if not game_name:
-        response_text = f"@{msg.user_login} Usage: !gs <game name>"
+        response_text = "Usage: !gs <game name>"
         await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
             channel_id=msg.channel_id,
@@ -135,25 +135,35 @@ async def handle_gs(handler, msg: ChatMessage, args: str = "") -> None:
         elapsed_lookup_ms = (time.perf_counter() - start_total) * 1000
         
         if not game:
-            response_text = f"@{msg.user_login} ❌ Game not found: {game_name}"
+            response_text = f"❌ Game not found: {game_name}"
             LOGGER.info(f"❌ Game not found: {game_name} | ⏱️ {elapsed_lookup_ms:.1f}ms")
         else:
-            # Format minimaliste : Nom (année): Description
+            # Format minimaliste : Nom (année): Description (450 chars max)
             output = f"🎮 {game.name}"
             
             if game.year != "?":
                 output += f" ({game.year})"
             
             if game.summary:
-                # Limiter à 200 caractères pour Twitch
-                summary_short = game.summary[:200].strip()
-                if len(game.summary) > 200:
-                    summary_short += "..."
+                # Calculer espace restant (450 - prefix)
+                prefix_len = len(output) + 2  # +2 pour ": "
+                max_summary = 450 - prefix_len
+                summary_short = game.summary[:max_summary].strip()
+                if len(game.summary) > max_summary:
+                    # Couper proprement
+                    last_dot = summary_short.rfind('. ')
+                    last_space = summary_short.rfind(' ')
+                    if last_dot > max_summary * 0.7:
+                        summary_short = summary_short[:last_dot + 1]
+                    elif last_space > max_summary * 0.8:
+                        summary_short = summary_short[:last_space] + "..."
+                    else:
+                        summary_short += "..."
                 output += f": {summary_short}"
             else:
                 output += " (Aucune description disponible)"
             
-            response_text = f"@{msg.user_login} {output}"
+            response_text = output
             LOGGER.info(f"✅ Game summary sent: {game.name} | ⏱️ {elapsed_lookup_ms:.1f}ms")
         
         await handler.bus.publish("chat.outbound", OutboundMessage(
@@ -165,7 +175,7 @@ async def handle_gs(handler, msg: ChatMessage, args: str = "") -> None:
         
     except Exception as e:
         LOGGER.error(f"❌ Error searching game summary: {e}", exc_info=True)
-        response_text = f"@{msg.user_login} ❌ Error searching game"
+        response_text = "❌ Error searching game"
         await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
             channel_id=msg.channel_id,
@@ -190,7 +200,7 @@ async def handle_gc(handler, msg: ChatMessage, args: str = "") -> None:
     from core.message_types import OutboundMessage
     
     if not handler.helix:
-        response_text = f"@{msg.user_login} ❌ Helix client not available"
+        response_text = "❌ Helix client not available"
         await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
             channel_id=msg.channel_id,
@@ -222,9 +232,9 @@ async def handle_gc(handler, msg: ChatMessage, args: str = "") -> None:
                 
                 # Ajouter la description si disponible
                 if game.summary:
-                    # Calculer l'espace disponible (limite Twitch ~500 chars)
-                    prefix = f"@{msg.user_login} {msg.channel} joue actuellement à {game_info} | "
-                    max_summary_len = 450 - len(prefix)  # Marge de sécurité
+                    # Calculer l'espace disponible (limite 450 chars)
+                    prefix = f"{msg.channel} joue à {game_info} | "
+                    max_summary_len = 450 - len(prefix)
                     
                     # Tronquer intelligemment (phrase complète si possible)
                     summary = game.summary[:max_summary_len]
@@ -242,21 +252,13 @@ async def handle_gc(handler, msg: ChatMessage, args: str = "") -> None:
                     response_text = f"{prefix}{summary}"
                 else:
                     # Pas de description, format compact suffit
-                    response_text = (
-                        f"@{msg.user_login} {msg.channel} joue actuellement à "
-                        f"{game_info}"
-                    )
+                    response_text = f"{msg.channel} joue à {game_info}"
             else:
                 # Pas de GameLookup ou recherche échouée → fallback simple
-                response_text = (
-                    f"@{msg.user_login} {msg.channel} joue actuellement à "
-                    f"**{game_name}** ({viewer_count} viewers)"
-                )
+                response_text = f"{msg.channel} joue à **{game_name}**"
         else:
             # Stream OFFLINE → Message auto
-            response_text = (
-                f"@{msg.user_login} 💤 {msg.channel} est offline actuellement"
-            )
+            response_text = f"💤 {msg.channel} est offline"
         
         await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
@@ -268,7 +270,7 @@ async def handle_gc(handler, msg: ChatMessage, args: str = "") -> None:
         
     except Exception as e:
         LOGGER.error(f"❌ Error getting current game: {e}", exc_info=True)
-        response_text = f"@{msg.user_login} ❌ Error getting current game"
+        response_text = "❌ Error getting current game"
         await handler.bus.publish("chat.outbound", OutboundMessage(
             channel=msg.channel,
             channel_id=msg.channel_id,

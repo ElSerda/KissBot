@@ -130,6 +130,23 @@ class LLMUsageDB:
             )
         """)
         
+        # Table pour les totaux cumulatifs (simple compteur)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS llm_totals (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                tokens_in_total INTEGER NOT NULL DEFAULT 0,
+                tokens_out_total INTEGER NOT NULL DEFAULT 0,
+                calls_total INTEGER NOT NULL DEFAULT 0,
+                last_updated TEXT
+            )
+        """)
+        
+        # Initialiser le compteur si vide
+        self.conn.execute("""
+            INSERT OR IGNORE INTO llm_totals (id, tokens_in_total, tokens_out_total, calls_total)
+            VALUES (1, 0, 0, 0)
+        """)
+        
         # Index pour les queries
         self.conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_llm_usage_channel_ts 
@@ -144,21 +161,63 @@ class LLMUsageDB:
         LOGGER.debug(f"LLM Usage DB initialized: {self.db_path}")
     
     def log(self, call: LLMCall):
-        """Insère un log d'appel LLM"""
+        """Insère un log d'appel LLM et incrémente les totaux"""
         ts = call.timestamp.isoformat() if call.timestamp else datetime.now(timezone.utc).isoformat()
         cost = call.estimate_cost()
         
+        # Log détaillé
         self.conn.execute("""
             INSERT INTO llm_usage (ts, channel, model, feature, tokens_in, tokens_out, latency_ms, cost_usd)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (ts, call.channel, call.model, call.feature, 
               call.tokens_in, call.tokens_out, call.latency_ms, cost))
+        
+        # Incrémenter les totaux
+        self.conn.execute("""
+            UPDATE llm_totals SET 
+                tokens_in_total = tokens_in_total + ?,
+                tokens_out_total = tokens_out_total + ?,
+                calls_total = calls_total + 1,
+                last_updated = ?
+            WHERE id = 1
+        """, (call.tokens_in, call.tokens_out, ts))
+        
         self.conn.commit()
         
         LOGGER.debug(
             f"📊 LLM: {call.channel} | {call.model} | {call.feature} | "
             f"{call.tokens_in}→{call.tokens_out} tokens | ${cost:.6f}"
         )
+    
+    def increment_tokens(self, tokens_in: int, tokens_out: int):
+        """Incrémente simplement les compteurs de tokens"""
+        ts = datetime.now(timezone.utc).isoformat()
+        self.conn.execute("""
+            UPDATE llm_totals SET 
+                tokens_in_total = tokens_in_total + ?,
+                tokens_out_total = tokens_out_total + ?,
+                calls_total = calls_total + 1,
+                last_updated = ?
+            WHERE id = 1
+        """, (tokens_in, tokens_out, ts))
+        self.conn.commit()
+    
+    def get_totals(self) -> Dict[str, int]:
+        """Récupère les totaux cumulatifs"""
+        cursor = self.conn.execute("""
+            SELECT tokens_in_total, tokens_out_total, calls_total, last_updated
+            FROM llm_totals WHERE id = 1
+        """)
+        row = cursor.fetchone()
+        if row:
+            return {
+                "tokens_in": row[0],
+                "tokens_out": row[1],
+                "tokens_total": row[0] + row[1],
+                "calls": row[2],
+                "last_updated": row[3]
+            }
+        return {"tokens_in": 0, "tokens_out": 0, "tokens_total": 0, "calls": 0}
     
     def get_channel_stats(self, channel: str, days: int = 30) -> Dict[str, Any]:
         """Récupère les stats d'un channel"""
@@ -281,6 +340,38 @@ def get_channel_llm_stats(channel: str, days: int = 30,
     except Exception as e:
         LOGGER.error(f"Failed to get LLM stats: {e}")
         return {}
+
+
+def increment_llm_tokens(tokens_in: int, tokens_out: int, 
+                         db_path: str = DEFAULT_DB_PATH) -> None:
+    """
+    Incrémente simplement les compteurs de tokens (sans détails).
+    
+    Args:
+        tokens_in: Tokens prompt
+        tokens_out: Tokens completion
+        db_path: Chemin de la base de données
+    """
+    try:
+        db = LLMUsageDB(db_path)
+        db.increment_tokens(tokens_in, tokens_out)
+    except Exception as e:
+        LOGGER.error(f"Failed to increment tokens: {e}")
+
+
+def get_llm_totals(db_path: str = DEFAULT_DB_PATH) -> Dict[str, int]:
+    """
+    Récupère les totaux cumulatifs de tokens.
+    
+    Returns:
+        Dict avec tokens_in, tokens_out, tokens_total, calls
+    """
+    try:
+        db = LLMUsageDB(db_path)
+        return db.get_totals()
+    except Exception as e:
+        LOGGER.error(f"Failed to get LLM totals: {e}")
+        return {"tokens_in": 0, "tokens_out": 0, "tokens_total": 0, "calls": 0}
 
 
 class LLMCallTracker:
