@@ -207,52 +207,47 @@ async def handle_gc(handler, msg: ChatMessage, args: str = "") -> None:
         if stream_info and stream_info.get("game_name"):
             # Stream LIVE → Enrichir avec GameLookup
             game_name = stream_info["game_name"]
-            game_id = stream_info.get("game_id")  # IGDB ID exact
+            game_id = stream_info.get("game_id")  # Twitch category ID
             viewer_count = stream_info.get("viewer_count", 0)
             
-            # Enrichissement du jeu via IGDB ID (source de vérité)
-            if handler.game_lookup and game_id:
-                LOGGER.info(f"🎮 Enriching game from IGDB ID: {game_id} ({game_name})")
-                game = await handler.game_lookup.enrich_game_from_igdb_id(game_id)
+            # Enrichissement du jeu via recherche par nom (fuzzy match)
+            game = None
+            if handler.game_lookup:
+                LOGGER.info(f"🎮 Enriching game by name: {game_name}")
+                game = await handler.game_lookup.search_game(game_name)
                 
-                if game:
-                    # Format COMPACT (sans confidence/sources pour gagner de l'espace)
-                    game_info = handler.game_lookup.format_result(game, compact=True)
+            if game:
+                # Format COMPACT (sans confidence/sources pour gagner de l'espace)
+                game_info = handler.game_lookup.format_result(game, compact=True)
+                
+                # Ajouter la description si disponible
+                if game.summary:
+                    # Calculer l'espace disponible (limite Twitch ~500 chars)
+                    prefix = f"@{msg.user_login} {msg.channel} joue actuellement à {game_info} | "
+                    max_summary_len = 450 - len(prefix)  # Marge de sécurité
                     
-                    # Ajouter la description si disponible
-                    if game.summary:
-                        # Calculer l'espace disponible (limite Twitch ~500 chars)
-                        prefix = f"@{msg.user_login} {msg.channel} joue actuellement à {game_info} | "
-                        max_summary_len = 450 - len(prefix)  # Marge de sécurité
-                        
-                        # Tronquer intelligemment (phrase complète si possible)
-                        summary = game.summary[:max_summary_len]
-                        if len(game.summary) > max_summary_len:
-                            # Chercher dernier point ou espace pour couper proprement
-                            last_dot = summary.rfind('. ')
-                            last_space = summary.rfind(' ')
-                            if last_dot > max_summary_len * 0.7:  # Si point à 70%+, couper là
-                                summary = summary[:last_dot + 1]
-                            elif last_space > max_summary_len * 0.8:  # Sinon dernier espace
-                                summary = summary[:last_space] + "..."
-                            else:
-                                summary += "..."
-                        
-                        response_text = f"{prefix}{summary}"
-                    else:
-                        # Fallback sur viewers si pas de description
-                        response_text = (
-                            f"@{msg.user_login} {msg.channel} joue actuellement à "
-                            f"{game_info} ({viewer_count} viewers)"
-                        )
+                    # Tronquer intelligemment (phrase complète si possible)
+                    summary = game.summary[:max_summary_len]
+                    if len(game.summary) > max_summary_len:
+                        # Chercher dernier point ou espace pour couper proprement
+                        last_dot = summary.rfind('. ')
+                        last_space = summary.rfind(' ')
+                        if last_dot > max_summary_len * 0.7:  # Si point à 70%+, couper là
+                            summary = summary[:last_dot + 1]
+                        elif last_space > max_summary_len * 0.8:  # Sinon dernier espace
+                            summary = summary[:last_space] + "..."
+                        else:
+                            summary += "..."
+                    
+                    response_text = f"{prefix}{summary}"
                 else:
-                    # Fallback si enrichissement échoue
+                    # Pas de description, format compact suffit
                     response_text = (
                         f"@{msg.user_login} {msg.channel} joue actuellement à "
-                        f"**{game_name}** ({viewer_count} viewers)"
+                        f"{game_info}"
                     )
             else:
-                # Pas de GameLookup configuré
+                # Pas de GameLookup ou recherche échouée → fallback simple
                 response_text = (
                     f"@{msg.user_login} {msg.channel} joue actuellement à "
                     f"**{game_name}** ({viewer_count} viewers)"

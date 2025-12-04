@@ -1353,11 +1353,8 @@ class GameLookup:
         if compact:
             return output
         
-        # Version complète : ajouter confidence + sources
-        icon = (
-            "🔥" if result.confidence == "HIGH" else "✅" if result.confidence == "MEDIUM" else "⚠️"
-        )
-        return f"{output} - {icon} {result.confidence} ({result.source_count} sources)"
+        # Version complète : juste le résumé, pas de confidence/sources en prod
+        return output
 
     async def close(self):
         """Cleanup resources."""

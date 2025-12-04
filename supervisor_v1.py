@@ -291,10 +291,15 @@ class SimpleSupervisor:
         # Load config
         self.config = self._load_config()
         
-        # Initialize EventSub Hub if enabled
+        # Initialize EventSub Hub if enabled AND not already running
         if self.enable_hub:
-            LOGGER.info("🌐 EventSub Hub: ENABLED")
-            self.hub = HubProcess(config_path, db_path, hub_socket)
+            # Check if hub socket already exists (external hub running)
+            if Path(hub_socket).exists():
+                LOGGER.info("🌐 EventSub Hub: EXTERNAL (socket already exists, not starting internal hub)")
+                self.hub = None  # Don't manage hub, use external one
+            else:
+                LOGGER.info("🌐 EventSub Hub: ENABLED (starting internal hub)")
+                self.hub = HubProcess(config_path, db_path, hub_socket)
         else:
             LOGGER.info("🌐 EventSub Hub: DISABLED (bots use direct mode)")
         

@@ -407,8 +407,27 @@ class MessageHandler:
             LOGGER.debug("🔇 Mention ignorée (LLM non disponible)")
             return  # Silent ignore
         
-        # Rate limiting: 15s cooldown par utilisateur
+        # 🔴 ANTI-DOUBLON: Dedupe basé sur user + contenu (fenêtre 10s)
+        mention_key = f"mention:{msg.user_id}:{msg.channel}:{mention_text[:100]}"
         current_time = time.time()
+        
+        if not hasattr(self, '_mention_dedupe'):
+            self._mention_dedupe = {}
+        
+        last_mention = self._mention_dedupe.get(mention_key, 0)
+        if current_time - last_mention < 10.0:  # 10s window anti-doublon
+            LOGGER.warning(f"🔴 DOUBLON MENTION BLOQUÉ: {msg.user_login} (delta={current_time - last_mention:.2f}s)")
+            return
+        
+        self._mention_dedupe[mention_key] = current_time
+        
+        # Cleanup vieux entries (garder 200 max)
+        if len(self._mention_dedupe) > 200:
+            sorted_keys = sorted(self._mention_dedupe.items(), key=lambda x: x[1])
+            for k, _ in sorted_keys[:100]:
+                del self._mention_dedupe[k]
+        
+        # Rate limiting additionnel: 15s cooldown par utilisateur (tous messages confondus)
         last_time = self._mention_last_time.get(msg.user_id, 0)
         
         if current_time - last_time < self._mention_cooldown:

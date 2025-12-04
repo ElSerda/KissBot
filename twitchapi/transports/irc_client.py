@@ -315,6 +315,9 @@ class IRCClient:
         if msg.user.name.lower() == self.bot_login:
             return
         
+        # 🔍 DEBUG: Log TOUS les messages reçus
+        LOGGER.info(f"📥 IRC RAW | {msg.user.name} dans #{msg.room.name}: {repr(msg.text[:100])}")
+        
         # 🔍 DEBUG: Log des badges pour validation A+B
         badges_str = ""
         if msg.user.mod:
