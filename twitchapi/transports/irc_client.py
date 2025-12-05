@@ -111,6 +111,17 @@ class IRCClient:
             self.chat._handle_user_state = _patched_handle_user_state
             LOGGER.info("✅ Monkey-patch USERSTATE installé pour détection VIP")
             
+            # Monkey-patch pour logger les PING/PONG Twitch (debug keepalive)
+            original_handle_ping = self.chat._handle_ping
+            
+            async def _patched_handle_ping(parsed: dict):
+                # Log le PING de Twitch (envoyé toutes les ~5 min)
+                LOGGER.info(f"🏓 PING reçu de Twitch → PONG envoyé")
+                await original_handle_ping(parsed)
+            
+            self.chat._handle_ping = _patched_handle_ping
+            LOGGER.info("✅ Monkey-patch PING installé pour monitoring keepalive")
+            
             # Register event handlers
             self.chat.register_event(ChatEvent.READY, self._on_ready)
             self.chat.register_event(ChatEvent.MESSAGE, self._on_message)
