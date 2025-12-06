@@ -111,10 +111,14 @@ backups/
 
 # 🔐 Patterns sensibles supplémentaires
 *.token
+*.token.*
+*tokens*.backup*
 *.key
 *.secret
 *.pem
 *.cert
+test_*.py
+verify_*.py
 
 
 # 🔐 Configuration avec vraies clés
