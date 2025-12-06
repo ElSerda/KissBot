@@ -226,7 +226,18 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, twitc
         import yaml
         from pathlib import Path
         
-        config_path = Path(__file__).parent.parent.parent / "config" / "config.yaml"
+        # Trouver le répertoire racine du projet (où se trouve config/)
+        current_file = Path(__file__).resolve()
+        project_root = current_file
+        while project_root.parent != project_root:  # Remonter jusqu'à trouver config/
+            if (project_root / "config" / "config.yaml").exists():
+                break
+            project_root = project_root.parent
+        
+        config_path = project_root / "config" / "config.yaml"
+        if not config_path.exists():
+            raise FileNotFoundError(f"config.yaml not found at {config_path}")
+        
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
         
