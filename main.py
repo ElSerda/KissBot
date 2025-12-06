@@ -637,6 +637,9 @@ async def main():
     # Inject Helix into MessageHandler (for !gc command)
     message_handler.set_helix(helix)
     
+    # Inject Twitch API Client into MessageHandler (for !kbupdate /announcements)
+    message_handler.set_twitch(twitch_bot)
+    
     # ═══════════════════════════════════════════════════════════════════════
     # 📡 Préparer broadcaster_ids (requis pour EventSub Chat et Stream Monitoring)
     # ═══════════════════════════════════════════════════════════════════════

@@ -159,6 +159,14 @@ class MessageHandler:
         self.irc_client = irc_client
         LOGGER.debug("✅ IRC Client injecté dans MessageHandler")
     
+    def set_twitch(self, twitch_client) -> None:
+        """
+        Injecte le Twitch API Client après initialisation
+        (pour appels API comme /announcements via !kbupdate)
+        """
+        self.twitch = twitch_client
+        LOGGER.debug("✅ Twitch API Client injecté dans MessageHandler")
+    
     def _sanitize_unicode_injection(self, text: str) -> str:
         """
         🛡️ SANITIZER: Supprime les caractères Unicode invisibles utilisés pour l'injection.
