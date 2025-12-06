@@ -65,7 +65,8 @@ class BotProcess:
                 "main.py",
                 "--channel", self.channel,
                 "--config", self.config_path,
-                "--eventsub", self.eventsub_mode  # Add EventSub mode
+                "--eventsub", self.eventsub_mode,  # Add EventSub mode
+                "--chat-transport", "eventsub"  # Use EventSub Chat (Twitch-recommended)
             ]
             
             # Add --use-db if enabled
