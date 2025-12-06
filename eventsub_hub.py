@@ -132,6 +132,7 @@ class EventSubHub:
         config: HubConfig,
         db: DatabaseManager,
         twitch: Twitch,
+        default_broadcaster_id: Optional[str] = None,
     ):
         self.config = config
         self.db = db
@@ -149,6 +150,10 @@ class EventSubHub:
         self._running = False
         self._reconcile_task: Optional[asyncio.Task] = None
         self._health_task: Optional[asyncio.Task] = None
+        self._ws_monitor_task: Optional[asyncio.Task] = None  # NEW: Monitor for 4003/reconnect
+        
+        # Track created subscriptions for re-creation after reconnect
+        self._created_subscriptions: List[Dict] = []  # [{channel_id, topic, version}, ...]
         
         # Metrics
         self._total_events_routed = 0
@@ -157,6 +162,8 @@ class EventSubHub:
         
         # Channel mapping (channel_id -> channel_login) for routing
         self._channel_mapping: Dict[str, str] = {}  # "44456636" -> "el_serda"
+        # Optional: broadcaster id to use for creating a first subscription
+        self._default_broadcaster_id: Optional[str] = default_broadcaster_id
         
         LOGGER.info("🌐 EventSub Hub initialized")
     
@@ -220,6 +227,14 @@ class EventSubHub:
             except asyncio.CancelledError:
                 pass
         
+        # Cancel WebSocket monitor task
+        if self._ws_monitor_task:
+            self._ws_monitor_task.cancel()
+            try:
+                await self._ws_monitor_task
+            except asyncio.CancelledError:
+                pass
+        
         # Stop WebSocket
         if self.eventsub:
             try:
@@ -244,18 +259,26 @@ class EventSubHub:
     # WebSocket Management
     # ========================================================================
     
-    async def _connect_websocket(self, attempt: int = 1):
+    async def _connect_websocket(self, attempt: int = 1, skip_monitor: bool = False):
         """
         Connect to Twitch EventSub WebSocket.
         
         Args:
             attempt: Reconnection attempt number
+            skip_monitor: Skip starting monitor task (used when called from monitor itself)
         """
         try:
             LOGGER.info(f"🔌 Connecting to EventSub WebSocket (attempt {attempt})...")
             
             # Create EventSub WebSocket
             self.eventsub = EventSubWebsocket(self.twitch)
+            
+            # Register reconnect/disconnect callbacks for monitoring
+            # pyTwitchAPI may use on_reconnect or similar
+            if hasattr(self.eventsub, 'on_reconnect'):
+                self.eventsub.on_reconnect = self._on_ws_reconnect
+            if hasattr(self.eventsub, 'on_disconnect'):
+                self.eventsub.on_disconnect = self._on_ws_disconnect
             
             # Register event handlers
             # Note: We'll subscribe to events dynamically, not here
@@ -285,7 +308,6 @@ class EventSubHub:
             self._update_hub_state("ws_reconnect_count", str(reconnect_count + 1))
             
             LOGGER.info(f"✅ EventSub WebSocket connected (session: {self._ws_session_id})")
-
             
             # Log to audit
             self._audit_log("eventsub_ws_connect", {
@@ -295,6 +317,17 @@ class EventSubHub:
             
             # CRITICAL: Create first subscription within 10s to avoid 4003
             await self._create_first_subscription()
+            
+            # Start WebSocket monitor task (detects issues and forces clean reconnect)
+            # Skip if called from monitor itself to avoid recursion
+            if not skip_monitor:
+                if self._ws_monitor_task and not self._ws_monitor_task.done():
+                    self._ws_monitor_task.cancel()
+                    try:
+                        await self._ws_monitor_task
+                    except asyncio.CancelledError:
+                        pass
+                self._ws_monitor_task = asyncio.create_task(self._ws_monitor_loop())
         
         except Exception as e:
             LOGGER.error(f"❌ Failed to connect WebSocket: {e}")
@@ -313,10 +346,153 @@ class EventSubHub:
                 backoff = min(self.config.ws_backoff_base ** attempt, self.config.ws_backoff_max)
                 LOGGER.info(f"🔄 Retrying in {backoff}s... (attempt {attempt + 1}/10)")
                 await asyncio.sleep(backoff)
-                await self._connect_websocket(attempt + 1)
+                await self._connect_websocket(attempt + 1, skip_monitor=skip_monitor)
             else:
                 LOGGER.error("❌ Max reconnect attempts (10) reached, giving up")
                 raise
+    
+    # Alias for internal use
+    _connect_websocket_internal = _connect_websocket
+    
+    def _on_ws_reconnect(self):
+        """Callback when EventSub WebSocket reconnects automatically."""
+        LOGGER.info("🔄 EventSub WebSocket reconnected (pyTwitchAPI auto-reconnect)")
+        self._ws_connected = True
+        self._ws_reconnect_count += 1
+        self._update_hub_state("ws_state", "connected")
+        self._update_hub_state("ws_reconnect_count", str(self._ws_reconnect_count))
+        self._audit_log("eventsub_ws_auto_reconnect", {}, severity="info")
+    
+    def _on_ws_disconnect(self):
+        """Callback when EventSub WebSocket disconnects."""
+        LOGGER.warning("⚠️  EventSub WebSocket disconnected (pyTwitchAPI callback)")
+        self._ws_connected = False
+        self._update_hub_state("ws_state", "disconnected")
+        self._audit_log("eventsub_ws_disconnect", {}, severity="warning")
+    
+    async def _ws_monitor_loop(self):
+        """
+        Monitor pyTwitchAPI WebSocket connection and handle disconnections.
+        
+        pyTwitchAPI's internal auto-reconnect can fail silently, leaving us
+        with a dead connection. This monitor detects that and forces a clean
+        reconnect with fresh EventSubWebsocket object.
+        
+        We check for:
+        - Connection being None or closed
+        - Session being invalid (after pyTwitchAPI internal reconnect fails)
+        """
+        LOGGER.info("🔍 WebSocket monitor loop started")
+        
+        # Wait for initial connection to stabilize
+        await asyncio.sleep(15)
+        
+        # Track stable session after initial connection
+        stable_session_id = self._ws_session_id
+        consecutive_failures = 0
+        
+        while self._running:
+            try:
+                await asyncio.sleep(10)  # Check every 10 seconds
+                
+                if not self._running:
+                    break
+                
+                # Check if eventsub object is gone or connection is dead
+                if not self.eventsub:
+                    LOGGER.warning("⚠️  Monitor: eventsub is None, waiting for reconnect...")
+                    consecutive_failures += 1
+                    if consecutive_failures >= 3:
+                        LOGGER.error("❌ Monitor: 3 consecutive failures, triggering reconnect")
+                        await self._force_reconnect_with_subscriptions()
+                        consecutive_failures = 0
+                        stable_session_id = self._ws_session_id
+                    continue
+                
+                # Check internal connection state
+                connection = getattr(self.eventsub, '_connection', None)
+                if connection and hasattr(connection, 'closed') and connection.closed:
+                    LOGGER.warning("⚠️  Monitor: WebSocket connection is closed")
+                    consecutive_failures += 1
+                    if consecutive_failures >= 2:
+                        LOGGER.error("❌ Monitor: Connection closed, triggering reconnect")
+                        await self._force_reconnect_with_subscriptions()
+                        consecutive_failures = 0
+                        stable_session_id = self._ws_session_id
+                    continue
+                
+                # Check if pyTwitchAPI is stuck in reconnecting state
+                is_reconnecting = getattr(self.eventsub, '_is_reconnecting', False)
+                if is_reconnecting:
+                    LOGGER.warning("⚠️  Monitor: pyTwitchAPI is in reconnecting state")
+                    consecutive_failures += 1
+                    if consecutive_failures >= 6:  # ~60 seconds of reconnecting
+                        LOGGER.error("❌ Monitor: pyTwitchAPI stuck reconnecting, taking over")
+                        await self._force_reconnect_with_subscriptions()
+                        consecutive_failures = 0
+                        stable_session_id = self._ws_session_id
+                    continue
+                
+                # All good, reset failure counter
+                if consecutive_failures > 0:
+                    LOGGER.info("✅ Monitor: Connection recovered")
+                consecutive_failures = 0
+                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                LOGGER.error(f"❌ WebSocket monitor error: {e}")
+                await asyncio.sleep(10)
+        
+        LOGGER.info("🛑 WebSocket monitor loop stopped")
+    
+    async def _force_reconnect_with_subscriptions(self):
+        """Force a complete reconnect and recreate all subscriptions."""
+        LOGGER.info("🔄 Force reconnecting with subscription recreation...")
+        
+        # Save subscriptions to recreate (deduplicate by channel_id+topic)
+        seen = set()
+        subs_to_recreate = []
+        for sub in self._created_subscriptions:
+            key = (sub['channel_id'], sub['topic'])
+            if key not in seen:
+                seen.add(key)
+                subs_to_recreate.append(sub)
+        
+        # Clear tracked subscriptions (will be re-added on creation)
+        self._created_subscriptions.clear()
+        
+        # Stop old EventSub cleanly
+        if self.eventsub:
+            try:
+                await self.eventsub.stop()
+            except Exception as e:
+                LOGGER.warning(f"⚠️  Error stopping old EventSub: {e}")
+        
+        self.eventsub = None
+        self._ws_connected = False
+        
+        # Small delay before reconnect
+        await asyncio.sleep(2)
+        
+        # Reconnect with fresh EventSubWebsocket (skip monitor creation - we're already in it)
+        await self._connect_websocket_internal(attempt=1, skip_monitor=True)
+        
+        # Recreate all subscriptions
+        if subs_to_recreate:
+            LOGGER.info(f"🔄 Recreating {len(subs_to_recreate)} subscriptions...")
+            for sub in subs_to_recreate:
+                try:
+                    await self._create_subscription(
+                        channel_id=sub['channel_id'],
+                        topic=sub['topic'],
+                        version=sub.get('version', '1')
+                    )
+                    await asyncio.sleep(0.5)  # Rate limit
+                except Exception as e:
+                    LOGGER.error(f"❌ Failed to recreate subscription {sub}: {e}")
+        
+        LOGGER.info("✅ Force reconnect complete")
     
     async def _create_first_subscription(self):
         """
@@ -343,9 +519,28 @@ class EventSubHub:
                 version=first_sub['version']
             )
         else:
-            LOGGER.warning("⚠️  No desired subscriptions yet, waiting for bot hello...")
-            # Note: If first bot doesn't connect within 10s, we'll get 4003
-            # But that's OK, we'll reconnect and try again
+            LOGGER.warning("⚠️  No desired subscriptions yet, attempting fallback first-subscription on hub broadcaster...")
+
+            # Try to create a safe fallback subscription on the hub's broadcaster
+            # This satisfies Twitch requirement to create *a* subscription within 10s
+            if self._default_broadcaster_id:
+                try:
+                    LOGGER.info(f"🔁 Creating fallback subscription: {self._default_broadcaster_id} / stream.online")
+                    success = await self._create_subscription(
+                        channel_id=self._default_broadcaster_id,
+                        topic="stream.online",
+                        version="1",
+                    )
+                    if success:
+                        LOGGER.info("✅ Fallback first-subscription created successfully")
+                        return
+                    else:
+                        LOGGER.warning("⚠️ Fallback subscription creation returned False")
+                except Exception as e:
+                    LOGGER.warning(f"⚠️ Fallback subscription failed: {e}")
+
+            # If we reach here, there's nothing we can do until a bot connects
+            LOGGER.warning("⚠️  No desired subscriptions and no fallback possible, waiting for bot hello...")
     
     # ========================================================================
     # IPC Message Handling (Bot → Hub)
@@ -767,6 +962,13 @@ class EventSubHub:
             
             LOGGER.info(f"✅ Subscription created: {sub_id}")
             
+            # Track subscription for re-creation on reconnect
+            self._created_subscriptions.append({
+                "channel_id": channel_id,
+                "topic": topic,
+                "sub_id": sub_id
+            })
+            
             # Log to audit
             self._audit_log("eventsub_create", {
                 "channel_id": channel_id,
@@ -886,19 +1088,51 @@ class EventSubHub:
         """Monitor WebSocket health and reconnect if needed."""
         LOGGER.info("🏥 Health check loop started")
         
+        _consecutive_failures = 0
+        
         while self._running:
             try:
                 await asyncio.sleep(self.config.health_timeout)
                 
-                # Check WebSocket health
+                # Multi-layer health check
+                ws_healthy = True
+                
+                # Check 1: Internal state
                 if not self._ws_connected or not self.eventsub:
-                    LOGGER.warning("⚠️  WebSocket health check failed")
+                    LOGGER.warning("⚠️  Health check: internal state indicates disconnected")
+                    ws_healthy = False
+                
+                # Check 2: pyTwitchAPI EventSub status (if available)
+                if ws_healthy and self.eventsub:
+                    # Check if EventSub has active connection
+                    # pyTwitchAPI uses _running or similar attribute
+                    eventsub_running = getattr(self.eventsub, '_running', None)
+                    if eventsub_running is not None and not eventsub_running:
+                        LOGGER.warning("⚠️  Health check: EventSub._running is False")
+                        ws_healthy = False
+                
+                if ws_healthy:
+                    _consecutive_failures = 0
+                    LOGGER.info(f"💓 Hub health check OK - WS connected, {len(self._channel_mapping)} channels mapped")
+                else:
+                    _consecutive_failures += 1
+                    LOGGER.warning(f"⚠️  WebSocket health check failed (failures: {_consecutive_failures})")
                     
-                    # Attempt reconnect
-                    self._ws_reconnect_count += 1
-                    self._update_hub_state("ws_reconnect_count", str(self._ws_reconnect_count))
-                    
-                    await self._connect_websocket(attempt=1)
+                    # Attempt reconnect after 2 consecutive failures
+                    if _consecutive_failures >= 2:
+                        LOGGER.warning("🔄 Forcing WebSocket reconnect...")
+                        self._ws_reconnect_count += 1
+                        self._update_hub_state("ws_reconnect_count", str(self._ws_reconnect_count))
+                        
+                        # Stop existing eventsub if any
+                        if self.eventsub:
+                            try:
+                                await self.eventsub.stop()
+                            except Exception:
+                                pass
+                        
+                        await self._connect_websocket(attempt=1)
+                        _consecutive_failures = 0
             
             except asyncio.CancelledError:
                 break
@@ -932,6 +1166,12 @@ async def main():
         default="/tmp/kissbot_hub.sock",
         help="Unix socket path for IPC"
     )
+    parser.add_argument(
+        "--broadcaster",
+        type=str,
+        default=None,
+        help="Broadcaster login to use for EventSub (default: first in config)"
+    )
     
     args = parser.parse_args()
     
@@ -950,11 +1190,20 @@ async def main():
     db = DatabaseManager(db_path=args.db, key_file=".kissbot.key")
     
     # IMPORTANT: EventSub WebSocket needs a USER token, not app token
-    # We'll use the first broadcaster token found in DB
-    # In production, you'd configure which user to use
+    # Use --broadcaster arg, or first channel from config
     
-    # Get first broadcaster from DB (for now, use el_serda as example)
-    broadcaster_login = "el_serda"  # TODO: Make this configurable
+    # Determine broadcaster login
+    if args.broadcaster:
+        broadcaster_login = args.broadcaster
+    else:
+        # Get first channel from config
+        channels = config_data.get('channels', [])
+        if channels:
+            broadcaster_login = channels[0] if isinstance(channels[0], str) else channels[0].get('name', 'el_serda')
+        else:
+            broadcaster_login = 'el_serda'
+    
+    LOGGER.info(f"🎯 Using broadcaster: {broadcaster_login}")
     
     try:
         # Load and decrypt broadcaster token
@@ -988,6 +1237,37 @@ async def main():
         app_secret=config_data['twitch']['client_secret']
     )
     
+    # =========================================================================
+    # CRITICAL: Token refresh callback - save refreshed tokens to DB
+    # =========================================================================
+    def save_refreshed_token(new_access_token: str, new_refresh_token: str):
+        """Callback invoked by pyTwitchAPI when token is auto-refreshed."""
+        try:
+            LOGGER.info(f"🔄 Token refreshed for {broadcaster_login}, saving to DB...")
+            # Get current scopes from DB
+            current_tokens = db.get_tokens(user_id, token_type='broadcaster')
+            current_scopes = current_tokens.get('scopes', scopes) if current_tokens else scopes
+            
+            # Calculate new expiry (~4 hours from now)
+            from datetime import datetime, timedelta
+            new_expiry = datetime.now() + timedelta(hours=4)
+            
+            # Store refreshed token
+            db.store_token(
+                user_id=user_id,
+                token_type='broadcaster',
+                access_token=new_access_token,
+                refresh_token=new_refresh_token,
+                expires_at=new_expiry,
+                scopes=[s.value if hasattr(s, 'value') else str(s) for s in current_scopes]
+            )
+            LOGGER.info(f"✅ Refreshed token saved for {broadcaster_login}")
+        except Exception as e:
+            LOGGER.error(f"❌ Failed to save refreshed token: {e}")
+    
+    # Register callback BEFORE set_user_authentication
+    twitch.user_auth_refresh_callback = save_refreshed_token
+    
     # Set user authentication (broadcaster token for EventSub)
     await twitch.set_user_authentication(
         token=access_token,
@@ -996,8 +1276,8 @@ async def main():
         validate=False  # We trust our DB token
     )
     
-    # Create Hub
-    hub = EventSubHub(config=hub_config, db=db, twitch=twitch)
+    # Create Hub (provide broadcaster id for fallback first-subscription)
+    hub = EventSubHub(config=hub_config, db=db, twitch=twitch, default_broadcaster_id=str(user_id))
     
     # Signal handlers
     def handle_shutdown(sig, frame):
