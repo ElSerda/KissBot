@@ -30,9 +30,7 @@ from core.registry import Registry
 from core.feature_manager import FeatureManager, Feature, init_feature_manager
 from core.memory_profiler import init_profiler, log_feature_mem, get_profiler
 from core.monitor_client import (
-    register_with_monitor, 
-    unregister_from_monitor,
-    HeartbeatTask,
+    MonitorClient,
     features_to_dict
 )
 
@@ -81,6 +79,7 @@ from twitchapi.transports.eventsub_client import EventSubClient
 from twitchapi.transports.hub_eventsub_client import HubEventSubClient
 from twitchapi.transports.helix_readonly import HelixReadOnlyClient
 from twitchapi.transports.irc_client import IRCClient
+from twitchapi.transports.eventsub_chat_client import EventSubChatClient
 from core.system_monitor import SystemMonitor
 
 # Logger will be configured in parse_args()
@@ -129,6 +128,13 @@ def parse_args():
         type=str,
         default='/tmp/kissbot_hub.sock',
         help='Path to EventSub Hub IPC socket (default: /tmp/kissbot_hub.sock)'
+    )
+    parser.add_argument(
+        '--chat-transport',
+        type=str,
+        choices=['irc', 'eventsub'],
+        default='irc',
+        help='Chat transport: irc (legacy, 5min keepalive) or eventsub (10s keepalive, recommandé Twitch)'
     )
     return parser.parse_args()
 
@@ -368,15 +374,8 @@ async def main():
     monitor_channel = args.channel or (channels_list[0] if channels_list else "unknown")
     monitor_pid = os.getpid()
     
-    # Enregistrer auprès du Monitor (ne crashe jamais si absent)
-    register_with_monitor(
-        channel=monitor_channel,
-        pid=monitor_pid,
-        features=features_to_dict(features)
-    )
-    
-    # Heartbeat task (sera démarrée après l'event loop)
-    heartbeat_task: HeartbeatTask = None
+    # Créer le client Monitor (sera enregistré et gère la heartbeat)
+    monitor_client = MonitorClient(channel=monitor_channel, pid=monitor_pid)
     
     twitch_config = config.get("twitch", {})
     bot_config = config.get("bot", {})
@@ -479,14 +478,20 @@ async def main():
                 # Save to database with token_type
                 user = db_manager.get_user_by_login(bot_name)
                 if user:
-                    # Store refreshed tokens with 4 hours expiry (will be updated on next validate)
+                    # Convert AuthScope enums to strings for JSON serialization
+                    scopes_for_db = [
+                        s.value if hasattr(s, 'value') else str(s) 
+                        for s in bot_token.scopes
+                    ] if bot_token.scopes else []
+                    
+                    # Store refreshed tokens with 4 hours expiry
                     db_manager.store_tokens(
                         user_id=user['id'],
                         access_token=token,
                         refresh_token=refresh_token,
                         expires_in=14400,  # 4 hours
-                        scopes=bot_token.scopes,  # Keep existing scopes
-                        token_type='bot',  # This is the bot token
+                        scopes=scopes_for_db,  # Keep existing scopes (as strings)
+                        token_type='bot',
                         status='valid'
                     )
                     LOGGER.info(f"✅ Bot token auto-refreshed and saved to DB for {bot_name}")
@@ -509,7 +514,15 @@ async def main():
         except Exception as e:
             LOGGER.error(f"❌ Erreur sauvegarde token refreshé: {e}")
     
-    # Set user authentication avec callback de refresh natif
+    # ═══════════════════════════════════════════════════════════════════════
+    # CRITICAL: Définir le callback AVANT set_user_authentication !
+    # Sinon le refresh initial ne déclenche pas le callback et le token
+    # n'est jamais sauvegardé en DB → déconnexions silencieuses au redémarrage
+    # ═══════════════════════════════════════════════════════════════════════
+    twitch_bot.user_auth_refresh_callback = save_refreshed_token
+    LOGGER.info("🔄 Callback de refresh token activé")
+    
+    # Set user authentication avec validation + auto-refresh si expiré
     try:
         if args.use_db and not bot_token.scopes:
             # Mode DB sans scopes : utiliser les scopes standards pour un bot Twitch
@@ -549,20 +562,19 @@ async def main():
         await twitch_app.close()
         await twitch_bot.close()
         sys.exit(1)
-    except Exception as e:
-        LOGGER.error(f"❌ Failed to set user authentication: {e}", exc_info=True)
-        await twitch_app.close()
-        await twitch_bot.close()
-        sys.exit(1)
     
     # Debug: vérifier l'état de l'authentification
     LOGGER.info(f"🔍 Debug: twitch_bot._user_auth_token = {twitch_bot._user_auth_token is not None}")
     LOGGER.info(f"🔍 Debug: twitch_bot._user_auth_refresh_token = {twitch_bot._user_auth_refresh_token is not None}")
-
-
     
-    # Activer le callback de refresh automatique (feature native pyTwitchAPI)
-    twitch_bot.user_auth_refresh_callback = save_refreshed_token
+    # ═══════════════════════════════════════════════════════════════════════
+    # Sauvegarder le token en DB si pyTwitchAPI l'a refreshé pendant validation
+    # (le callback n'est pas appelé pour le refresh initial)
+    # ═══════════════════════════════════════════════════════════════════════
+    current_token = twitch_bot.get_user_auth_token()
+    if current_token and current_token != bot_token.access_token:
+        LOGGER.info("🔄 Token refreshé pendant validation - sauvegarde en DB...")
+        await save_refreshed_token(current_token, twitch_bot._user_auth_refresh_token)
     
     # Test API App Token (silencieux)
     try:
@@ -626,6 +638,18 @@ async def main():
     message_handler.set_helix(helix)
     
     # ═══════════════════════════════════════════════════════════════════════
+    # 📡 Préparer broadcaster_ids (requis pour EventSub Chat et Stream Monitoring)
+    # ═══════════════════════════════════════════════════════════════════════
+    broadcaster_ids = {}
+    for channel in irc_channels:
+        user_info = await helix.get_user(channel)
+        if user_info:
+            broadcaster_ids[channel] = user_info["id"]
+            LOGGER.debug(f"📝 Broadcaster ID: {channel} -> {user_info['id']}")
+        else:
+            LOGGER.warning(f"⚠️ Cannot get broadcaster ID for {channel}")
+    
+    # ═══════════════════════════════════════════════════════════════════════
     # 📡 Stream Monitoring (with Feature Flags)
     # ═══════════════════════════════════════════════════════════════════════
     announcements_config = config.get("announcements", {})
@@ -650,15 +674,7 @@ async def main():
         monitoring_method = announcements_config.get("monitoring", {}).get("method", "auto")
         polling_interval = announcements_config.get("monitoring", {}).get("polling_interval", 60)
         
-        # Préparer broadcaster_ids (requis pour EventSub)
-        broadcaster_ids = {}
-        for channel in irc_channels:
-            user_info = await helix.get_user(channel)
-            if user_info:
-                broadcaster_ids[channel] = user_info["id"]
-                LOGGER.debug(f"📝 Broadcaster ID: {channel} -> {user_info['id']}")
-            else:
-                LOGGER.warning(f"⚠️ Cannot get broadcaster ID for {channel}")
+        # broadcaster_ids déjà préparé plus haut
         
         # Logique hybrid: auto, eventsub, ou polling
         # NEW: Support pour --eventsub=hub mode
@@ -756,34 +772,59 @@ async def main():
                 interval=polling_interval
             )
     
-    # IRC Client (with Bot Token + timeout)
-    irc_client = IRCClient(
-        twitch=twitch_bot,
-        bus=bus,
-        bot_user_id=bot_user_id,
-        bot_login=bot_token.user_login,
-        channels=irc_channels,
-        irc_send_timeout=irc_send_timeout
-    )
+    # Chat Transport: IRC (legacy) ou EventSub (recommandé Twitch)
+    chat_transport = args.chat_transport if hasattr(args, 'chat_transport') else 'irc'
+    chat_client = None  # Sera IRCClient ou EventSubChatClient
     
-    # Inject IRC Client into MessageHandler (for !kisscharity broadcast)
-    message_handler.set_irc_client(irc_client)
+    if chat_transport == 'eventsub':
+        # 🚀 EventSub Chat - Recommandé par Twitch, keepalive 10s
+        LOGGER.info("🚀 Chat Transport: EventSub WebSocket (recommandé Twitch)")
+        LOGGER.info("   → Keepalive: 10s (vs IRC 5min)")
+        LOGGER.info("   → Détection déconnexion: ~20s (vs IRC 6-10min)")
+        
+        chat_client = EventSubChatClient(
+            twitch=twitch_bot,
+            bus=bus,
+            bot_user_id=bot_user_id,
+            bot_login=bot_token.user_login,
+            channels=irc_channels,
+            broadcaster_ids=broadcaster_ids,
+            send_timeout=irc_send_timeout  # Réutilise le même timeout
+        )
+    else:
+        # IRC (legacy) - Maintenu pour compatibilité
+        LOGGER.info("💬 Chat Transport: IRC (legacy)")
+        chat_client = IRCClient(
+            twitch=twitch_bot,
+            bus=bus,
+            bot_user_id=bot_user_id,
+            bot_login=bot_token.user_login,
+            channels=irc_channels,
+            irc_send_timeout=irc_send_timeout
+        )
     
-    LOGGER.info(f"🚀 KissBot démarré | Channels: {', '.join([f'#{c}' for c in irc_channels])} | Timeouts: IRC={irc_send_timeout}s, Helix={helix_timeout}s")
+    # Alias pour compatibilité (message_handler utilise irc_client)
+    irc_client = chat_client
     
-    # Démarrer IRC Client
-    print('\n💬 Démarrage IRC Client...')
+    # Inject Chat Client into MessageHandler (for !kisscharity broadcast)
+    message_handler.set_irc_client(chat_client)
+    
+    LOGGER.info(f"🚀 KissBot démarré | Channels: {', '.join([f'#{c}' for c in irc_channels])} | Transport: {chat_transport} | Timeout: {irc_send_timeout}s")
+    
+    # Démarrer Chat Client
+    transport_name = "EventSub Chat" if chat_transport == 'eventsub' else "IRC"
+    print(f'\n💬 Démarrage {transport_name} Client...')
     print('=' * 70)
-    await irc_client.start()
+    await chat_client.start()
     
-    # Attendre que IRC soit connecté
+    # Attendre que le client soit connecté
     await asyncio.sleep(2)
     
-    # Signal: IRC connected
+    # Signal: Chat connected
     if args.channel:
         irc_flag = pathlib.Path(f"pids/{args.channel}.irc")
         irc_flag.touch()
-        LOGGER.info(f"🚦 IRC flag created: {irc_flag}")
+        LOGGER.info(f"🚦 Chat flag created: {irc_flag}")
     
     # Start Stream Monitoring (EventSub or Polling)
     if eventsub_client:
@@ -968,11 +1009,11 @@ async def main():
         LOGGER.info("📡 Broadcast listener started")
     
     # ═══════════════════════════════════════════════════════════════════════
-    # 💓 Start Heartbeat Task for Monitor
+    # 💓 Register and Start Heartbeat for Monitor
     # ═══════════════════════════════════════════════════════════════════════
-    heartbeat_task = HeartbeatTask(channel=monitor_channel, pid=monitor_pid)
-    asyncio.create_task(heartbeat_task.start())
-    LOGGER.info("💓 Heartbeat task started")
+    await monitor_client.register(features=features_to_dict(features))
+    await monitor_client.start_heartbeat()
+    LOGGER.info("💓 Monitor registered and heartbeat started")
     
     try:
         # Boucle infinie qui répond bien à KeyboardInterrupt
@@ -986,8 +1027,8 @@ async def main():
         # ═══════════════════════════════════════════════════════════════════
         # 👋 Unregister from Monitor
         # ═══════════════════════════════════════════════════════════════════
-        if heartbeat_task:
-            await heartbeat_task.stop()
+        await monitor_client.stop_heartbeat()
+        await monitor_client.unregister()
         unregister_from_monitor(channel=monitor_channel, pid=monitor_pid)
         
         # Remove all status flags (signal shutdown)

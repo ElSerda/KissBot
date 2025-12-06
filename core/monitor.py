@@ -282,6 +282,9 @@ class KissBotMonitor:
         self.bots: Dict[str, BotInfo] = {}
         self._running = False
         self._server: Optional[asyncio.AbstractServer] = None
+        
+        # Queue pour les événements (fire-and-forget pattern)
+        self.event_queue: asyncio.Queue = asyncio.Queue()
     
     async def start(self):
         """Démarre le monitor"""
@@ -310,6 +313,7 @@ class KissBotMonitor:
             await asyncio.gather(
                 self._metrics_loop(),
                 self._cleanup_loop(),
+                self._event_worker(),
                 self._server.serve_forever()
             )
         except asyncio.CancelledError:
@@ -344,39 +348,88 @@ class KissBotMonitor:
     
     async def _handle_client(self, reader: asyncio.StreamReader, 
                              writer: asyncio.StreamWriter):
-        """Gère une connexion client"""
+        """Gère une connexion client (fire-and-forget)
+        
+        Lit les messages JSON ligne par ligne et les met en queue.
+        Pas d'ACK envoyé - pattern fire-and-forget.
+        """
+        client_addr = writer.get_extra_info('peername')
         try:
-            data = await asyncio.wait_for(reader.read(4096), timeout=5.0)
-            if not data:
-                return
-            
-            message = json.loads(data.decode('utf-8'))
-            msg_type = message.get("type")
-            
-            if msg_type == "register":
-                await self._handle_register(message)
-            elif msg_type == "heartbeat":
-                await self._handle_heartbeat(message)
-            elif msg_type == "unregister":
-                await self._handle_unregister(message)
-            elif msg_type == "llm_usage":
-                await self._handle_llm_usage(message)
-            else:
-                LOGGER.warning(f"Unknown message type: {msg_type}")
-            
-            # Envoyer ACK
-            writer.write(b'{"status": "ok"}')
-            await writer.drain()
-            
-        except asyncio.TimeoutError:
-            LOGGER.warning("Client connection timeout")
-        except json.JSONDecodeError as e:
-            LOGGER.error(f"Invalid JSON: {e}")
+            while True:
+                try:
+                    # Lire une ligne de JSON (délimitée par \n)
+                    line = await asyncio.wait_for(
+                        reader.readline(),
+                        timeout=30.0
+                    )
+                    
+                    if not line:
+                        break
+                    
+                    # Décoder et parser le JSON
+                    message = json.loads(line.decode('utf-8').strip())
+                    
+                    # Mettre en queue (non-bloquant)
+                    await self.event_queue.put(message)
+                    LOGGER.debug(f"📨 Event queued from {client_addr}: {message.get('type')}")
+                    
+                except asyncio.TimeoutError:
+                    # Le client a arrêté d'envoyer - fermer la connexion
+                    break
+                except json.JSONDecodeError as e:
+                    LOGGER.error(f"Invalid JSON from {client_addr}: {e}")
+                    break
+                except Exception as e:
+                    LOGGER.error(f"Error reading from {client_addr}: {e}")
+                    break
+                    
         except Exception as e:
-            LOGGER.error(f"Error handling client: {e}")
+            LOGGER.error(f"Unexpected error in _handle_client: {e}")
         finally:
-            writer.close()
-            await writer.wait_closed()
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except:
+                pass
+    
+    async def _event_worker(self):
+        """Worker qui consomme les événements de la queue et les dispatche"""
+        LOGGER.info("🔄 Event worker started")
+        
+        while self._running:
+            try:
+                # Attendre un événement avec timeout
+                message = await asyncio.wait_for(
+                    self.event_queue.get(),
+                    timeout=1.0
+                )
+                
+                msg_type = message.get("type")
+                
+                try:
+                    if msg_type == "register":
+                        await self._handle_register(message)
+                    elif msg_type == "heartbeat":
+                        await self._handle_heartbeat(message)
+                    elif msg_type == "unregister":
+                        await self._handle_unregister(message)
+                    elif msg_type == "llm_usage":
+                        await self._handle_llm_usage(message)
+                    else:
+                        LOGGER.warning(f"Unknown message type: {msg_type}")
+                except Exception as e:
+                    LOGGER.error(f"Error processing event {msg_type}: {e}")
+                finally:
+                    self.event_queue.task_done()
+                    
+            except asyncio.TimeoutError:
+                # Pas d'événement - continue
+                continue
+            except Exception as e:
+                LOGGER.error(f"Error in event worker: {e}")
+                await asyncio.sleep(0.1)
+        
+        LOGGER.info("🛑 Event worker stopped")
     
     async def _handle_register(self, message: Dict):
         """Gère l'enregistrement d'un bot"""
