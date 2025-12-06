@@ -637,10 +637,7 @@ class MessageHandler:
         !kbupdate <message> - Notifier tous les channels d'une MAJ du bot
         
         Owner only (el_serda) - Pas de cooldown
-        Parfait pour annoncer:
-        - Nouvelles fonctionnalités
-        - Maintenance prévue
-        - Corrections de bugs
+        Utilise l'API Helix /announcements (plus beau, officiel).
         """
         from modules.classic_commands.broadcaster_commands.broadcast import cmd_kbupdate
         
@@ -658,12 +655,13 @@ class MessageHandler:
         # Parser les arguments
         args_list = args.split() if args else []
         
-        # Appeler le handler
+        # Appeler le handler avec Twitch client (optionnel pour fallback)
         response_text = await cmd_kbupdate(
             msg=msg,
             args=args_list,
             bus=self.bus,
-            irc_client=self.irc_client
+            irc_client=self.irc_client,
+            twitch_client=getattr(self, 'twitch', None)  # Passer le client Twitch si dispo
         )
         
         # Envoyer la réponse

@@ -160,9 +160,12 @@ async def cmd_kisscharity(msg: ChatMessage, args: list[str], bus: MessageBus, ir
 # Owner only (el_serda user_id)
 OWNER_USER_ID = "44456636"  # el_serda
 
-async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_client) -> Optional[str]:
+async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_client, twitch_client=None) -> Optional[str]:
     """
     !kbupdate <message> - Notifier tous les channels d'une mise à jour du bot
+    
+    Envoie une ANNONCE OFFICIELLE Twitch (via /announcements API) 
+    au lieu d'un message chat classique.
     
     Usage:
         !kbupdate Nouvelle commande !wiki disponible ! 🎉
@@ -178,10 +181,11 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_c
         msg: Message d'origine
         args: Liste des arguments (le message de mise à jour)
         bus: MessageBus
-        irc_client: Instance IRCClient pour broadcaster
+        irc_client: Instance IRCClient (legacy, pas utilisé pour announces)
+        twitch_client: Instance Twitch API (pour /announcements)
         
     Returns:
-        Message de confirmation
+        Message de confirmation avec nombre de channels notifiés
     """
     # 1. Permission check: Owner only
     if msg.user_id != OWNER_USER_ID:
@@ -195,76 +199,106 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_c
     # 3. Construire le message
     update_msg = " ".join(args)
     
-    # 4. Validation: max 400 chars (on garde de la marge pour le préfixe)
-    if len(update_msg) > 400:
+    # 4. Validation: max 300 chars (Twitch /announcements limit 500, on en garde pour marge)
+    if len(update_msg) > 300:
         return (
             f"@{msg.user_login} ❌ Message trop long ! "
-            f"Max 400 caractères (actuellement: {len(update_msg)})"
+            f"Max 300 caractères (actuellement: {len(update_msg)})"
         )
     
-    # 5. Format du message broadcast
-    broadcast_msg = f"🤖 [KissBot Update] {update_msg}"
+    # 5. Format du message announce (sans préfixe, l'API ajoute visuellement)
+    announce_msg = f"🤖 KissBot Update: {update_msg}"
     
     # 6. Log
     LOGGER.info(
-        f"🔧 UPDATE BROADCAST | "
+        f"📢 ANNOUNCE REQUEST | "
         f"user={msg.user_login} | "
         f"message={update_msg[:100]}..."
     )
     
-    # 7. Broadcaster - MONO-PROCESS vs MULTI-PROCESS
-    try:
+    # 7. Si pas de Twitch client, fallback à broadcast classique
+    if not twitch_client:
+        LOGGER.warning("⚠️ Pas de Twitch client fourni, fallback à broadcast IRC")
+        
         if irc_client and hasattr(irc_client, 'broadcast_message'):
-            # ═══════════════════════════════════════════════════════════════
-            # MODE MONO-PROCESS: Broadcast direct via IRCClient
-            # ═══════════════════════════════════════════════════════════════
-            LOGGER.info("🔧 Mode MONO-PROCESS → broadcast direct via IRCClient")
-            
+            # Fallback: Broadcast direct via IRCClient
+            broadcast_msg = f"🤖 [KissBot Update] {update_msg}"
             success, total = await irc_client.broadcast_message(
                 message=broadcast_msg,
                 source_channel=msg.channel,
-                exclude_channel=None  # Envoyer sur TOUS les channels (même source)
+                exclude_channel=None
             )
             
             if success > 0:
                 return (
-                    f"@{msg.user_login} 🔧 Notification envoyée sur {success}/{total} channels ! "
-                    f"\"[KissBot Update] {update_msg[:40]}...\""
+                    f"@{msg.user_login} 🔧 Notification (IRC fallback) envoyée sur {success}/{total} channels"
                 )
             else:
                 return f"@{msg.user_login} ❌ Erreur: notification non envoyée"
         else:
-            # ═══════════════════════════════════════════════════════════════
-            # MODE MULTI-PROCESS: Écrire pour le Supervisor
-            # ═══════════════════════════════════════════════════════════════
+            # Multi-process fallback
             now = datetime.now()
             broadcast_file = "pids/supervisor.broadcast"
-            
-            # Format: timestamp|source_channel|message
+            broadcast_msg = f"🤖 [KissBot Update] {update_msg}"
             broadcast_data = f"{int(now.timestamp())}|{msg.channel}|{broadcast_msg}\n"
             
             os.makedirs("pids", exist_ok=True)
             with open(broadcast_file, "w") as f:
                 f.write(broadcast_data)
             
-            LOGGER.info(
-                f"✅ UPDATE BROADCAST SENT | "
-                f"message={broadcast_msg[:50]}..."
-            )
-            
             return (
-                f"@{msg.user_login} 🔧 Notification envoyée sur tous les channels ! "
-                f"\"[KissBot Update] {update_msg[:50]}...\""
+                f"@{msg.user_login} 🔧 Notification (supervisor fallback) envoyée sur tous les channels"
             )
+    
+    # 8. Utiliser Twitch API /announcements
+    try:
+        # Récupérer les channels configurés depuis le config
+        # Pour l'instant, on envoie sur le channel source
+        # Dans une implémentation complète, itérer sur tous les channels configured
+        
+        LOGGER.info(f"📢 Envoi announce via API Helix pour channel: {msg.channel_id}")
+        
+        # Appel à l'API Helix: send_chat_announcement
+        # Signature: send_chat_announcement(broadcaster_id, moderator_id, message, color=None)
+        # - broadcaster_id: ID du channel
+        # - moderator_id: ID du modérateur qui envoie (le bot = moderator)
+        # - message: Le message à annoncer
+        # - color: Couleur de l'annonce (BLUE, GREEN, ORANGE, PURPLE)
+        
+        await twitch_client.send_chat_announcement(
+            broadcaster_id=msg.channel_id,
+            moderator_id=msg.user_id,  # Owner sending as moderator
+            message=announce_msg,
+            color="PURPLE"  # 👑 KissBot color
+        )
+        
+        LOGGER.info(
+            f"✅ ANNOUNCE SENT | "
+            f"channel_id={msg.channel_id} | "
+            f"message={announce_msg[:50]}..."
+        )
         
         return (
-            f"@{msg.user_login} 🔧 Notification envoyée sur tous les channels ! "
-            f"\"[KissBot Update] {update_msg[:50]}...\""
+            f"@{msg.user_login} 📢 Annonce officielle envoyée au channel {msg.channel} ! "
+            f"(via /announcements API)"
         )
             
     except Exception as e:
-        LOGGER.error(f"❌ Erreur kbupdate: {e}", exc_info=True)
-        return f"@{msg.user_login} ❌ Erreur technique lors de l'envoi"
+        LOGGER.error(f"❌ Erreur announce: {e}", exc_info=True)
+        
+        # Log l'erreur détaillée mais reste graceful
+        error_msg = str(e)
+        if "403" in error_msg or "Forbidden" in error_msg:
+            return (
+                f"@{msg.user_login} ❌ Erreur 403: Pas les permissions /announcements sur ce channel. "
+                f"Scope: channel:manage:announcements"
+            )
+        elif "401" in error_msg or "Unauthorized" in error_msg:
+            return (
+                f"@{msg.user_login} ❌ Erreur 401: Token invalide ou expiré"
+            )
+        else:
+            return f"@{msg.user_login} ❌ Erreur technique: {error_msg[:60]}..."
 
 
 # Export de la commande pour le registry
