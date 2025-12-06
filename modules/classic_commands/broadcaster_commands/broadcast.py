@@ -250,38 +250,62 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_c
                 f"@{msg.user_login} 🔧 Notification (supervisor fallback) envoyée sur tous les channels"
             )
     
-    # 8. Utiliser Twitch API /announcements
+    # 8. Utiliser Twitch API /announcements sur TOUS les channels configurés
     try:
-        # Récupérer les channels configurés depuis le config
-        # Pour l'instant, on envoie sur le channel source
-        # Dans une implémentation complète, itérer sur tous les channels configured
+        # Récupérer tous les channels configurés
+        from core.config_manager import ConfigManager
+        config = ConfigManager()
+        all_channels = config.get_channels()
         
-        LOGGER.info(f"📢 Envoi announce via API Helix pour channel: {msg.channel_id}")
+        if not all_channels:
+            LOGGER.warning("⚠️ Aucun channel configuré dans config.yaml")
+            return f"@{msg.user_login} ❌ Aucun channel configuré"
         
-        # Appel à l'API Helix: send_chat_announcement
-        # Signature: send_chat_announcement(broadcaster_id, moderator_id, message, color=None)
-        # - broadcaster_id: ID du channel
-        # - moderator_id: ID du modérateur qui envoie (le bot = moderator)
-        # - message: Le message à annoncer
-        # - color: Couleur de l'annonce (blue, green, orange, purple, primary)
+        success_count = 0
+        failed_channels = []
         
-        await twitch_client.send_chat_announcement(
-            broadcaster_id=msg.channel_id,
-            moderator_id="1209350837",  # Bot ID (serda_bot) - le token authentifié est le bot
-            message=announce_msg,
-            color="purple"  # 👑 KissBot color (minuscule requis par API)
-        )
+        LOGGER.info(f"📢 Broadcasting announce to {len(all_channels)} channels via API Helix")
         
-        LOGGER.info(
-            f"✅ ANNOUNCE SENT | "
-            f"channel_id={msg.channel_id} | "
-            f"message={announce_msg[:50]}..."
-        )
+        # Itérer sur tous les channels configurés
+        for channel_config in all_channels:
+            channel_login = channel_config.get("name", "").lower()
+            
+            # Récupérer l'ID du channel via l'API (nécessaire pour send_chat_announcement)
+            try:
+                async for user in twitch_client.get_users(logins=[channel_login]):
+                    channel_id = user.id
+                    
+                    # Appel à l'API Helix: send_chat_announcement
+                    await twitch_client.send_chat_announcement(
+                        broadcaster_id=channel_id,
+                        moderator_id="1209350837",  # Bot ID (serda_bot)
+                        message=announce_msg,
+                        color="purple"  # 👑 KissBot color
+                    )
+                    
+                    success_count += 1
+                    LOGGER.info(f"✅ Announce sent to #{channel_login} (ID: {channel_id})")
+                    break  # get_users retourne async generator, on prend le premier
+                    
+            except Exception as channel_error:
+                failed_channels.append(channel_login)
+                LOGGER.error(f"❌ Failed to send announce to #{channel_login}: {channel_error}")
         
-        return (
-            f"@{msg.user_login} 📢 Annonce officielle envoyée au channel {msg.channel} ! "
-            f"(via /announcements API)"
-        )
+        # Résultat final
+        total = len(all_channels)
+        if success_count == total:
+            return (
+                f"@{msg.user_login} 📢 Annonce officielle envoyée sur {success_count}/{total} channels ! "
+                f"(via /announcements API)"
+            )
+        elif success_count > 0:
+            failed_str = ", ".join(failed_channels[:3])
+            return (
+                f"@{msg.user_login} ⚠️ Broadcast partiel: {success_count}/{total} channels. "
+                f"Échecs: {failed_str}{'...' if len(failed_channels) > 3 else ''}"
+            )
+        else:
+            return f"@{msg.user_login} ❌ Aucune annonce envoyée (erreur sur tous les channels)"
             
     except Exception as e:
         LOGGER.error(f"❌ Erreur announce: {e}", exc_info=True)
