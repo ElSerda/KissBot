@@ -252,9 +252,10 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, twitc
         
         LOGGER.info(f"📢 Broadcasting announce to {len(all_channels)} channels via API Helix")
         
-        # Itérer sur tous les channels configurés
-        for channel_config in all_channels:
-            channel_login = channel_config.get("name", "").lower()
+        # Itérer sur tous les channels configurés (liste de strings)
+        for channel_login in all_channels:
+            # Normaliser le nom (enlever # si présent, lowercase)
+            channel_login = channel_login.strip().lstrip('#').lower()
             
             # Récupérer l'ID du channel via l'API (nécessaire pour send_chat_announcement)
             try:
