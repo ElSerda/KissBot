@@ -201,3 +201,4 @@ archive/
 config/config.test.yaml
 config/config.test-supervisor.yaml
 TODO_COMMANDS_MIGRATION.md
+web/
