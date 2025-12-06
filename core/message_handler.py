@@ -659,31 +659,31 @@ class MessageHandler:
         !kbupdate <message> - Notifier tous les channels d'une MAJ du bot
         
         Owner only (el_serda) - Pas de cooldown
-        Utilise l'API Helix /announcements (plus beau, officiel).
+        Utilise l'API Helix /announcements (annonces officielles purple).
         """
         from modules.classic_commands.broadcaster_commands.broadcast import cmd_kbupdate
         
-        # Check si IRC client est disponible
-        if not self.irc_client:
-            response_text = f"@{msg.user_login} ❌ Erreur système : IRC client non disponible"
+        # Check si Twitch client est disponible
+        twitch_client = getattr(self, 'twitch', None)
+        if not twitch_client:
+            response_text = f"@{msg.user_login} ❌ Erreur système : Twitch API non disponible"
             await self.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,
                 channel_id=msg.channel_id,
                 text=response_text,
-                prefer="irc"
+                prefer="eventsub"
             ))
             return
         
         # Parser les arguments
         args_list = args.split() if args else []
         
-        # Appeler le handler avec Twitch client (optionnel pour fallback)
+        # Appeler le handler avec Twitch client
         response_text = await cmd_kbupdate(
             msg=msg,
             args=args_list,
             bus=self.bus,
-            irc_client=self.irc_client,
-            twitch_client=getattr(self, 'twitch', None)  # Passer le client Twitch si dispo
+            twitch_client=twitch_client
         )
         
         # Envoyer la réponse
@@ -692,7 +692,7 @@ class MessageHandler:
                 channel=msg.channel,
                 channel_id=msg.channel_id,
                 text=response_text,
-                prefer="irc"
+                prefer="eventsub"
             ))
     
     async def _cmd_kbkofi(self, msg: ChatMessage) -> None:

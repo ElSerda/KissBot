@@ -160,7 +160,7 @@ async def cmd_kisscharity(msg: ChatMessage, args: list[str], bus: MessageBus, ir
 # Owner only (el_serda user_id)
 OWNER_USER_ID = "44456636"  # el_serda
 
-async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_client, twitch_client=None) -> Optional[str]:
+async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, twitch_client) -> Optional[str]:
     """
     !kbupdate <message> - Notifier tous les channels d'une mise à jour du bot
     
@@ -181,8 +181,7 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_c
         msg: Message d'origine
         args: Liste des arguments (le message de mise à jour)
         bus: MessageBus
-        irc_client: Instance IRCClient (legacy, pas utilisé pour announces)
-        twitch_client: Instance Twitch API (pour /announcements)
+        twitch_client: Instance Twitch API (requis pour /announcements)
         
     Returns:
         Message de confirmation avec nombre de channels notifiés
@@ -216,39 +215,10 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_c
         f"message={update_msg[:100]}..."
     )
     
-    # 7. Si pas de Twitch client, fallback à broadcast classique
+    # 7. Validation: Twitch client requis (pas de fallback IRC)
     if not twitch_client:
-        LOGGER.warning("⚠️ Pas de Twitch client fourni, fallback à broadcast IRC")
-        
-        if irc_client and hasattr(irc_client, 'broadcast_message'):
-            # Fallback: Broadcast direct via IRCClient
-            broadcast_msg = f"🤖 [KissBot Update] {update_msg}"
-            success, total = await irc_client.broadcast_message(
-                message=broadcast_msg,
-                source_channel=msg.channel,
-                exclude_channel=None
-            )
-            
-            if success > 0:
-                return (
-                    f"@{msg.user_login} 🔧 Notification (IRC fallback) envoyée sur {success}/{total} channels"
-                )
-            else:
-                return f"@{msg.user_login} ❌ Erreur: notification non envoyée"
-        else:
-            # Multi-process fallback
-            now = datetime.now()
-            broadcast_file = "pids/supervisor.broadcast"
-            broadcast_msg = f"🤖 [KissBot Update] {update_msg}"
-            broadcast_data = f"{int(now.timestamp())}|{msg.channel}|{broadcast_msg}\n"
-            
-            os.makedirs("pids", exist_ok=True)
-            with open(broadcast_file, "w") as f:
-                f.write(broadcast_data)
-            
-            return (
-                f"@{msg.user_login} 🔧 Notification (supervisor fallback) envoyée sur tous les channels"
-            )
+        LOGGER.error("❌ Twitch client manquant pour !kbupdate")
+        return f"@{msg.user_login} ❌ Erreur système: Twitch API non disponible"
     
     # 8. Utiliser Twitch API /announcements sur TOUS les channels configurés
     try:
