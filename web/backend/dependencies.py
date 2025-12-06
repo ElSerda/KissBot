@@ -3,16 +3,58 @@
 Dépendances FastAPI partagées
 """
 
+import sys
+import logging
+from pathlib import Path
+from functools import lru_cache
 from typing import Optional
+
 from fastapi import Cookie, HTTPException
 
+# Ajouter le path parent pour importer les modules KissBot
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from database.manager import DatabaseManager
+from config import get_settings
+
+logger = logging.getLogger(__name__)
+
+# ============================================================
+# DATABASE SINGLETON
+# ============================================================
+
+_db_instance: Optional[DatabaseManager] = None
+
+
+def get_database() -> DatabaseManager:
+    """
+    Singleton DatabaseManager.
+    
+    Charge la clé de chiffrement et initialise la connexion une seule fois.
+    """
+    global _db_instance
+    
+    if _db_instance is None:
+        settings = get_settings()
+        _db_instance = DatabaseManager(
+            db_path=settings.database_path,
+            key_file=settings.encryption_key_file
+        )
+        logger.info("📦 DatabaseManager singleton initialized")
+    
+    return _db_instance
+
+
+# ============================================================
+# AUTH DEPENDENCIES
+# ============================================================
 
 def get_current_user(session: Optional[str] = Cookie(None)) -> dict:
     """
     Dépendance pour vérifier l'authentification.
     
     Extrait les infos utilisateur du cookie de session.
-    Format session: "user_id:user_login:display_name"
+    Format session: "user_id:user_login:display_name" (URL-encoded)
     
     Returns:
         dict: {"id": str, "login": str, "display_name": str}
@@ -24,7 +66,10 @@ def get_current_user(session: Optional[str] = Cookie(None)) -> dict:
         raise HTTPException(401, "Not authenticated")
     
     try:
-        parts = session.split(":")
+        from urllib.parse import unquote
+        # Décoder l'URL encoding
+        decoded = unquote(session)
+        parts = decoded.split(":")
         if len(parts) >= 2:
             return {
                 "id": parts[0],
@@ -47,7 +92,9 @@ def get_optional_user(session: Optional[str] = Cookie(None)) -> Optional[dict]:
         return None
     
     try:
-        parts = session.split(":")
+        from urllib.parse import unquote
+        decoded = unquote(session)
+        parts = decoded.split(":")
         if len(parts) >= 2:
             return {
                 "id": parts[0],

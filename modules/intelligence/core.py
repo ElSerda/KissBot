@@ -125,7 +125,8 @@ async def process_llm_request(
         if not response:
             return None
 
-        # Truncate si trop long (Twitch limit: 500 chars, on laisse marge)
+        # Truncate si trop long (Twitch: 500 chars - [ASK] 6 chars = 494 max)
+        # Sécurité IRC à 450 chars (marge 44 chars pour edge cases)
         if len(response) > 450:
             response = response[:447] + "..."
 

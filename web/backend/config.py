@@ -31,11 +31,16 @@ class Settings(BaseSettings):
         "channel:read:subscriptions",
         "channel:manage:broadcast",
         "channel:read:redemptions",
-        # Chat
+        "channel:bot",                      # Bot chat identity
+        # Chat (EventSub + IRC)
         "chat:read",
         "chat:edit",
+        "user:read:chat",                   # EventSub chat receive
+        "user:write:chat",                  # Helix API send message
+        "user:bot",                         # Bot chat identity
         # User
         "user:read:email",
+        "user:read:moderated_channels",     # Check if bot is mod (rate limits)
     ])
     
     # Database (réutilise kissbot.db)

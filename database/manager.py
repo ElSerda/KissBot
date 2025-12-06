@@ -431,6 +431,7 @@ class DatabaseManager:
     def increment_refresh_failures(self, user_id: int, token_type: str = 'bot') -> int:
         """
         Incrémente le compteur d'échecs de refresh.
+        Après 3 échecs, marque automatiquement needs_reauth=1 et log une alerte.
         
         Args:
             user_id: ID de l'utilisateur
@@ -452,48 +453,21 @@ class DatabaseManager:
             row = cursor.fetchone()
             failures = row[0] if row else 0
             
+            # Auto-mark needs_reauth après 3 échecs
             if failures >= 3:
                 conn.execute(
                     "UPDATE oauth_tokens SET needs_reauth = 1, status = 'expired' WHERE user_id = ? AND token_type = ?",
                     (user_id, token_type)
                 )
-    
-    def increment_refresh_failures(self, user_id: int) -> int:
-        """
-        Incrémente le compteur d'échecs de refresh.
-        
-        Args:
-            user_id: ID de l'utilisateur
-        
-        Returns:
-            Nouveau nombre d'échecs
-        """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                UPDATE oauth_tokens
-                SET refresh_failures = refresh_failures + 1
-                WHERE user_id = ?
-                RETURNING refresh_failures
-                """,
-                (user_id,)
-            )
-            row = cursor.fetchone()
-            failures = row[0] if row else 0
-            
-            if failures >= 3:
-                # Marquer comme nécessitant réautorisation après 3 échecs
-                conn.execute(
-                    "UPDATE oauth_tokens SET needs_reauth = 1 WHERE user_id = ?",
-                    (user_id,)
-                )
+                # Log audit avec severity error pour alertes
                 self._log_audit(
                     conn=conn,
                     event_type="tokens_max_failures",
                     user_id=user_id,
-                    details={"failures": failures},
+                    details={"failures": failures, "token_type": token_type, "action": "needs_reauth"},
                     severity="error"
                 )
+                logger.error(f"🚨 Token {token_type} pour user {user_id} a échoué {failures}x - NEEDS_REAUTH activé!")
             
             return failures
     

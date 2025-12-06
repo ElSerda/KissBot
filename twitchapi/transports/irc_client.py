@@ -9,6 +9,7 @@ Client IRC Twitch complet:
 
 import asyncio
 import logging
+import time
 from typing import Optional
 
 from twitchAPI.twitch import Twitch
@@ -65,6 +66,15 @@ class IRCClient:
         # Keepalive task (prevent silent IRC disconnects)
         self._keepalive_task: Optional[asyncio.Task] = None
         
+        # Proactive PING tracking
+        self._ping_interval = 120  # Health check toutes les 2 minutes
+        self._last_twitch_ping_time: Optional[float] = None  # Dernier PING reçu de Twitch
+        
+        # Reconnection failure tracking
+        self._consecutive_disconnects = 0
+        self._max_disconnects_before_restart = 2  # Force Chat restart après 2 échecs (4 min max)
+        self._last_message_time: Optional[float] = None  # Track last received message
+        
         # Subscribe aux messages sortants
         self.bus.subscribe("chat.outbound", self._handle_outbound_message)
         
@@ -79,48 +89,24 @@ class IRCClient:
         LOGGER.info("🚀 Démarrage IRC Client...")
         
         try:
-            # Créer instance Chat avec le user token
-            self.chat = await Chat(self.twitch)
+            # Créer instance Chat avec le user token ET les channels initiaux
+            # CRITICAL: Passer initial_channel pour que pyTwitchAPI rejoigne
+            # automatiquement les channels après une reconnexion automatique.
+            # Sans ça, après reconnect, _join_target est vide et les channels
+            # ne sont jamais rejoints → le bot ne reçoit plus de messages !
+            # 
+            # no_message_reset_time=7 : Réduit le timeout de 10 min à 7 min.
+            # Twitch envoie PING toutes les ~5 min, notre health check est à 6 min.
+            # Donc 7 min laisse pyTwitchAPI réagir juste après nous si on échoue.
+            self.chat = await Chat(
+                self.twitch, 
+                initial_channel=self.channels,
+                no_message_reset_time=7  # 7 min au lieu de 10 min par défaut
+            )
             
-            # Monkey-patch pyTwitchAPI pour cacher VIP depuis USERSTATE
-            # pyTwitchAPI cache mod/sub mais ignore vip dans _handle_user_state
-            # → On wrappe le handler original pour extraire vip AVANT qu'il ne l'ignore
-            original_handle_user_state = self.chat._handle_user_state
-            
-            async def _patched_handle_user_state(parsed: dict):
-                # Extraire VIP depuis USERSTATE badges (envoyé par Twitch au JOIN)
-                channel = parsed['command']['channel'][1:]  # Remove '#'
-                
-                # VIP est dans badges dict, pas dans tags directs !
-                badges = parsed['tags'].get('badges') or {}
-                is_vip = badges.get('vip') is not None  # Si badge 'vip' existe → VIP=True
-                
-                # Cache VIP status (pyTwitchAPI ne le fait pas !)
-                old_vip = self._vip_status_cache.get(channel.lower(), False)
-                if is_vip != old_vip:
-                    self._vip_status_cache[channel.lower()] = is_vip
-                    LOGGER.info(f"✅ VIP detected via USERSTATE: #{channel} → VIP={is_vip}")
-                    
-                    # Re-calcul rate limit avec nouveau VIP status
-                    await self._update_channel_permissions(channel, log_change=True)
-                
-                # Appeler le handler original de pyTwitchAPI (cache mod/sub)
-                await original_handle_user_state(parsed)
-            
-            # Remplacer le handler USERSTATE
-            self.chat._handle_user_state = _patched_handle_user_state
-            LOGGER.info("✅ Monkey-patch USERSTATE installé pour détection VIP")
-            
-            # Monkey-patch pour logger les PING/PONG Twitch (debug keepalive)
-            original_handle_ping = self.chat._handle_ping
-            
-            async def _patched_handle_ping(parsed: dict):
-                # Log le PING de Twitch (envoyé toutes les ~5 min)
-                LOGGER.info(f"🏓 PING reçu de Twitch → PONG envoyé")
-                await original_handle_ping(parsed)
-            
-            self.chat._handle_ping = _patched_handle_ping
-            LOGGER.info("✅ Monkey-patch PING installé pour monitoring keepalive")
+            # Appliquer les monkey-patches (VIP detection, PING logging, reconnect verification)
+            await self._apply_monkey_patches()
+            LOGGER.info("✅ Tous les monkey-patches installés")
             
             # Register event handlers
             self.chat.register_event(ChatEvent.READY, self._on_ready)
@@ -168,17 +154,15 @@ class IRCClient:
     
     async def _on_ready(self, ready_event: EventData) -> None:
         """
-        Callback quand IRC est ready
-        → Rejoint tous les channels
-        """
-        LOGGER.debug("📡 IRC Ready, connexion aux channels...")
+        Callback quand IRC est ready (premier démarrage uniquement)
         
-        for channel in self.channels:
-            try:
-                await self.chat.join_room(channel)
-                LOGGER.debug(f"✅ Rejoint #{channel}")
-            except Exception as e:
-                LOGGER.error(f"❌ Erreur join #{channel}: {e}")
+        Note: Les channels sont automatiquement rejoints via initial_channel
+        passé à Chat(). Ce callback sert juste à logger le status.
+        Après une reconnexion automatique, ce callback n'est PAS rappelé
+        (was_ready=True dans pyTwitchAPI), mais les channels sont rejoints
+        automatiquement grâce à _join_target.
+        """
+        LOGGER.info("📡 IRC Ready - Channels seront rejoints automatiquement via initial_channel")
     
     async def _on_join(self, join_event: EventData) -> None:
         """Callback quand on rejoint un channel - Détecte les permissions"""
@@ -399,6 +383,181 @@ class IRCClient:
         """Retourne la liste des channels"""
         return self.channels.copy()
     
+    def is_in_channel(self, channel: str) -> bool:
+        """
+        Vérifie si le bot est actuellement dans un channel.
+        Utilise is_in_room() de pyTwitchAPI pour une vérification réelle.
+        
+        Args:
+            channel: Nom du channel (avec ou sans #)
+            
+        Returns:
+            True si le bot est dans le channel, False sinon
+        """
+        normalized = channel.lower().lstrip('#')
+        # Utiliser pyTwitchAPI au lieu de notre cache interne
+        if self.chat and self.chat.is_connected():
+            return self.chat.is_in_room(normalized)
+        return False
+    
+    async def verify_all_channels(self) -> tuple[list[str], list[str]]:
+        """
+        Vérifie que le bot est dans tous les channels attendus.
+        Utilise is_connected() et is_in_room() de pyTwitchAPI pour une vérification réelle.
+        Tente de rejoindre les channels manquants.
+        
+        Returns:
+            Tuple (channels_ok, channels_missing)
+        """
+        expected = {c.lower().lstrip('#') for c in self.channels}
+        
+        # ⚠️ VÉRIFICATION RÉELLE : utiliser pyTwitchAPI, pas notre cache interne
+        if not self.chat:
+            LOGGER.error("❌ verify_all_channels: chat non initialisé")
+            return ([], sorted(list(expected)))
+        
+        # Vérifier d'abord si la connexion WebSocket est vivante
+        if not self.chat.is_connected():
+            LOGGER.error("❌ verify_all_channels: connexion IRC fermée!")
+            # Invalider notre cache interne
+            self._joined_channels.clear()
+            return ([], sorted(list(expected)))
+        
+        # Vérifier chaque channel avec is_in_room() de pyTwitchAPI
+        ok = set()
+        missing = set()
+        for channel in expected:
+            if self.chat.is_in_room(channel):
+                ok.add(channel)
+            else:
+                missing.add(channel)
+        
+        # Synchroniser notre cache interne avec la réalité
+        self._joined_channels = ok.copy()
+        
+        if missing:
+            LOGGER.warning(f"🚨 Channels manquants (vérification pyTwitchAPI): {sorted(list(missing))}")
+            
+            # Tenter de rejoindre les channels manquants
+            if self._running:
+                for channel in missing:
+                    try:
+                        LOGGER.info(f"🔄 Tentative de rejoin #{channel}...")
+                        await self.chat.join_room(channel)
+                        await asyncio.sleep(0.5)  # Rate limit join
+                        # Revérifier après join
+                        if self.chat.is_in_room(channel):
+                            ok.add(channel)
+                            missing.discard(channel)
+                            self._joined_channels.add(channel)
+                            LOGGER.info(f"✅ Rejoin #{channel} confirmé")
+                        else:
+                            LOGGER.warning(f"⚠️ Rejoin #{channel} envoyé mais pas confirmé")
+                    except Exception as e:
+                        LOGGER.error(f"❌ Échec rejoin #{channel}: {e}")
+        else:
+            LOGGER.info(f"✅ Tous les channels OK (vérification pyTwitchAPI): {sorted(list(ok))}")
+        
+        return (sorted(list(ok)), sorted(list(missing)))
+    
+    async def add_channel(self, channel: str) -> bool:
+        """
+        Ajoute dynamiquement un channel à la liste et rejoint le chat.
+        
+        Args:
+            channel: Nom du channel (avec ou sans #)
+            
+        Returns:
+            True si le join a réussi, False sinon
+        """
+        normalized = channel.lower().lstrip('#')
+        
+        # Vérifier si déjà dans la liste
+        if normalized in {c.lower() for c in self.channels}:
+            LOGGER.warning(f"⚠️ Channel #{normalized} déjà dans la liste")
+            return self.is_in_channel(normalized)
+        
+        if not self.chat or not self._running:
+            LOGGER.error(f"❌ IRC non prêt, impossible d'ajouter #{normalized}")
+            return False
+        
+        try:
+            LOGGER.info(f"➕ Ajout dynamique du channel #{normalized}...")
+            
+            # Ajouter à la liste interne
+            self.channels.append(normalized)
+            
+            # Rejoindre le channel
+            await self.chat.join_room(normalized)
+            
+            # Attendre le join event (max 5s)
+            deadline = time.time() + 5.0
+            while time.time() < deadline:
+                if self.is_in_channel(normalized):
+                    LOGGER.info(f"✅ Channel #{normalized} ajouté et rejoint")
+                    return True
+                await asyncio.sleep(0.3)
+            
+            LOGGER.warning(f"⚠️ Channel #{normalized} ajouté mais join non confirmé")
+            return False
+            
+        except Exception as e:
+            LOGGER.error(f"❌ Erreur ajout #{normalized}: {e}")
+            # Rollback
+            if normalized in self.channels:
+                self.channels.remove(normalized)
+            return False
+    
+    async def remove_channel(self, channel: str) -> bool:
+        """
+        Retire dynamiquement un channel de la liste et quitte le chat.
+        
+        Args:
+            channel: Nom du channel (avec ou sans #)
+            
+        Returns:
+            True si le leave a réussi, False sinon
+        """
+        normalized = channel.lower().lstrip('#')
+        
+        # Trouver le channel dans la liste (case-insensitive)
+        found = None
+        for c in self.channels:
+            if c.lower() == normalized:
+                found = c
+                break
+        
+        if not found:
+            LOGGER.warning(f"⚠️ Channel #{normalized} pas dans la liste")
+            return True  # Déjà absent = succès
+        
+        if not self.chat or not self._running:
+            LOGGER.error(f"❌ IRC non prêt, impossible de retirer #{normalized}")
+            return False
+        
+        try:
+            LOGGER.info(f"➖ Retrait dynamique du channel #{normalized}...")
+            
+            # Quitter le channel
+            await self.chat.leave_room(normalized)
+            
+            # Retirer de la liste
+            self.channels.remove(found)
+            
+            # Nettoyer les caches
+            self._joined_channels.discard(normalized)
+            if normalized in self._channel_permissions:
+                del self._channel_permissions[normalized]
+            if normalized in self._vip_status_cache:
+                del self._vip_status_cache[normalized]
+            
+            LOGGER.info(f"✅ Channel #{normalized} retiré")
+            return True
+            
+        except Exception as e:
+            LOGGER.error(f"❌ Erreur retrait #{normalized}: {e}")
+            return False
+    
     async def get_permissions(self, channel: str) -> dict:
         """
         Récupère les permissions du bot sur un channel
@@ -525,28 +684,254 @@ class IRCClient:
     
     async def _keepalive_loop(self):
         """
-        Keepalive IRC : health check passif toutes les 4 minutes.
+        Keepalive IRC basé sur l'observation des PING Twitch.
         
-        Note: pyTwitchAPI v4 gère le keepalive WebSocket en interne.
-        On fait juste un health check pour détecter les déconnexions silencieuses.
+        Stratégie:
+        1. Twitch envoie PING toutes les ~5 min → on track le dernier reçu
+        2. Si pas de PING depuis > 6 min → connexion probablement morte
+        3. Health check toutes les 2 min (rapide)
+        4. Si problème détecté → tente rejoin immédiat
+        5. Si échec persistant → force restart Chat (dernier recours)
+        
+        Temps de détection max: ~2 minutes (intervalle de check)
         """
-        LOGGER.info("💓 IRC Keepalive démarré (health check toutes les 4 min)")
+        LOGGER.info(f"💓 IRC Keepalive démarré (health check toutes les {self._ping_interval}s)")
         
         while self._running:
             try:
-                await asyncio.sleep(240)  # 4 minutes
+                await asyncio.sleep(self._ping_interval)
                 
-                if self.chat and self._running:
-                    # Health check passif - vérifier que le chat est connecté
-                    if hasattr(self.chat, 'is_connected') and callable(self.chat.is_connected):
-                        if not self.chat.is_connected():
-                            LOGGER.warning("💓 IRC disconnected detected - pyTwitchAPI should auto-reconnect")
-                    else:
-                        LOGGER.debug("💓 IRC health check OK")
+                if not self.chat or not self._running:
+                    continue
+                
+                # ═══════════════════════════════════════════════════════════
+                # Health check complet
+                # ═══════════════════════════════════════════════════════════
+                is_healthy = await self._check_connection_health()
+                
+                if is_healthy:
+                    # Connexion OK
+                    self._consecutive_disconnects = 0
+                    LOGGER.debug("💓 Health check OK - connexion saine")
+                else:
+                    # Problème détecté
+                    self._consecutive_disconnects += 1
+                    LOGGER.warning(f"⚠️ Health check FAILED ({self._consecutive_disconnects}/{self._max_disconnects_before_restart})")
+                    
+                    # ═══════════════════════════════════════════════════════════
+                    # STRATÉGIE DE RECONNEXION PROGRESSIVE
+                    # ═══════════════════════════════════════════════════════════
+                    # 1er échec: Appeler _handle_base_reconnect() de pyTwitchAPI
+                    #            C'est la VRAIE reconnexion native, pas un hack
+                    # 2+ échecs: Force restart (dernier recours)
+                    # ═══════════════════════════════════════════════════════════
+                    
+                    if self._consecutive_disconnects == 1:
+                        # Première tentative: utiliser la reconnexion NATIVE de pyTwitchAPI
+                        LOGGER.info("🔄 Appel de _handle_base_reconnect() (reconnexion native pyTwitchAPI)...")
+                        try:
+                            await self.chat._handle_base_reconnect()
+                            LOGGER.info("✅ Reconnexion native réussie!")
+                            # Vérifier qu'on est bien dans les channels
+                            await asyncio.sleep(2)  # Laisser le temps au rejoin
+                            ok, missing = await self.verify_all_channels()
+                            if not missing:
+                                LOGGER.info(f"✅ Channels OK après reconnexion: {ok}")
+                                self._consecutive_disconnects = 0
+                            else:
+                                LOGGER.warning(f"⚠️ Channels manquants après reconnexion: {missing}")
+                        except Exception as e:
+                            LOGGER.error(f"❌ Échec reconnexion native: {e}")
+                    
+                    # Force restart si échecs persistants
+                    elif self._consecutive_disconnects >= self._max_disconnects_before_restart:
+                        LOGGER.error("🚨 Health checks échoués - FORCE RESTART Chat (dernier recours)")
+                        await self._force_restart_chat()
+                        self._consecutive_disconnects = 0
                         
             except asyncio.CancelledError:
                 LOGGER.info("🛑 IRC Keepalive arrêté")
                 break
             except Exception as e:
                 LOGGER.error(f"❌ Erreur keepalive loop: {e}")
-                await asyncio.sleep(60)  # Retry dans 1 min si erreur
+                await asyncio.sleep(30)  # Retry rapide si erreur
+    
+    async def _check_connection_health(self) -> bool:
+        """
+        Vérifie la santé de la connexion IRC.
+        
+        Utilise plusieurs indicateurs:
+        1. is_connected() de pyTwitchAPI
+        2. Dernier PING reçu de Twitch (doit être < 6 min)
+        3. Channels effectivement rejoints
+        
+        Returns:
+            True si connexion saine, False sinon
+        """
+        if not self.chat:
+            return False
+        
+        # 1. Vérifier is_connected()
+        is_connected = True
+        if hasattr(self.chat, 'is_connected') and callable(self.chat.is_connected):
+            is_connected = self.chat.is_connected()
+        
+        if not is_connected:
+            LOGGER.warning("⚠️ is_connected() = False")
+            return False
+        
+        # 2. Vérifier le dernier PING Twitch (doit être < 6 min = 360s)
+        # Twitch envoie PING toutes les ~5 min
+        if self._last_twitch_ping_time is not None:
+            time_since_ping = time.time() - self._last_twitch_ping_time
+            if time_since_ping > 360:  # > 6 min sans PING = problème
+                LOGGER.warning(f"⚠️ Pas de PING Twitch depuis {time_since_ping:.0f}s (> 6 min)")
+                return False
+            else:
+                LOGGER.debug(f"✅ Dernier PING Twitch il y a {time_since_ping:.0f}s")
+        
+        # 2b. Vérifier dernier message reçu (indicateur supplémentaire)
+        # Si pas de message depuis 10 min ET pas de PING récent → suspicieux
+        if self._last_message_time is not None:
+            time_since_msg = time.time() - self._last_message_time
+            if time_since_msg > 600 and (self._last_twitch_ping_time is None or time_since_ping > 300):
+                LOGGER.warning(f"⚠️ Pas de message depuis {time_since_msg:.0f}s ET PING absent/ancien")
+                # Ne pas retourner False ici, juste un warning (canal peut être silencieux)
+        
+        # 3. Vérifier qu'on est dans les channels attendus (via pyTwitchAPI)
+        expected = {c.lower().lstrip('#') for c in self.channels}
+        actually_joined = set()
+        for channel in expected:
+            if self.chat.is_in_room(channel):
+                actually_joined.add(channel)
+        
+        if not expected.issubset(actually_joined):
+            missing = expected - actually_joined
+            LOGGER.warning(f"⚠️ Channels manquants (pyTwitchAPI check): {missing}")
+            # Synchroniser notre cache avec la réalité
+            self._joined_channels = actually_joined
+            return False
+        
+        # Log health OK en INFO pour visibilité
+        LOGGER.info(f"💓 Health check OK - connected, PING OK, {len(actually_joined)} channels")
+        return True
+    
+    async def _force_restart_chat(self) -> None:
+        """
+        Force la destruction et recréation de l'instance Chat.
+        À utiliser quand pyTwitchAPI a abandonné les reconnexions.
+        """
+        LOGGER.warning("🔄 Force restart Chat - destruction de l'instance...")
+        
+        try:
+            # Sauvegarder les références
+            old_chat = self.chat
+            
+            # Stopper l'ancien chat
+            if old_chat:
+                try:
+                    old_chat.stop()
+                except Exception as e:
+                    LOGGER.warning(f"⚠️ Erreur lors du stop de l'ancien Chat: {e}")
+            
+            # Reset state
+            self._joined_channels.clear()
+            self._channel_permissions.clear()
+            self.chat = None
+            
+            # Attendre un peu avant de recréer
+            await asyncio.sleep(2)
+            
+            # Recréer le Chat avec les mêmes paramètres
+            LOGGER.info("🚀 Création d'une nouvelle instance Chat...")
+            self.chat = await Chat(
+                self.twitch, 
+                initial_channel=self.channels,
+                no_message_reset_time=7  # 7 min au lieu de 10 min par défaut
+            )
+            
+            # Réappliquer les monkey-patches (copier depuis start())
+            await self._apply_monkey_patches()
+            
+            # Re-register event handlers
+            self.chat.register_event(ChatEvent.READY, self._on_ready)
+            self.chat.register_event(ChatEvent.MESSAGE, self._on_message)
+            self.chat.register_event(ChatEvent.JOIN, self._on_join)
+            self.chat.register_event(ChatEvent.LEFT, self._on_left)
+            self.chat.register_event(ChatEvent.ROOM_STATE_CHANGE, self._on_room_state_change)
+            self.chat.register_event(ChatEvent.NOTICE, self._on_notice)
+            
+            # Démarrer le nouveau chat
+            self.chat.start()
+            
+            LOGGER.info("✅ Force restart Chat terminé - en attente des joins...")
+            
+            # Attendre et vérifier les joins
+            await asyncio.sleep(10)
+            ok, missing = await self.verify_all_channels()
+            
+            if not missing:
+                LOGGER.info("✅ Force restart réussi - tous les channels rejoints")
+            else:
+                LOGGER.error(f"⚠️ Force restart: channels encore manquants: {missing}")
+                
+        except Exception as e:
+            LOGGER.error(f"❌ Erreur durant force restart Chat: {e}", exc_info=True)
+    
+    async def _apply_monkey_patches(self) -> None:
+        """Applique les monkey-patches sur l'instance Chat."""
+        if not self.chat:
+            return
+        
+        # Patch USERSTATE pour VIP
+        original_handle_user_state = self.chat._handle_user_state
+        
+        async def _patched_handle_user_state(parsed: dict):
+            channel = parsed['command']['channel'][1:]
+            badges = parsed['tags'].get('badges') or {}
+            is_vip = badges.get('vip') is not None
+            
+            old_vip = self._vip_status_cache.get(channel.lower(), False)
+            if is_vip != old_vip:
+                self._vip_status_cache[channel.lower()] = is_vip
+                LOGGER.info(f"✅ VIP detected via USERSTATE: #{channel} → VIP={is_vip}")
+                await self._update_channel_permissions(channel, log_change=True)
+            
+            await original_handle_user_state(parsed)
+        
+        self.chat._handle_user_state = _patched_handle_user_state
+        
+        # Patch PING (Twitch → nous) - Track le timestamp pour health check
+        original_handle_ping = self.chat._handle_ping
+        
+        async def _patched_handle_ping(parsed: dict):
+            # Tracker le dernier PING reçu de Twitch
+            self._last_twitch_ping_time = time.time()
+            LOGGER.info(f"🏓 PING reçu de Twitch → PONG envoyé")
+            await original_handle_ping(parsed)
+        
+        self.chat._handle_ping = _patched_handle_ping
+        
+        # Patch reconnect verifier
+        try:
+            original_base_reconnect = getattr(self.chat, '_handle_base_reconnect', None)
+            
+            if original_base_reconnect is not None:
+                async def _patched_base_reconnect(*args, **kwargs):
+                    LOGGER.warning('🔁 pyTwitchAPI base reconnect detected - verifying channel joins')
+                    await original_base_reconnect(*args, **kwargs)
+                    
+                    deadline = time.time() + 12.0
+                    expected = set([c.lower().lstrip('#') for c in self.channels])
+                    while time.time() < deadline:
+                        current = set([c.lower() for c in self._joined_channels])
+                        if expected.issubset(current):
+                            LOGGER.info('✅ Rejoin confirmed after reconnect (joined=%s)', sorted(list(current)))
+                            return
+                        await asyncio.sleep(0.5)
+                    
+                    LOGGER.error('🚨 Reconnect completed but channels not rejoined within timeout.')
+                
+                self.chat._handle_base_reconnect = _patched_base_reconnect
+        except Exception as e:
+            LOGGER.error(f'❌ Failed to install reconnect verifier: {e}')

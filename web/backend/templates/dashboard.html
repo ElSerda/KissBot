@@ -3,7 +3,7 @@
 {% block title %}Dashboard - KissBot{% endblock %}
 
 {% block content %}
-<div x-data="dashboard()" x-init="init()">
+<!-- outer Alpine mount moved to the inner content; data-scopes attribute now used -->
     
     <!-- Header -->
     <div class="flex items-center justify-between mb-8">
@@ -11,7 +11,7 @@
             <h1 class="text-2xl font-bold">Dashboard</h1>
             <p class="text-gray-400">Bienvenue, {{ user.display_name }} 👋</p>
         </div>
-        <div class="flex items-center space-x-2">
+        <div class="flex items-center space-x-2"> 
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm 
                          {{ 'bg-green-900 text-green-300' if bot_active else 'bg-red-900 text-red-300' }}">
                 <span class="w-2 h-2 rounded-full mr-2 
@@ -20,12 +20,13 @@
             </span>
         </div>
     </div>
+<div id="dashboard-root" data-scopes='{{ scopes | tojson | safe if scopes else "[]" }}' data-channel='{{ user.login }}'>
     
     <!-- Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div class="bg-gray-800 rounded-lg p-4">
             <div class="text-gray-400 text-sm">Banwords actifs</div>
-            <div class="text-2xl font-bold" x-text="banwords.length">0</div>
+            <div class="text-2xl font-bold" id="banwords-count">0</div>
         </div>
         <div class="bg-gray-800 rounded-lg p-4">
             <div class="text-gray-400 text-sm">Messages traités (24h)</div>
@@ -44,37 +45,57 @@
             Banwords
         </h2>
         
-        <!-- Add form -->
-        <form @submit.prevent="addBanword()" class="flex space-x-2 mb-4">
-            <input type="text" 
-                   x-model="newWord"
+        <!-- Add form (managed by vanilla JS) -->
+        <div class="flex space-x-2 mb-4">
+            <input id="banword-input" type="text"
                    placeholder="Ajouter un mot à bannir..."
-                   class="flex-1 bg-gray-700 border border-gray-600 rounded px-4 py-2 
-                          focus:outline-none focus:border-twitch">
-            <button type="submit" 
-                    class="bg-twitch hover:bg-twitch-dark px-4 py-2 rounded font-semibold transition-colors"
-                    :disabled="!newWord.trim()">
+                   class="flex-1 bg-gray-700 border border-gray-600 rounded px-4 py-2 focus:outline-none focus:border-twitch">
+            <button id="banword-add" type="button"
+                    class="bg-twitch hover:bg-twitch-dark px-4 py-2 rounded font-semibold transition-colors">
                 Ajouter
             </button>
-        </form>
+        </div>
+
+        <!-- List (rendered by vanilla JS) -->
+        <div id="banwords-list" class="space-y-2">
+            <p id="banwords-empty" class="text-gray-500 text-center py-4" style="display:none;">Aucun banword configuré. Ajoutez-en un ci-dessus.</p>
+        </div>
+    </div>
+    
+    <!-- Settings Section -->
+    <div class="bg-gray-800 rounded-lg p-6 mt-6">
+        <h2 class="text-lg font-semibold mb-4 flex items-center">
+            <span class="mr-2">⚙️</span>
+            Paramètres
+        </h2>
         
-        <!-- List -->
-        <div class="space-y-2">
-            <template x-if="banwords.length === 0">
-                <p class="text-gray-500 text-center py-4">
-                    Aucun banword configuré. Ajoutez-en un ci-dessus.
-                </p>
-            </template>
-            
-            <template x-for="word in banwords" :key="word">
-                <div class="flex items-center justify-between bg-gray-700 rounded px-4 py-2">
-                    <span x-text="word"></span>
-                    <button @click="removeBanword(word)" 
-                            class="text-red-400 hover:text-red-300 text-sm">
-                        Supprimer
-                    </button>
+        <!-- Scopes info -->
+        <div class="mb-4">
+            <div class="text-gray-400 text-sm mb-2">Permissions actuelles</div>
+            <div class="flex flex-wrap gap-2">
+                <div id="scopes-list" class="flex flex-wrap gap-2 w-full mb-2 text-sm text-gray-300">
+                    {% if scopes %}
+                        {% for s in scopes %}
+                            <span class="inline-flex items-center px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">{{ s }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-gray-500 text-sm">Aucune permission détectée</span>
+                    {% endif %}
                 </div>
-            </template>
+            </div>
+        </div>
+        
+        <!-- Update scopes button -->
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-white font-medium">Mettre à jour les permissions</div>
+                <div class="text-gray-400 text-sm">Ré-autorisez le bot pour obtenir les dernières permissions</div>
+            </div>
+            <a href="/auth/twitch?force=true" 
+               class="bg-twitch hover:bg-twitch-dark px-4 py-2 rounded font-semibold transition-colors inline-flex items-center">
+                <span class="mr-2">🔄</span>
+                Update Scopes
+            </a>
         </div>
     </div>
     
@@ -90,65 +111,113 @@
 </div>
 
 <script>
-function dashboard() {
-    return {
-        banwords: [],
-        newWord: '',
-        channel: '{{ user.login }}',
-        
-        async init() {
-            await this.loadBanwords();
-        },
-        
-        async loadBanwords() {
-            try {
-                const res = await fetch(`/api/banwords/${this.channel}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    this.banwords = data.banwords || [];
-                }
-            } catch (e) {
-                console.error('Failed to load banwords:', e);
-            }
-        },
-        
-        async addBanword() {
-            const word = this.newWord.trim().toLowerCase();
-            if (!word || word.length < 3) return;
-            
-            try {
-                const res = await fetch(`/api/banwords/${this.channel}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ word: word })
-                });
-                if (res.ok) {
-                    this.banwords.push(word);
-                    this.banwords.sort();
-                    this.newWord = '';
-                } else if (res.status === 429) {
-                    alert('Trop de requêtes. Réessaie dans une minute.');
-                }
-            } catch (e) {
-                console.error('Failed to add banword:', e);
-            }
-        },
-        
-        async removeBanword(word) {
-            try {
-                const res = await fetch(`/api/banwords/${this.channel}/${encodeURIComponent(word)}`, {
-                    method: 'DELETE'
-                });
-                if (res.ok) {
-                    this.banwords = this.banwords.filter(w => w !== word);
-                }
-            } catch (e) {
-                console.error('Failed to remove banword:', e);
-            }
-        }
+// Vanilla JS frontend for banwords + scopes (no eval, CSP-safe)
+document.addEventListener('DOMContentLoaded', function () {
+    const root = document.getElementById('dashboard-root');
+    const channel = root.dataset.channel;
+    const scopesListEl = document.getElementById('scopes-list');
+
+    // Banwords elements
+    const banwordsList = document.getElementById('banwords-list');
+    const banwordsEmpty = document.getElementById('banwords-empty');
+    const input = document.getElementById('banword-input');
+    const addBtn = document.getElementById('banword-add');
+
+    async function loadBanwords() {
+        try {
+            const res = await fetch(`/api/banwords/${channel}`, { credentials: 'include' });
+            if (!res.ok) return;
+            const data = await res.json();
+            renderBanwords(data.banwords || []);
+        } catch (e) { console.error('Failed to load banwords', e); }
     }
-}
+
+    function renderBanwords(list) {
+        banwordsList.querySelectorAll('.banword-row').forEach(n => n.remove());
+        const countEl = document.getElementById('banwords-count');
+        if (countEl) countEl.textContent = String(list.length || 0);
+        if (!list || list.length === 0) {
+            banwordsEmpty.style.display = '';
+            return;
+        }
+        banwordsEmpty.style.display = 'none';
+        list.forEach(word => {
+            const row = document.createElement('div');
+            row.className = 'banword-row flex items-center justify-between bg-gray-700 rounded px-4 py-2';
+            const span = document.createElement('span');
+            span.textContent = word;
+            const btn = document.createElement('button');
+            btn.className = 'text-red-400 hover:text-red-300 text-sm';
+            btn.textContent = 'Supprimer';
+            btn.addEventListener('click', async () => {
+                try {
+                    const r = await fetch(`/api/banwords/${channel}/${encodeURIComponent(word)}`, { method: 'DELETE', credentials: 'include' });
+                    if (r.ok) {
+                        // reload list
+                        await loadBanwords();
+                    }
+                } catch (e) { console.error('Failed to remove banword', e); }
+            });
+            row.appendChild(span);
+            row.appendChild(btn);
+            banwordsList.appendChild(row);
+        });
+    }
+
+    addBtn.addEventListener('click', async () => {
+        const word = input.value.trim().toLowerCase();
+        if (!word || word.length < 3) return alert('Mot trop court (min 3 caractères)');
+        try {
+            const r = await fetch(`/api/banwords/${channel}`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ word })
+            });
+            const body = await r.json().catch(()=>({detail:'Erreur réseau'}));
+            if (r.ok) {
+                alert(body?.message || '✅ Banword ajouté!');
+                await loadBanwords();
+                input.value = '';
+            } else {
+                // Affiche le détail ou le message d'erreur
+                const msg = body?.message || body?.detail || JSON.stringify(body) || 'Erreur inconnue';
+                alert('❌ ' + msg);
+            }
+        } catch (e) { 
+            console.error('Failed to add banword', e);
+            alert('❌ Erreur réseau: ' + e.message);
+        }
+    });
+
+    // Fetch scopes from protected endpoint to ensure freshest view
+    async function loadScopes() {
+        try {
+            const res = await fetch('/api/me/scopes', { credentials: 'include' });
+            if (!res.ok) return;
+            const data = await res.json();
+            // Replace scopes-list content
+            scopesListEl.innerHTML = '';
+            if (!data.scopes || data.scopes.length === 0) {
+                scopesListEl.textContent = '';
+                const span = document.createElement('span');
+                span.className = 'text-gray-500 text-sm';
+                span.textContent = 'Aucune permission détectée';
+                scopesListEl.appendChild(span);
+                return;
+            }
+            data.scopes.forEach(s => {
+                const span = document.createElement('span');
+                span.className = 'inline-flex items-center px-2 py-1 rounded text-xs bg-gray-700 text-gray-300 mr-2 mb-2';
+                span.textContent = s;
+                scopesListEl.appendChild(span);
+            });
+        } catch (e) { console.error('Failed to load scopes', e); }
+    }
+
+    // Init
+    loadBanwords();
+    loadScopes();
+});
 </script>
 {% endblock %}

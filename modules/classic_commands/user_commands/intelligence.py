@@ -106,12 +106,12 @@ Réponds en te basant sur ces informations factuelles."""
         )
         
         if llm_response:
+            # Tronquer le contenu LLM à 450 chars (sécurité IRC/Twitch)
+            if len(llm_response) > 450:
+                llm_response = llm_response[:447] + "..."
+            
             # [ASK] prefix pour maximiser l'espace (vs @username qui prend plus de chars)
             response_text = f"[ASK] {llm_response}"
-            
-            # Tronquer si trop long (Twitch limit 500 chars)
-            if len(response_text) > 500:
-                response_text = response_text[:497] + "..."
             
             await handler.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,

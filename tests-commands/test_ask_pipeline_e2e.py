@@ -62,11 +62,11 @@ async def test_pipeline_with_mock_llm(question: str = "correspondance ADS CFT"):
     results = PipelineTestResults()
     
     # ═══════════════════════════════════════════════════════════════════
-    # STEP 1: Import du handler depuis message_handler.py
+    # STEP 1: Import du handler depuis intelligence.py (corrigé)
     # ═══════════════════════════════════════════════════════════════════
     try:
-        from modules.classic_commands.user_commands.intelligence_v2 import handle_ask
-        results.log("Import handle_ask", "OK", "modules.classic_commands.user_commands.intelligence_v2")
+        from modules.classic_commands.user_commands.intelligence import handle_ask
+        results.log("Import handle_ask", "OK", "modules.classic_commands.user_commands.intelligence")
     except ImportError as e:
         results.log("Import handle_ask", "FAIL", str(e))
         return results
@@ -75,13 +75,14 @@ async def test_pipeline_with_mock_llm(question: str = "correspondance ADS CFT"):
     # STEP 2: Setup des mocks réalistes
     # ═══════════════════════════════════════════════════════════════════
     
-    # Réponse LLM simulée (longueur réaliste)
+    # Réponse LLM simulée (longueur LONGUE pour tester la truncation)
+    # Simuler ce que CloudSynapse devrait retourner avec max_tokens=190
     mock_llm_response = (
         "La correspondance AdS/CFT est une conjecture fondamentale en physique théorique "
         "qui établit une équivalence entre une théorie de gravité quantique dans un espace "
         "anti-de Sitter (AdS) et une théorie conforme des champs (CFT) vivant sur la frontière "
         "de cet espace. Cette dualité holographique, proposée par Juan Maldacena en 1997, "
-        "permet d'étudier des systèmes fortement couplés en utilisant des méthodes gravitationnelles."
+        "permet d'étudier des systèmes fortement couplés."
     )
     
     print(f"\n📝 Réponse LLM simulée ({len(mock_llm_response)} chars):")
@@ -94,8 +95,28 @@ async def test_pipeline_with_mock_llm(question: str = "correspondance ADS CFT"):
             self.published_messages = []
             self.bus.publish = self._capture_publish
             self.config = {'wikipedia': {'lang': 'fr'}}
+            
+            # Mock llm_handler.ask() pour appeler process_llm_request (vrai pipeline)
             self.llm_handler = MagicMock()
-            self.llm_handler.ask = AsyncMock(return_value=mock_llm_response)
+            self.llm_handler.ask = self._mock_ask
+        
+        async def _mock_ask(self, question, user_name, channel, game_cache=None, channel_id=""):
+            """Simule llm_handler.ask() qui appelle process_llm_request"""
+            from modules.intelligence.core import process_llm_request
+            
+            # Mock du LLM handler interne pour process_llm_request
+            mock_inner_handler = MagicMock()
+            mock_inner_handler.process_stimulus = AsyncMock(return_value=mock_llm_response)
+            
+            # Appeler le VRAI pipeline
+            return await process_llm_request(
+                llm_handler=mock_inner_handler,
+                prompt=question,
+                context="ask",
+                user_name=user_name,
+                game_cache=game_cache,
+                channel_id=channel_id
+            )
         
         async def _capture_publish(self, topic, message):
             self.published_messages.append((topic, message))

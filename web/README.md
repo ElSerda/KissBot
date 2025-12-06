@@ -1,61 +1,34 @@
 # KissBot Web Dashboard
 
-Interface web pour la gestion de KissBot.
+> ⚠️ **Ce dossier n'est pas inclus dans le repo public.**
+> 
+> Le dashboard web est déployé séparément sur un VPS privé.
 
-## Architecture
+## Pour les contributeurs
 
-```
-web/
-├── backend/          # FastAPI (Python)
-│   ├── main.py       # Entry point
-│   ├── auth/         # OAuth Twitch
-│   ├── api/          # Routes API
-│   └── requirements.txt
-│
-├── frontend/         # SvelteKit ou Next.js
-│   ├── src/
-│   ├── package.json
-│   └── ...
-│
-└── README.md
-```
+Si vous souhaitez développer votre propre dashboard pour KissBot, voici l'architecture attendue :
 
-## Fonctionnalités prévues
+### API Endpoints
 
-### Phase 1 - OAuth Broadcaster
-- [ ] Login Twitch OAuth (broadcaster)
-- [ ] Stockage tokens chiffrés dans kissbot.db
-- [ ] Page "Mon Bot" avec statut connexion
+Le bot expose les données suivantes (via `kissbot.db`) :
 
-### Phase 2 - Dashboard
-- [ ] Gestion banwords (!kbbanword via UI)
-- [ ] Liste des commandes actives
-- [ ] Logs en temps réel (WebSocket)
+- **Users** : `users` table (twitch_user_id, twitch_login, display_name)
+- **Tokens** : `oauth_tokens` table (chiffrés avec `.kissbot.key`)
+- **Banwords** : `banwords` table (channel_id, word)
+- **Config** : `config` table (key/value)
 
-### Phase 3 - Configuration
-- [ ] Activer/désactiver modules par channel
-- [ ] Custom commands (quand implémenté)
-- [ ] Personnalité LLM par channel
+### Authentification
 
-## Scopes OAuth requis
+- OAuth 2.0 Twitch avec les scopes définis dans `config.yaml`
+- Tokens stockés chiffrés en BDD (AES-256-GCM)
+- Session cookie simple pour le frontend
 
-```
-# Modération
-moderator:manage:banned_users      # Ban/unban users
-moderator:manage:blocked_terms     # Blocked terms
-moderator:manage:chat_messages     # Delete messages
-moderator:read:chatters            # List viewers
+### Stack suggérée
 
-# Channel
-channel:read:subscriptions         # Read subs
-channel:manage:broadcast           # Title/category
-channel:read:redemptions           # Channel points
+- **Backend** : FastAPI + Jinja2 (ou autre)
+- **Frontend** : Tailwind CSS + Vanilla JS (CSP-safe)
+- **Auth** : OAuth Twitch → stockage tokens chiffrés
 
-# Chat
-chat:read                          # Read chat
-chat:edit                          # Send messages
-```
+## Contact
 
-## TODO - Implémentation
-
-Voir `TODO_WEB.md` pour le détail.
+Pour accès au dashboard privé, contactez le mainteneur du projet.

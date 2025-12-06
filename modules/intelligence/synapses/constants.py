@@ -17,8 +17,8 @@ ASK_PREFIX = "[ASK] "           # Préfixe des réponses !ask
 ASK_PREFIX_LEN = 6              # len("[ASK] ")
 ASK_TARGET_CHARS = 419          # Content max (500 - 6 - 15% marge)
 ASK_PROMPT_RANGE = "350-420"    # Guidage LLM dans prompt système
-ASK_MAX_TOKENS_CLOUD = 450      # Tokens OpenAI (fallback)
-ASK_MAX_TOKENS_LOCAL = 200      # Tokens Mistral local
+ASK_MAX_TOKENS_CLOUD = 190      # Tokens OpenAI (~400 chars @ 2.1 ratio, marge sécurité)
+ASK_MAX_TOKENS_LOCAL = 120      # Tokens Mistral local (~250 chars)
 
 # ═══════════════════════════════════════════════════════════════════
 # 💬 MENTIONS - Réponses courtes/fun

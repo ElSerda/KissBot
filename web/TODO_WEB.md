@@ -34,11 +34,22 @@
 ## Phase 3 : À faire
 
 ### 3.1 Tests
-- [ ] Tester le flow OAuth complet
-- [ ] Vérifier stockage tokens en BDD
-- [ ] Tester API banwords depuis dashboard
+- [x] Tester le flow OAuth complet
+- [x] Vérifier stockage tokens en BDD
+- [x] Tester API banwords depuis dashboard
 
-### 3.2 Production
-- [ ] Configuration HTTPS
-- [ ] Variables d'environnement production
-- [ ] Reverse proxy Nginx
+### 3.2 Production ✅
+- [x] Configuration HTTPS
+- [x] Variables d'environnement production
+- [x] Reverse proxy Nginx
+- [x] Correction config nginx pour transmission body POST
+
+### 3.3 Améliorations futures
+- [ ] **Statut bot dynamique** : Détecter si le bot (main.py/supervisor) tourne réellement
+  - Option 1 : Vérifier PID dans `pids/*.pid` ou `kissbot.pid`
+  - Option 2 : Health check endpoint exposé par le bot
+  - Option 3 : Vérifier connexion IRC/EventSub active
+  - Mettre à jour `bot_active` dans `api/router.py` (actuellement hardcodé à `True`)
+- [ ] Stats temps réel (messages traités, bans auto)
+- [ ] Gestion des commandes custom depuis le dashboard
+- [ ] Logs du bot consultables via l'interface

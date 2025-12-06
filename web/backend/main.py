@@ -21,6 +21,7 @@ from slowapi.errors import RateLimitExceeded
 
 from auth.router import router as auth_router
 from api.router import router as api_router
+from config import get_settings
 
 # Logging
 logging.basicConfig(
@@ -159,10 +160,39 @@ async def dashboard(request: Request):
         return RedirectResponse(url="/")
     
     user = _parse_session(session)
+    
+    # Récupérer les scopes depuis la DB
+    scopes = []
+    try:
+        import json
+        from dependencies import get_database
+        
+        db = get_database()
+        
+        # Chercher l'utilisateur
+        db_user = db.get_user(user["id"])
+        if db_user:
+            tokens = db.get_tokens(user_id=db_user['id'], token_type='broadcaster')
+            if tokens and 'scopes' in tokens:
+                raw_scopes = tokens['scopes']
+                # Scopes peut être une string JSON ou une liste
+                if isinstance(raw_scopes, str):
+                    try:
+                        scopes = json.loads(raw_scopes)
+                    except json.JSONDecodeError:
+                        scopes = raw_scopes.split() if raw_scopes else []
+                elif isinstance(raw_scopes, list):
+                    scopes = raw_scopes
+                else:
+                    scopes = []
+    except Exception as e:
+        logger.warning(f"⚠️ Could not load scopes: {e}")
+    
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "user": user,
         "bot_active": True,  # TODO: Check real status
+        "scopes": scopes,
     })
 
 
@@ -175,7 +205,10 @@ async def health():
 def _parse_session(session: str) -> dict:
     """Parse session cookie into user dict."""
     try:
-        parts = session.split(":")
+        from urllib.parse import unquote
+        # Décoder l'URL encoding
+        decoded = unquote(session)
+        parts = decoded.split(":")
         return {
             "id": parts[0],
             "login": parts[1],

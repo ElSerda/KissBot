@@ -1011,9 +1011,14 @@ async def main():
     # ═══════════════════════════════════════════════════════════════════════
     # 💓 Register and Start Heartbeat for Monitor
     # ═══════════════════════════════════════════════════════════════════════
-    await monitor_client.register(features=features_to_dict(features))
-    await monitor_client.start_heartbeat()
-    LOGGER.info("💓 Monitor registered and heartbeat started")
+    try:
+        await monitor_client.register(features=features_to_dict(features))
+        await monitor_client.start_heartbeat()
+        LOGGER.info("💓 Monitor registered and heartbeat started")
+    except Exception as e:
+        LOGGER.error(f"❌ Monitor registration failed: {e}")
+        import traceback
+        traceback.print_exc()
     
     try:
         # Boucle infinie qui répond bien à KeyboardInterrupt

@@ -135,12 +135,9 @@ async def handle_oauth_callback(
     # STOCKAGE TOKENS EN BDD
     # ═══════════════════════════════════════════════════════════════════
     try:
-        from database.manager import DatabaseManager
+        from dependencies import get_database
         
-        db = DatabaseManager(
-            db_path=settings.database_path,
-            key_file=settings.encryption_key_file
-        )
+        db = get_database()
         
         # 1. Chercher ou créer l'utilisateur
         existing_user = db.get_user(user_id)
@@ -185,14 +182,17 @@ async def handle_oauth_callback(
         # On continue quand même pour permettre le login
     
     # Créer session (cookie) avec id:login:display_name
-    # secure=True uniquement en prod (HTTPS)
+    # URL-encode pour éviter les problèmes avec les caractères spéciaux
     import os
+    from urllib.parse import quote
     is_prod = os.getenv("DEBUG", "false").lower() != "true"
+    
+    session_value = f"{user_id}:{user_login}:{user_display}"
     
     response = RedirectResponse(url="/dashboard", status_code=302)
     response.set_cookie(
         key="session",
-        value=f"{user_id}:{user_login}:{user_display}",
+        value=quote(session_value),  # URL-encode pour protéger les ':'
         httponly=True,
         secure=is_prod,  # True en prod (HTTPS), False en dev
         samesite="lax",

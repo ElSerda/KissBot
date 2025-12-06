@@ -58,6 +58,9 @@ env.bak/
 venv.bak/
 kissbot-venv/
 
+# Web Dashboard (private, deployed separately)
+web/
+!web/README.md
 # Cache
 cache/
 *.log

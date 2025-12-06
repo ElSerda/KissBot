@@ -441,8 +441,12 @@ class SimpleSupervisor:
         print("=" * 90 + "\n")
     
     async def health_check_loop(self):
-        """Monitor processes and auto-restart if crashed"""
+        """Monitor processes and auto-restart if crashed (with backoff on repeated failures)"""
         LOGGER.info(f"💚 Health check loop started (interval={self.health_check_interval}s)")
+        
+        # Backoff settings to prevent restart loops
+        MAX_RESTARTS_BEFORE_BACKOFF = 5
+        BACKOFF_DELAY = 60  # seconds
         
         while self.running:
             # Sleep in small chunks to be more responsive to crashes
@@ -453,16 +457,24 @@ class SimpleSupervisor:
             
             # Check Hub first (critical!)
             if self.hub and not self.hub.is_running():
-                LOGGER.error(f"🚨 EventSub Hub CRASHED! Auto-restarting...")
+                if self.hub.restart_count >= MAX_RESTARTS_BEFORE_BACKOFF:
+                    LOGGER.error(f"🚨 EventSub Hub crashed {self.hub.restart_count}x! Waiting {BACKOFF_DELAY}s before retry...")
+                    await asyncio.sleep(BACKOFF_DELAY)
+                
+                LOGGER.error(f"🚨 EventSub Hub CRASHED! Auto-restarting... (restart #{self.hub.restart_count + 1})")
                 self.hub.restart()
                 
                 # Wait for Hub to stabilize before checking bots
                 await asyncio.sleep(3)
             
-            # Check bots
+            # Check bots (with backoff on repeated failures)
             for channel, bot in self.bots.items():
                 if not bot.is_running():
-                    LOGGER.warning(f"⚠️ {channel}: Process crashed! Auto-restarting...")
+                    if bot.restart_count >= MAX_RESTARTS_BEFORE_BACKOFF:
+                        LOGGER.error(f"🚨 {channel}: Crashed {bot.restart_count}x! Waiting {BACKOFF_DELAY}s before retry...")
+                        await asyncio.sleep(BACKOFF_DELAY)
+                    
+                    LOGGER.warning(f"⚠️ {channel}: Process crashed! Auto-restarting... (restart #{bot.restart_count + 1})")
                     bot.restart()
     
     async def broadcast_listener_loop(self):

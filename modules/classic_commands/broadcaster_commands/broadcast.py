@@ -88,35 +88,65 @@ async def cmd_kisscharity(msg: ChatMessage, args: list[str], bus: MessageBus, ir
         f"message={broadcast_msg[:100]}..."
     )
     
-    # 7. Broadcaster via Supervisor (communication inter-bots)
+    # 7. Broadcaster - MONO-PROCESS vs MULTI-PROCESS
     try:
-        # Écrire la commande de broadcast dans un fichier pour le Supervisor
-        broadcast_file = "pids/supervisor.broadcast"
+        # Détecter le mode: si irc_client a broadcast_message(), on l'utilise directement (mono-process)
+        # Sinon, on écrit dans le fichier pour le Supervisor (multi-process)
         
-        # Format: timestamp|source_channel|message
-        broadcast_data = f"{int(now.timestamp())}|{msg.channel}|{broadcast_msg}\n"
-        
-        # Écrire dans le fichier (append mode pour ne pas écraser)
-        os.makedirs("pids", exist_ok=True)
-        with open(broadcast_file, "w") as f:
-            f.write(broadcast_data)
-        
-        # 8. Update cooldown
-        _last_broadcast_time = now
-        
-        # 9. Log broadcast request
-        LOGGER.info(
-            f"✅ BROADCAST REQUEST SENT TO SUPERVISOR | "
-            f"user={msg.user_login} | "
-            f"source={msg.channel} | "
-            f"message={broadcast_msg[:50]}..."
-        )
-        
-        # 10. Response immédiate (le Supervisor s'occupe de la diffusion)
-        return (
-            f"@{msg.user_login} 📢 Broadcast en cours sur tous les channels... "
-            f"(traitement par Supervisor)"
-        )
+        if irc_client and hasattr(irc_client, 'broadcast_message'):
+            # ═══════════════════════════════════════════════════════════════
+            # MODE MONO-PROCESS: Broadcast direct via IRCClient
+            # ═══════════════════════════════════════════════════════════════
+            LOGGER.info("📢 Mode MONO-PROCESS détecté → broadcast direct via IRCClient")
+            
+            success, total = await irc_client.broadcast_message(
+                message=broadcast_msg,
+                source_channel=msg.channel,
+                exclude_channel=msg.channel  # Ne pas renvoyer sur le channel source
+            )
+            
+            # 8. Update cooldown
+            _last_broadcast_time = now
+            
+            if success == total:
+                return (
+                    f"@{msg.user_login} 📢 Broadcast réussi ! "
+                    f"Message envoyé sur {success}/{total} channels 🎉"
+                )
+            elif success > 0:
+                return (
+                    f"@{msg.user_login} ⚠️ Broadcast partiel: "
+                    f"{success}/{total} channels ont reçu le message"
+                )
+            else:
+                return f"@{msg.user_login} ❌ Broadcast échoué sur tous les channels"
+        else:
+            # ═══════════════════════════════════════════════════════════════
+            # MODE MULTI-PROCESS: Écrire pour le Supervisor
+            # ═══════════════════════════════════════════════════════════════
+            LOGGER.info("📢 Mode MULTI-PROCESS détecté → fichier IPC pour Supervisor")
+            
+            broadcast_file = "pids/supervisor.broadcast"
+            
+            # Format: timestamp|source_channel|message
+            broadcast_data = f"{int(now.timestamp())}|{msg.channel}|{broadcast_msg}\n"
+            
+            os.makedirs("pids", exist_ok=True)
+            with open(broadcast_file, "w") as f:
+                f.write(broadcast_data)
+            
+            # 8. Update cooldown
+            _last_broadcast_time = now
+            
+            LOGGER.info(
+                f"✅ BROADCAST REQUEST SENT TO SUPERVISOR | "
+                f"source={msg.channel} | message={broadcast_msg[:50]}..."
+            )
+            
+            return (
+                f"@{msg.user_login} 📢 Broadcast en cours sur tous les channels... "
+                f"(traitement par Supervisor)"
+            )
             
     except Exception as e:
         LOGGER.error(f"❌ Erreur broadcast: {e}", exc_info=True)
@@ -182,22 +212,50 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_c
         f"message={update_msg[:100]}..."
     )
     
-    # 7. Écrire dans le fichier broadcast pour le Supervisor
+    # 7. Broadcaster - MONO-PROCESS vs MULTI-PROCESS
     try:
-        now = datetime.now()
-        broadcast_file = "pids/supervisor.broadcast"
-        
-        # Format: timestamp|source_channel|message
-        broadcast_data = f"{int(now.timestamp())}|{msg.channel}|{broadcast_msg}\n"
-        
-        os.makedirs("pids", exist_ok=True)
-        with open(broadcast_file, "w") as f:
-            f.write(broadcast_data)
-        
-        LOGGER.info(
-            f"✅ UPDATE BROADCAST SENT | "
-            f"message={broadcast_msg[:50]}..."
-        )
+        if irc_client and hasattr(irc_client, 'broadcast_message'):
+            # ═══════════════════════════════════════════════════════════════
+            # MODE MONO-PROCESS: Broadcast direct via IRCClient
+            # ═══════════════════════════════════════════════════════════════
+            LOGGER.info("🔧 Mode MONO-PROCESS → broadcast direct via IRCClient")
+            
+            success, total = await irc_client.broadcast_message(
+                message=broadcast_msg,
+                source_channel=msg.channel,
+                exclude_channel=None  # Envoyer sur TOUS les channels (même source)
+            )
+            
+            if success > 0:
+                return (
+                    f"@{msg.user_login} 🔧 Notification envoyée sur {success}/{total} channels ! "
+                    f"\"[KissBot Update] {update_msg[:40]}...\""
+                )
+            else:
+                return f"@{msg.user_login} ❌ Erreur: notification non envoyée"
+        else:
+            # ═══════════════════════════════════════════════════════════════
+            # MODE MULTI-PROCESS: Écrire pour le Supervisor
+            # ═══════════════════════════════════════════════════════════════
+            now = datetime.now()
+            broadcast_file = "pids/supervisor.broadcast"
+            
+            # Format: timestamp|source_channel|message
+            broadcast_data = f"{int(now.timestamp())}|{msg.channel}|{broadcast_msg}\n"
+            
+            os.makedirs("pids", exist_ok=True)
+            with open(broadcast_file, "w") as f:
+                f.write(broadcast_data)
+            
+            LOGGER.info(
+                f"✅ UPDATE BROADCAST SENT | "
+                f"message={broadcast_msg[:50]}..."
+            )
+            
+            return (
+                f"@{msg.user_login} 🔧 Notification envoyée sur tous les channels ! "
+                f"\"[KissBot Update] {update_msg[:50]}...\""
+            )
         
         return (
             f"@{msg.user_login} 🔧 Notification envoyée sur tous les channels ! "

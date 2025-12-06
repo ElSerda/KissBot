@@ -72,18 +72,39 @@ class HubEventSubClient:
         """
         Connect to Hub and subscribe to events.
         
+        Includes retry logic with exponential backoff if Hub is not immediately available.
+        
         Raises:
-            ConnectionError: If Hub is not reachable
+            ConnectionError: If Hub is not reachable after max retries
         """
         if self._running:
             LOGGER.warning("⚠️  Hub client already running")
             return
         
+        # Retry settings
+        MAX_RETRIES = 5
+        BACKOFF_BASE = 2  # seconds
+        
+        last_error = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                # Connect to Hub
+                LOGGER.info(f"🔗 Connecting to EventSub Hub at {self.hub_socket_path}... (attempt {attempt}/{MAX_RETRIES})")
+                await self.ipc_client.connect(timeout=5.0)
+                LOGGER.info("✅ Connected to EventSub Hub")
+                break  # Success!
+            except Exception as e:
+                last_error = e
+                if attempt < MAX_RETRIES:
+                    backoff = BACKOFF_BASE ** attempt
+                    LOGGER.warning(f"⚠️ Hub connection failed: {e}. Retrying in {backoff}s...")
+                    await asyncio.sleep(backoff)
+                else:
+                    LOGGER.error(f"❌ Failed to connect to Hub after {MAX_RETRIES} attempts: {e}")
+                    LOGGER.error("💡 Make sure EventSub Hub is running: python eventsub_hub.py")
+                    raise ConnectionError(f"Hub unreachable after {MAX_RETRIES} attempts") from last_error
+        
         try:
-            # Connect to Hub
-            LOGGER.info(f"🔗 Connecting to EventSub Hub at {self.hub_socket_path}...")
-            await self.ipc_client.connect(timeout=5.0)
-            LOGGER.info("✅ Connected to EventSub Hub")
             
             # Send hello for each channel
             # Note: Hub expects 1 hello per bot (single channel in single-channel mode)
