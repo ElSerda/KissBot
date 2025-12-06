@@ -263,13 +263,13 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, irc_c
         # - broadcaster_id: ID du channel
         # - moderator_id: ID du modérateur qui envoie (le bot = moderator)
         # - message: Le message à annoncer
-        # - color: Couleur de l'annonce (BLUE, GREEN, ORANGE, PURPLE)
+        # - color: Couleur de l'annonce (blue, green, orange, purple, primary)
         
         await twitch_client.send_chat_announcement(
             broadcaster_id=msg.channel_id,
-            moderator_id=msg.user_id,  # Owner sending as moderator
+            moderator_id="1209350837",  # Bot ID (serda_bot) - le token authentifié est le bot
             message=announce_msg,
-            color="PURPLE"  # 👑 KissBot color
+            color="purple"  # 👑 KissBot color (minuscule requis par API)
         )
         
         LOGGER.info(

@@ -577,15 +577,29 @@ class MessageHandler:
         # MODE DRY-RUN : Vérifier si on peut vraiment bannir
         # ═══════════════════════════════════════════════════════════════════
         
+        # Ne jamais bannir le broadcaster (sécurité absolue)
+        if msg.is_broadcaster:
+            LOGGER.warning(
+                f"⚠️ Banword détecté mais broadcaster protégé: {msg.user_login} in #{msg.channel}"
+            )
+            safe_msg = (
+                f"🚫 Banword '{matched_word}' détecté mais broadcaster protégé: @" \
+                f"{msg.user_login}"
+            )
+            await self.bus.publish("chat.outbound", OutboundMessage(
+                channel=msg.channel,
+                channel_id=msg.channel_id,
+                text=safe_msg,
+                prefer="irc"
+            ))
+            return
+
         # Config: activer le vrai ban uniquement si explicitement configuré
         banword_config = self.config.get("moderation", {}).get("banword", {})
-        dry_run = banword_config.get("dry_run", True)  # Par défaut: dry-run activé !
+        dry_run = banword_config.get("dry_run", False)  # Par défaut: dry-run activé !
         
-        # Vérifier si le bot est mod sur ce channel (via les tags du message)
-        bot_is_mod = getattr(msg, 'bot_is_mod', False)  # TODO: récupérer cette info
-        
-        # Pour l'instant, on considère qu'on ne sait pas si on est mod
-        # On utilise une heuristique: si on a reçu des messages avec badges, etc.
+        # Vérifier si le bot est mod sur ce channel (via les meta du message)
+        bot_is_mod = msg.meta.get("bot_is_mod", False)  # ← Passé depuis EventSubChatClient
         
         try:
             if dry_run:

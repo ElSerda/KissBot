@@ -275,6 +275,9 @@ class EventSubChatClient:
         badge_str = f"[{','.join(badges.keys())}]" if badges else ""
         LOGGER.info(f"📥 EventSub {badge_str} {evt.chatter_user_name} dans #{channel}: {evt.message.text[:100]}")
         
+        # Vérifier si le BOT est mod sur ce channel
+        bot_is_mod = self._channel_permissions.get(channel, {}).get("is_mod", False)
+        
         # Créer ChatMessage pour MessageBus
         chat_msg = ChatMessage(
             channel=channel,
@@ -290,7 +293,8 @@ class EventSubChatClient:
             meta={
                 "message_id": evt.message_id,
                 "color": evt.color if hasattr(evt, 'color') else None,
-                "reply": evt.reply if hasattr(evt, 'reply') else None
+                "reply": evt.reply if hasattr(evt, 'reply') else None,
+                "bot_is_mod": bot_is_mod  # ← Info de bot permissions
             }
         )
         

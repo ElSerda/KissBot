@@ -424,6 +424,87 @@ integrations/
 - ✅ Déjà chiffrés (Fernet) en BDD → on garde
 - ✅ `.kissbot.key` indispensable pour déchiffrage
 
+### OAuth & Pipeline des Scopes
+
+**Problème résolu (Dec 6, 2025)** : `!kbupdate` nécessitait `moderator:manage:announcements` scope
+
+**Pipeline complet :**
+
+1. **Configuration des Scopes** (`main.py` lignes 520-574)
+   ```python
+   # Mode YAML (scopes statiques)
+   bot_scopes = [AuthScope.CHAT_READ, AuthScope.CHAT_WRITE, ...]
+   
+   # Mode DB (scopes dynamiques)
+   bot_token = db.get_user_token(bot_user_id, "bot")
+   scopes = convert_scope_strings_to_enums(bot_token.scopes)  # ["chat_read", ...] → AuthScope enums
+   ```
+
+2. **Chargement du Token** (`main.py` lignes 560-568)
+   ```python
+   await twitch_bot.set_user_authentication(
+       token=bot_token.access_token,
+       scope=scopes,                    # ← Scopes appliqués ici
+       refresh_token=bot_token.refresh_token,
+       validate=True                     # ← Valide token ET scopes
+   )
+   ```
+
+3. **Force Refresh des Scopes** (`main.py` lignes 578-599) ⭐ **CRUCIAL**
+   ```python
+   # Si les scopes ont été ajoutées APRÈS le dernier refresh,
+   # pyTwitchAPI ne les chargera que si on force un refresh du token
+   async for user in twitch_bot.get_users():
+       LOGGER.info(f"✅ Bot user verified: {user.login} (ID: {user.id})")
+       break
+   ```
+   **Pourquoi ?** `set_user_authentication(validate=True)` ne force refresh que si token expiré.
+   Si token est frais, pyTwitchAPI peut garder l'ancienne liste de scopes en mémoire.
+   Appel Helix = force pyTwitchAPI à vérifier que le token a tous les scopes requis.
+
+4. **Ajout de Scopes** (via `scripts/update_bot_scopes.py`)
+   ```bash
+   python scripts/update_bot_scopes.py
+   # → Ouvre navigateur OAuth
+   # → User authentifie le bot avec NEW scopes
+   # → Callback capture la response et met à jour kissbot.db
+   # → Au prochain redémarrage avec --use-db : les scopes sont chargés
+   ```
+
+5. **Utilisation des Scopes** (exemple : `!kbupdate` API call)
+   ```python
+   # broadcast.py ligne 274
+   await twitch_client.send_chat_announcement(
+       broadcaster_id=msg.channel_id,      # Qui reçoit l'annonce
+       moderator_id="1209350837",          # Qui l'envoie (MUST = token user!)
+       message=announce_msg,
+       color="purple"
+   )
+   # ⚠️ CRITICAL: moderator_id DOIT = l'ID du user du token authentifié
+   # Sinon Twitch rejette avec "incorrect user authorization"
+   ```
+
+**Checklist pour ajouter un nouveau Scope :**
+- [ ] Identifier le scope requis (ex: `moderator:manage:announcements`)
+- [ ] Ajouter au `scripts/update_bot_scopes.py` dans la liste des 16 scopes
+- [ ] Exécuter `python scripts/update_bot_scopes.py` et s'authentifier
+- [ ] Vérifier le scope dans `kissbot.db` : `SELECT scopes FROM users WHERE user_id='bot_id'`
+- [ ] Redémarrer avec `./kissbot.sh start --use-db`
+- [ ] Vérifier les logs : `✅ Bot user verified` + `✅ Token has valid scopes`
+- [ ] Tester la commande qui utilise le scope (ex: `!kbupdate test`)
+
+**Debugging :**
+```bash
+# Voir les scopes en mémoire (logs)
+tail -f logs/broadcast/el_serda/instance.log | grep -E "(Force refresh|Bot user verified|Token has valid)"
+
+# Vérifier scopes en DB
+sqlite3 kissbot.db "SELECT user_id, token_type, scopes FROM users WHERE user_id='1209350837';"
+
+# Forcer refresh du token au redémarrage
+./kissbot.sh stop && ./kissbot.sh start --use-db
+```
+
 ### Modules
 - ✅ N'ont accès qu'au strict minimum (contexte, config de channel)
 - ❌ Pas d'`eval`, pas d'`exec`, pas de SQL direct sans passer par le core

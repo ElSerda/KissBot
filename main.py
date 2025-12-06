@@ -54,8 +54,15 @@ def convert_scope_strings_to_enums(scope_strings: list[str]) -> list[AuthScope]:
         'user:write:chat': AuthScope.USER_WRITE_CHAT,
         'moderator:manage:announcements': AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS,
         'moderator:read:chatters': AuthScope.MODERATOR_READ_CHATTERS,
+        'moderator:manage:banned_users': AuthScope.MODERATOR_MANAGE_BANNED_USERS,
+        'moderator:manage:blocked_terms': AuthScope.MODERATOR_MANAGE_BLOCKED_TERMS,
+        'moderator:manage:chat_messages': AuthScope.MODERATOR_MANAGE_CHAT_MESSAGES,
         'channel:bot': AuthScope.CHANNEL_BOT,
         'channel:moderate': AuthScope.CHANNEL_MODERATE,
+        'channel:manage:broadcast': AuthScope.CHANNEL_MANAGE_BROADCAST,
+        'channel:read:redemptions': AuthScope.CHANNEL_READ_REDEMPTIONS,
+        'channel:read:subscriptions': AuthScope.CHANNEL_READ_SUBSCRIPTIONS,
+        'user:read:email': AuthScope.USER_READ_EMAIL,
     }
     
     result = []
@@ -533,7 +540,8 @@ async def main():
                 AuthScope.USER_BOT,
                 AuthScope.USER_READ_CHAT,
                 AuthScope.USER_READ_MODERATED_CHANNELS,
-                AuthScope.USER_WRITE_CHAT
+                AuthScope.USER_WRITE_CHAT,
+                AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS
             ]
             LOGGER.info(f"🔍 Using default bot scopes: {[s.value for s in default_scopes]}")
             
@@ -566,6 +574,40 @@ async def main():
     # Debug: vérifier l'état de l'authentification
     LOGGER.info(f"🔍 Debug: twitch_bot._user_auth_token = {twitch_bot._user_auth_token is not None}")
     LOGGER.info(f"🔍 Debug: twitch_bot._user_auth_refresh_token = {twitch_bot._user_auth_refresh_token is not None}")
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🔄 Force refresh du token pour les nouvelles scopes
+    # Si les scopes ont été ajoutées APRÈS le dernier refresh, pyTwitchAPI
+    # ne les chargera que si on force un refresh du token
+    # ═══════════════════════════════════════════════════════════════════════
+    try:
+        LOGGER.info("🔄 Force refresh du token bot pour charger les nouvelles scopes...")
+        
+        # Utilise Helix pour obtenir le user courant (valide le token)
+        # Ceci force pyTwitchAPI à vérifier que le token est valide ET avec les bonnes scopes
+        users = []
+        async for user in twitch_bot.get_users():
+            users.append(user)
+            break
+        
+        if users:
+            user = users[0]
+            LOGGER.info(f"✅ Bot user verified: {user.login} (ID: {user.id})")
+            LOGGER.info(f"✅ Token has valid scopes for {user.login}")
+        else:
+            LOGGER.warning("⚠️ Could not verify bot user via Helix API")
+    except Exception as e:
+        LOGGER.warning(f"⚠️ Token refresh check failed (non-critical): {e}")
+    
+    # Vérifie les scopes enregistrés dans pyTwitchAPI
+    if hasattr(twitch_bot, '_user_auth_scope'):
+        LOGGER.info(f"🔍 Debug: twitch_bot._user_auth_scope = {twitch_bot._user_auth_scope}")
+    if hasattr(twitch_bot, 'get_user_auth_scope'):
+        try:
+            scopes = twitch_bot.get_user_auth_scope()
+            LOGGER.info(f"🔍 Debug: get_user_auth_scope() = {scopes}")
+        except Exception as e:
+            LOGGER.info(f"🔍 Debug: get_user_auth_scope() failed: {e}")
     
     # ═══════════════════════════════════════════════════════════════════════
     # Sauvegarder le token en DB si pyTwitchAPI l'a refreshé pendant validation

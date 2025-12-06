@@ -35,8 +35,8 @@ LOGGER = logging.getLogger(__name__)
 # Singleton instance
 _instance: Optional["BanWordManager"] = None
 
-# Default DB path
-DEFAULT_DB_PATH = "kissbot.db"
+# Default DB path - CHEMIN ABSOLU pour éviter les problèmes de répertoire courant
+DEFAULT_DB_PATH = str(Path(__file__).parent.parent.parent / "kissbot.db")
 
 
 def get_banword_manager(db_path: str = DEFAULT_DB_PATH) -> "BanWordManager":

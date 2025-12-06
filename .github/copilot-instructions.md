@@ -33,6 +33,13 @@ Bienvenue dans KissBot ! Ce guide est destiné aux agents IA pour une productivi
 - **Monitoring** : Métriques et logs dans `system.log`, analytics via `core/analytics_handler.py`
 - **EventBus** : Communication interne via `core/message_bus.py`
 - **Sécurité** : Clé `.kissbot.key` indispensable pour déchiffrer les tokens
+- **OAuth & Scopes** (NOUVEAU - Dec 6, 2025) :
+  1. Ajouter scope dans `scripts/update_bot_scopes.py` 
+  2. Exécuter : `python scripts/update_bot_scopes.py` → authenticate via navigateur
+  3. Scope sauvegardé en DB (chiffré)
+  4. Redémarrer avec `./kissbot.sh start --use-db`
+  5. Force refresh du token activé à startup (voir `main.py` lignes 578-599)
+  6. **CRITICAL** : `moderator_id` en API DOIT = l'ID du token authentifié (ex: `!kbupdate` = serda_bot ID 1209350837)
 
 ## 🧠 Points d'attention
 - **Ne modifiez jamais `.kissbot.key` ou la structure de `kissbot.db` sans migration**
