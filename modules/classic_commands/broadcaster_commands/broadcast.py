@@ -222,10 +222,15 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, twitc
     
     # 8. Utiliser Twitch API /announcements sur TOUS les channels configurés
     try:
-        # Récupérer tous les channels configurés
-        from core.config_manager import ConfigManager
-        config = ConfigManager()
-        all_channels = config.get_channels()
+        # Récupérer tous les channels configurés depuis config.yaml
+        import yaml
+        from pathlib import Path
+        
+        config_path = Path(__file__).parent.parent.parent / "config" / "config.yaml"
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        all_channels = config.get('twitch', {}).get('channels', [])
         
         if not all_channels:
             LOGGER.warning("⚠️ Aucun channel configuré dans config.yaml")
