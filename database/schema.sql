@@ -282,3 +282,39 @@ CREATE INDEX IF NOT EXISTS idx_dev_whitelist_username
 -- Index pour filtre enabled
 CREATE INDEX IF NOT EXISTS idx_dev_whitelist_enabled 
     ON dev_whitelist(enabled);
+
+-- ============================================================================
+-- Banwords Management
+-- ============================================================================
+-- Stocke les mots bannis par channel (auto-ban)
+CREATE TABLE IF NOT EXISTS banwords (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,
+    word TEXT NOT NULL,
+    added_by TEXT DEFAULT 'system',
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(channel, word)
+);
+
+-- Index pour recherche rapide par channel
+CREATE INDEX IF NOT EXISTS idx_banwords_channel 
+    ON banwords(channel);
+
+-- ============================================================================
+-- Channel Personality
+-- ============================================================================
+-- Configuration de personnalité par channel
+CREATE TABLE IF NOT EXISTS channel_personality (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id TEXT NOT NULL UNIQUE,
+    channel_login TEXT NOT NULL,
+    preset TEXT NOT NULL DEFAULT 'normal',
+    custom_rules TEXT,
+    nsfw_allowed BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index pour recherche rapide par channel_id
+CREATE INDEX IF NOT EXISTS idx_personality_channel 
+    ON channel_personality(channel_id);
