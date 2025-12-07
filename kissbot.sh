@@ -99,7 +99,7 @@ start_hub() {
     # Activate venv and start hub in background
     cd "$SCRIPT_DIR"
     source "$VENV_PATH/bin/activate"
-    nohup python "$HUB_SCRIPT" --config "$CONFIG_FILE" --db "$DB_FILE" > "$HUB_LOG" 2>&1 &
+    nohup python "$HUB_SCRIPT" --config "$CONFIG_FILE" --db "$DB_FILE" --broadcaster serda_bot > "$HUB_LOG" 2>&1 &
     
     # Save PID
     HUB_PID=$!
