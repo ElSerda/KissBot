@@ -12,8 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from database.manager import DatabaseManager
-from database.crypto import TokenEncryptor
-from twitchAPI.twitch import Twitch
+from twitchAPI.oauth import validate_token
 import yaml
 
 
@@ -29,16 +28,12 @@ async def check_token_scopes():
     
     # Connect to DB
     db = DatabaseManager('kissbot.db')
-    crypto = TokenEncryptor()
-    
-    # Create Twitch client
-    twitch = await Twitch(client_id, client_secret)
     
     print("=" * 70)
     print("🔍 Vérification des scopes OAuth (Database)")
     print("=" * 70)
     
-    # Get all users
+    # Get all users (includes bot + broadcasters)
     users = db.get_all_users()
     
     for user in users:
@@ -52,8 +47,8 @@ async def check_token_scopes():
                 if not token_data:
                     continue
                 
-                # Decrypt access token
-                access_token = crypto.decrypt(token_data['access_token'])
+                # Tokens are already decrypted by DatabaseManager
+                access_token = token_data['access_token']
                 
                 # Set token and validate
                 try:
@@ -65,26 +60,35 @@ async def check_token_scopes():
                     if token_data.get('scopes'):
                         stored_scopes = json.loads(token_data['scopes'])
                     
-                    # Try to validate with token
-                    await twitch.set_user_authentication(
-                        token=access_token,
-                        scope=[],  # Don't require any scope to just validate
-                        validate=True
-                    )
-                    
-                    # Get token info to see actual scopes
-                    token_info = await twitch.get_users()
+                    # Validate token directly via Twitch OAuth endpoint
+                    validation = await validate_token(access_token)
+                    raw_scopes = validation.get('scopes', []) or []
+                    actual_scopes = [s.value if hasattr(s, 'value') else str(s) for s in raw_scopes]
+                    login = validation.get('login')
+                    user_id = validation.get('user_id')
+                    expires_in = validation.get('expires_in')
                     
                     print(f"\n  🔑 {token_type.upper()} token:")
-                    print(f"    Expires: {token_data['expires_at']}")
+                    print(f"    Expires (DB): {token_data['expires_at']}")
+                    if expires_in is not None:
+                        print(f"    Expires (Twitch): {expires_in}s")
                     print(f"    Status: {token_data['status']}")
                     print(f"    Stored scopes ({len(stored_scopes)}):")
                     for scope in stored_scopes:
                         print(f"      - {scope}")
+                    print(f"    Actual scopes ({len(actual_scopes)}):")
+                    for scope in actual_scopes:
+                        print(f"      - {scope}")
+                    if login:
+                        print(f"    Twitch login: {login} (ID: {user_id})")
                     
-                    # Note: We can't easily get actual scopes from token without making
-                    # an API call that requires specific scopes. The validation above
-                    # will tell us if the token is valid.
+                    # Compare stored vs actual scopes
+                    missing = set(stored_scopes) - set(actual_scopes)
+                    extra = set(actual_scopes) - set(stored_scopes)
+                    if missing:
+                        print(f"    ⚠️  Missing scopes in Twitch: {sorted(missing)}")
+                    if extra:
+                        print(f"    ℹ️  Extra scopes on Twitch: {sorted(extra)}")
                     print(f"    ✅ Token is valid")
                     
                 except Exception as e:
@@ -93,7 +97,6 @@ async def check_token_scopes():
             except Exception as e:
                 print(f"  ⚠️ Error checking {token_type}: {e}")
     
-    await twitch.close()
     print("\n" + "=" * 70)
 
 

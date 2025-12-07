@@ -641,6 +641,12 @@ async def main():
     registry = Registry()
     rate_limiter = RateLimiter()
     
+    # EventSub Metrics Collector (for dashboard observability)
+    with profile_block("eventsub_metrics"):
+        from web.core.eventsub_metrics import get_eventsub_metrics
+        eventsub_metrics = get_eventsub_metrics(bus, channel=monitor_channel)
+        LOGGER.info("📊 EventSub Metrics Collector initialized")
+    
     # Analytics Handler (conditional)
     analytics = None
     if features.is_enabled(Feature.ANALYTICS):
@@ -662,7 +668,7 @@ async def main():
     
     # Message Handler (always needed for IRC routing, but features inside are conditional)
     with profile_block("message_handler"):
-        message_handler = MessageHandler(bus, config)
+        message_handler = MessageHandler(bus, config, monitor_client=monitor_client)
     
     # Configure MessageBus pour game_lookup_rust (métriques)
     if features.is_enabled(Feature.GAME_ENGINE):

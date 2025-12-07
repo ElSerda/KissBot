@@ -60,13 +60,19 @@ class BotProcess:
             venv_python = Path("kissbot-venv/bin/python")
             python_cmd = str(venv_python) if venv_python.exists() else "python3"
             
+            # Determine chat transport based on EventSub mode
+            # NOTE: When using hub mode, we MUST use IRC for chat to avoid 4003 conflict
+            # (Hub uses 1 WebSocket for stream events, chat needs separate direct connection)
+            # We can only have 1 EventSub WebSocket per bot user!
+            chat_transport = "irc" if self.eventsub_mode == "hub" else "eventsub"
+            
             cmd = [
                 python_cmd,
                 "main.py",
                 "--channel", self.channel,
                 "--config", self.config_path,
                 "--eventsub", self.eventsub_mode,  # Add EventSub mode
-                "--chat-transport", "eventsub"  # Use EventSub Chat (Twitch-recommended)
+                "--chat-transport", chat_transport  # IRC for hub, EventSub for direct
             ]
             
             # Add --use-db if enabled
@@ -180,7 +186,8 @@ class HubProcess:
                 "eventsub_hub.py",
                 "--config", self.config_path,
                 "--db", self.db_path,
-                "--socket", self.socket_path
+                "--socket", self.socket_path,
+                "--broadcaster", "el_serda"  # Use broadcaster token with proper EventSub scopes
             ]
             
             # Create logs directory if needed

@@ -502,24 +502,29 @@ class EventSubHub:
         is created within 10 seconds of WebSocket connect.
         
         Strategy:
-            - Check desired_subscriptions for any pending sub
+            - Check desired_subscriptions for any pending sub that matches our broadcaster
             - If found, create it immediately
             - If not found, wait for first bot hello (should arrive soon)
         """
-        # Check if we have any desired subscriptions
+        # Check if we have any desired subscriptions FOR THIS BROADCASTER
         desired = self._get_desired_subscriptions()
         
-        if desired:
-            # Create first one immediately
-            first_sub = desired[0]
-            LOGGER.info(f"🚀 Creating first subscription to avoid 4003: {first_sub['channel_id']} / {first_sub['topic']}")
+        # Filter to only subscriptions for the current broadcaster
+        # (a WebSocket can only receive events for the broadcaster who owns the token)
+        my_broadcaster_id = str(self._default_broadcaster_id) if self._default_broadcaster_id else None
+        suitable_subs = [s for s in desired if s['channel_id'] == my_broadcaster_id] if my_broadcaster_id else []
+        
+        if suitable_subs:
+            # Create first one immediately (for our broadcaster)
+            first_sub = suitable_subs[0]
+            LOGGER.info(f"🚀 Creating first subscription for our broadcaster to avoid 4003: {first_sub['channel_id']} / {first_sub['topic']}")
             await self._create_subscription(
                 channel_id=first_sub['channel_id'],
                 topic=first_sub['topic'],
                 version=first_sub['version']
             )
         else:
-            LOGGER.warning("⚠️  No desired subscriptions yet, attempting fallback first-subscription on hub broadcaster...")
+            LOGGER.warning("⚠️  No desired subscriptions for our broadcaster yet, attempting fallback first-subscription...")
 
             # Try to create a safe fallback subscription on the hub's broadcaster
             # This satisfies Twitch requirement to create *a* subscription within 10s
@@ -540,7 +545,7 @@ class EventSubHub:
                     LOGGER.warning(f"⚠️ Fallback subscription failed: {e}")
 
             # If we reach here, there's nothing we can do until a bot connects
-            LOGGER.warning("⚠️  No desired subscriptions and no fallback possible, waiting for bot hello...")
+            LOGGER.warning("⚠️  No suitable subscriptions for our broadcaster, waiting for bot hello...")
     
     # ========================================================================
     # IPC Message Handling (Bot → Hub)
@@ -1211,7 +1216,8 @@ async def main():
             LOGGER.error(f"❌ User {broadcaster_login} not found in database")
             sys.exit(1)
         
-        user_id = user_info['id']
+        user_id = user_info['id']  # DB ID for token lookup
+        twitch_user_id = user_info['twitch_user_id']  # Twitch ID for subscriptions
         # CRITICAL: serda_bot is a bot account → token_type='bot'
         # Only human broadcasters use token_type='broadcaster' (from Dashboard OAuth)
         token_type = 'bot' if broadcaster_login == 'serda_bot' else 'broadcaster'
@@ -1254,13 +1260,16 @@ async def main():
             from datetime import datetime, timedelta
             new_expiry = datetime.now() + timedelta(hours=4)
             
+            # Calculate expires_in (seconds from now)
+            expires_in = int((new_expiry - datetime.now()).total_seconds())
+            
             # Store refreshed token
-            db.store_token(
+            db.store_tokens(
                 user_id=user_id,
                 token_type='broadcaster',
                 access_token=new_access_token,
                 refresh_token=new_refresh_token,
-                expires_at=new_expiry,
+                expires_in=expires_in,
                 scopes=[s.value if hasattr(s, 'value') else str(s) for s in current_scopes]
             )
             LOGGER.info(f"✅ Refreshed token saved for {broadcaster_login}")
@@ -1279,7 +1288,8 @@ async def main():
     )
     
     # Create Hub (provide broadcaster id for fallback first-subscription)
-    hub = EventSubHub(config=hub_config, db=db, twitch=twitch, default_broadcaster_id=str(user_id))
+    # Use twitch_user_id (Twitch ID) not user_id (DB ID) for subscriptions
+    hub = EventSubHub(config=hub_config, db=db, twitch=twitch, default_broadcaster_id=str(twitch_user_id))
     
     # Signal handlers
     def handle_shutdown(sig, frame):

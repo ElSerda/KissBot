@@ -594,7 +594,7 @@ class KissBotMonitor:
                 self.db.cleanup_old_metrics(days=7)
 
 
-def main():
+def main(db_path: str = "kissbot_monitor.db", socket_path: str = "/tmp/kissbot_monitor.sock"):
     """Point d'entrée du Monitor"""
     print("=" * 60)
     print("🎛️ KissBot Monitor")
@@ -604,7 +604,7 @@ def main():
         print("❌ psutil not available, cannot monitor processes")
         sys.exit(1)
     
-    monitor = KissBotMonitor()
+    monitor = KissBotMonitor(socket_path=socket_path, db_path=db_path)
     
     # Gestion des signaux
     loop = asyncio.new_event_loop()
@@ -640,4 +640,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="KissBot Monitor")
+    parser.add_argument("--db", default="kissbot_monitor.db", help="Path to monitor database")
+    parser.add_argument("--socket", default="/tmp/kissbot_monitor.sock", help="Path to Unix socket")
+    args = parser.parse_args()
+    
+    main(db_path=args.db, socket_path=args.socket)

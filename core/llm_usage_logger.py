@@ -293,9 +293,10 @@ class LLMUsageDB:
 def log_llm_usage(channel: str, model: str, feature: str,
                   tokens_in: int, tokens_out: int,
                   latency_ms: Optional[float] = None,
-                  db_path: str = DEFAULT_DB_PATH):
+                  db_path: str = DEFAULT_DB_PATH,
+                  monitor_client = None):
     """
-    Log un appel LLM.
+    Log un appel LLM (synchrone, mais envoie au monitor en background).
     
     Args:
         channel: Channel Twitch
@@ -305,8 +306,10 @@ def log_llm_usage(channel: str, model: str, feature: str,
         tokens_out: Nombre de tokens en sortie (completion)
         latency_ms: Latence en millisecondes (optionnel)
         db_path: Chemin de la base de données
+        monitor_client: Instance MonitorClient optionnelle pour envoyer aux stats centralisées
     """
     try:
+        # Log dans la DB locale
         db = LLMUsageDB(db_path)
         call = LLMCall(
             channel=channel,
@@ -317,6 +320,33 @@ def log_llm_usage(channel: str, model: str, feature: str,
             latency_ms=latency_ms
         )
         db.log(call)
+        
+        # Envoyer aussi au monitor central si disponible (fire-and-forget)
+        if monitor_client:
+            try:
+                import asyncio
+                
+                async def send_to_monitor():
+                    try:
+                        await monitor_client.log_llm_usage(
+                            model=model,
+                            feature=feature,
+                            tokens_in=tokens_in,
+                            tokens_out=tokens_out,
+                            latency_ms=latency_ms
+                        )
+                    except Exception as e:
+                        LOGGER.debug(f"Could not send LLM usage to monitor: {e}")
+                
+                # Créer une task dans l'event loop courant si possible
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(send_to_monitor())
+                except RuntimeError:
+                    # Pas d'event loop, l'ignorer
+                    pass
+            except Exception as e:
+                LOGGER.debug(f"Could not schedule LLM usage to monitor: {e}")
     except Exception as e:
         LOGGER.error(f"Failed to log LLM usage: {e}")
 

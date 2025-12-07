@@ -40,15 +40,17 @@ class MessageHandler:
     - !kisscharity <message>: Broadcaster message sur tous les channels
     """
     
-    def __init__(self, bus: MessageBus, config: Optional[Dict] = None):
+    def __init__(self, bus: MessageBus, config: Optional[Dict] = None, monitor_client=None):
         """
         Args:
             bus: MessageBus pour subscribe/publish
             config: Configuration du bot (pour GameLookup, LLM)
+            monitor_client: MonitorClient optionnel pour envoyer les stats LLM
         """
         self.bus = bus
         self.start_time = time.time()
         self.config = config or {}
+        self.monitor_client = monitor_client
         
         # Deduplication pour éviter double traitement
         self._processed_messages = set()  # Cache des message IDs déjà traités
@@ -108,7 +110,7 @@ class MessageHandler:
                 try:
                     with profile_block("llm_handler_init"):
                         from modules.integrations.llm_provider.llm_handler import LLMHandler
-                        self.llm_handler = LLMHandler(config)
+                        self.llm_handler = LLMHandler(config, monitor_client=self.monitor_client)
                     LOGGER.info("✅ LLMHandler initialisé")
                 except Exception as e:
                     LOGGER.error(f"❌ LLMHandler init failed: {e}")

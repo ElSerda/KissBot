@@ -26,13 +26,15 @@ class LLMHandler:
     Inclut le logging automatique des appels LLM.
     """
     
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, monitor_client=None):
         """
         Args:
             config: Configuration du bot (dict depuis config.yaml)
+            monitor_client: MonitorClient optionnel pour envoyer les stats LLM
         """
         self.config = config
         self.neural_pathway = None
+        self.monitor_client = monitor_client
         
         # Model name for logging
         llm_config = config.get("llm", {})
@@ -105,7 +107,8 @@ class LLMHandler:
                     feature="ask",
                     tokens_in=tokens_in,
                     tokens_out=tokens_out,
-                    latency_ms=latency_ms
+                    latency_ms=latency_ms,
+                    monitor_client=self.monitor_client
                 )
                 
                 LOGGER.info(f"✅ LLM response generated ({len(response)} chars, {tokens_out} tokens, {latency_ms:.0f}ms)")
@@ -166,7 +169,8 @@ class LLMHandler:
                     feature="mention",
                     tokens_in=tokens_in,
                     tokens_out=tokens_out,
-                    latency_ms=latency_ms
+                    latency_ms=latency_ms,
+                    monitor_client=self.monitor_client
                 )
                 
                 return response

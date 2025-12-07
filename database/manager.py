@@ -184,6 +184,12 @@ class DatabaseManager:
             if row:
                 return dict(row)
             return None
+
+    def get_all_users(self) -> List[Dict[str, Any]]:
+        """Retourne la liste complète des utilisateurs Twitch enregistrés."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM users ORDER BY id ASC")
+            return [dict(row) for row in cursor.fetchall()]
     
     def create_user(self, twitch_user_id: str, twitch_login: str, 
                    display_name: str, is_bot: bool = False) -> int:

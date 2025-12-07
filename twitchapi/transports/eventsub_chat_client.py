@@ -27,6 +27,7 @@ Scopes requis:
     - user:read:chat (recevoir messages)
     - user:write:chat (envoyer messages)
     - user:bot (apparaître comme bot dans chatters list)
+    - channel:bot (envoyer messages sans /mod - requis pour chaque channel)
 """
 
 import asyncio
@@ -39,9 +40,34 @@ from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.object.eventsub import ChannelChatMessageEvent
 
 from core.message_bus import MessageBus
-from core.message_types import ChatMessage, OutboundMessage
+from core.message_types import ChatMessage, OutboundMessage, SystemEvent
 
 LOGGER = logging.getLogger(__name__)
+
+# Import rate-limit tracker
+try:
+    from web.core.ratelimit_tracker import get_ratelimit_metrics
+    RATELIMIT_TRACKER_AVAILABLE = True
+except ImportError:
+    RATELIMIT_TRACKER_AVAILABLE = False
+    LOGGER.debug("⚠️ Rate-limit tracker not available")
+    
+    def get_ratelimit_metrics():
+        return None
+
+
+# Import anti-AutoMod formatter (optional)
+try:
+    from web.core.anti_automod import get_anti_automod_formatter
+    from modules.moderation.anti_automod import should_reformat_message
+    ANTI_AUTOMOD_AVAILABLE = True
+except ImportError:
+    ANTI_AUTOMOD_AVAILABLE = False
+    LOGGER.debug("⚠️ Anti-AutoMod module not available")
+    
+    # Fallback function if anti-automod not available
+    def should_reformat_message(text: str, min_safety_score: int = 70):
+        return False, text, 100.0
 
 
 class EventSubChatClient:
@@ -99,8 +125,19 @@ class EventSubChatClient:
         self._keepalive_count: int = 0
         self._health_check_task: Optional[asyncio.Task] = None
         
+        # Session tracking (handshake)
+        self._session_id: Optional[str] = None
+        self._session_status: Optional[str] = None
+        self._keepalive_timeout_seconds: int = 10
+        
         # Permissions cache (comme IRC client)
         self._channel_permissions: Dict[str, dict] = {}
+        
+        # Anti-AutoMod configuration
+        self._anti_automod_enabled = False
+        self._anti_automod_aggressive = False
+        self._anti_automod_min_score = 70
+        self._load_anti_automod_config()
         
         # Subscribe aux messages sortants
         self.bus.subscribe("chat.outbound", self._handle_outbound_message)
@@ -142,6 +179,34 @@ class EventSubChatClient:
             LOGGER.error(f"❌ Erreur démarrage EventSub Chat: {e}", exc_info=True)
             raise
     
+    def _load_anti_automod_config(self) -> None:
+        """Charge la configuration Anti-AutoMod depuis config.yaml"""
+        try:
+            from pathlib import Path
+            import yaml
+            
+            config_path = Path(__file__).parent.parent.parent / "config" / "config.yaml"
+            if not config_path.exists():
+                return
+            
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            eventsub_config = config.get('eventsub', {})
+            auto_format = eventsub_config.get('auto_format', {})
+            
+            self._anti_automod_enabled = auto_format.get('enabled', True) and ANTI_AUTOMOD_AVAILABLE
+            self._anti_automod_aggressive = auto_format.get('aggressive', False)
+            self._anti_automod_min_score = auto_format.get('min_safety_score', 70)
+            
+            if self._anti_automod_enabled:
+                LOGGER.info(
+                    f"🛡️ Anti-AutoMod enabled (aggressive={self._anti_automod_aggressive}, "
+                    f"min_score={self._anti_automod_min_score})"
+                )
+        except Exception as e:
+            LOGGER.debug(f"⚠️ Could not load anti-automod config: {e}")
+    
     async def stop(self) -> None:
         """Arrête le client proprement."""
         if not self._running:
@@ -169,12 +234,12 @@ class EventSubChatClient:
         LOGGER.info("✅ EventSub Chat Client arrêté")
     
     async def _install_keepalive_hook(self) -> None:
-        """Installe un hook pour tracker les keepalives EventSub."""
+        """Installe des hooks pour tracker les keepalives et le handshake EventSub."""
         if not self.eventsub:
             return
         
-        # Sauvegarder le handler original
-        original_handler = self.eventsub._handle_keepalive
+        # Sauvegarder le handler original du keepalive
+        original_keepalive_handler = self.eventsub._handle_keepalive
         
         async def patched_keepalive(data: dict):
             """Hook keepalive pour tracking."""
@@ -186,10 +251,89 @@ class EventSubChatClient:
                 LOGGER.debug(f"💓 EventSub keepalive #{self._keepalive_count}")
             
             # Appeler le handler original
-            await original_handler(data)
+            await original_keepalive_handler(data)
         
         self.eventsub._handle_keepalive = patched_keepalive
-        LOGGER.debug("✅ Keepalive hook installé")
+        
+        # Sauvegarder le handler original du welcome (handshake)
+        original_welcome_handler = self.eventsub._handle_welcome
+        
+        async def patched_welcome(data: dict):
+            """Hook welcome (handshake) pour capturer le session_welcome."""
+            await self._handle_session_welcome(data)
+            # Appeler le handler original
+            await original_welcome_handler(data)
+        
+        self.eventsub._handle_welcome = patched_welcome
+        
+        LOGGER.debug("✅ Keepalive & Welcome hooks installés")
+    
+    async def _handle_session_welcome(self, data: dict) -> None:
+        """
+        Capture et log le handshake EventSub (session_welcome).
+        
+        C'est le message que Twitch envoie quand la connexion WebSocket s'établit.
+        Il contient l'ID de session et les paramètres de connexion.
+        
+        Args:
+            data: Payload WebSocket contenant le metadata et session info
+        """
+        try:
+            # Extraire les infos du payload
+            metadata = data.get("metadata", {})
+            payload = data.get("payload", {})
+            session = payload.get("session", {})
+            
+            # Session info
+            self._session_id = session.get("id", "unknown")
+            self._session_status = session.get("status", "unknown")
+            self._keepalive_timeout_seconds = session.get("keepalive_timeout_seconds", 10)
+            
+            connected_at = session.get("connected_at", "unknown")
+            reconnect_url = session.get("reconnect_url")
+            
+            # Log du handshake
+            LOGGER.info(
+                f"🤝 EventSub HANDSHAKE SUCCESS | "
+                f"session_id={self._session_id[:8]}... | "
+                f"status={self._session_status} | "
+                f"keepalive_timeout={self._keepalive_timeout_seconds}s"
+            )
+            
+            # Log détaillé
+            LOGGER.debug(
+                f"📋 EventSub Session Details:\n"
+                f"   ID: {self._session_id}\n"
+                f"   Status: {self._session_status}\n"
+                f"   Connected At: {connected_at}\n"
+                f"   Keepalive Timeout: {self._keepalive_timeout_seconds}s\n"
+                f"   Reconnect URL: {reconnect_url if reconnect_url else 'None'}"
+            )
+            
+            # Publier SystemEvent pour le HUB / monitoring
+            system_event = SystemEvent(
+                kind="eventsub.session_welcome",
+                payload={
+                    "session_id": self._session_id,
+                    "status": self._session_status,
+                    "connected_at": connected_at,
+                    "keepalive_timeout_seconds": self._keepalive_timeout_seconds,
+                    "reconnect_url": reconnect_url,
+                    "bot_user_id": self.bot_user_id,
+                    "bot_login": self.bot_login,
+                    "channels": self.channels,
+                    "message_id": metadata.get("message_id"),
+                    "message_timestamp": metadata.get("message_timestamp")
+                }
+            )
+            
+            try:
+                await self.bus.publish("system.event", system_event)
+            except Exception as e:
+                LOGGER.error(f"❌ Erreur publish system.event (session_welcome): {e}")
+            
+        except Exception as e:
+            LOGGER.error(f"❌ Erreur parsing session_welcome: {e}", exc_info=True)
     
     async def _subscribe_channel(self, channel: str) -> bool:
         """
@@ -304,6 +448,146 @@ class EventSubChatClient:
         except Exception as e:
             LOGGER.error(f"❌ Erreur publish chat.inbound: {e}")
     
+    def _log_send_result(self, channel: str, response, msg_text: str) -> None:
+        """
+        Log détaillé d'une réponse send_chat_message.
+        
+        Args:
+            channel: Nom du channel
+            response: SendMessageResponse object
+            msg_text: Texte du message envoyé
+        """
+        if response.is_sent:
+            # ✅ Message envoyé avec succès
+            LOGGER.info(
+                f"✅ Message envoyé à #{channel} | "
+                f"id={response.message_id} | "
+                f"text={msg_text[:60]}"
+            )
+        else:
+            # ❌ Message droppé par Twitch
+            drop_code = response.drop_reason.code if response.drop_reason else "unknown"
+            drop_msg = response.drop_reason.message if response.drop_reason else "No details"
+            
+            # Log avec couleur/emoji selon le code
+            if drop_code == "msg_rejected":
+                # AutoMod/sécurité
+                LOGGER.warning(
+                    f"🚫 AutoMod REJECTED #{channel} | "
+                    f"Raison: {drop_msg} | "
+                    f"Texte: {msg_text[:60]} | "
+                    f"💡 Solutions: /mod bot, vérifier scopes, attendre vérification chatbot"
+                )
+            elif drop_code == "automod_held":
+                # Message retenu pour review mod
+                LOGGER.warning(
+                    f"⏸️ AutoMod HELD (await mod review) #{channel} | "
+                    f"Raison: {drop_msg} | "
+                    f"Texte: {msg_text[:60]}"
+                )
+            elif drop_code == "msg_blocked":
+                # Message explicitement bloqué
+                LOGGER.error(
+                    f"🛑 Message BLOCKED #{channel} | "
+                    f"Raison: {drop_msg} | "
+                    f"Texte: {msg_text[:60]}"
+                )
+            else:
+                # Autres raisons
+                LOGGER.warning(
+                    f"⚠️ Message DROP (code={drop_code}) #{channel} | "
+                    f"Raison: {drop_msg} | "
+                    f"Texte: {msg_text[:60]}"
+                )
+    
+    async def _publish_send_metrics(self, channel: str, response, msg_text: str) -> None:
+        """
+        Publie les métriques d'envoi via le MessageBus pour le dashboard.
+        
+        Args:
+            channel: Nom du channel
+            response: SendMessageResponse object
+            msg_text: Texte du message envoyé
+        """
+        try:
+            drop_code = response.drop_reason.code if response.drop_reason else None
+            
+            # Publier l'événement pour le collector de métriques
+            await self.bus.publish("eventsub.send_result", {
+                "channel": channel,
+                "broadcaster_id": self.broadcaster_ids.get(channel, ""),
+                "is_sent": response.is_sent,
+                "message_id": response.message_id if response.is_sent else "",
+                "drop_code": drop_code,
+                "drop_message": response.drop_reason.message if response.drop_reason else "",
+                "message_text": msg_text[:100],
+                "latency_ms": 0,  # TODO: track actual latency
+                "timestamp": time.time(),
+            })
+        except Exception as e:
+            LOGGER.debug(f"⚠️ Error publishing send metrics: {e}")
+    
+    def _update_ratelimit_from_response(self, response) -> None:
+        """
+        Simule et track le rate-limit depuis la réponse API Twitch.
+        
+        Twitch retourne les headers:
+        - Ratelimit-Limit: 20 (max requests per minute)
+        - Ratelimit-Remaining: 15 (requests left)
+        - Ratelimit-Reset: 1733551500 (timestamp)
+        
+        NOTE: pyTwitchAPI ne retourne pas les headers dans SendMessageResponse,
+        donc on simule avec une logique simple: on décrémente le remaining à chaque envoi.
+        
+        Args:
+            response: SendMessageResponse object
+        """
+        if not RATELIMIT_TRACKER_AVAILABLE:
+            return
+        
+        try:
+            tracker = get_ratelimit_metrics()
+            if not tracker:
+                return
+            
+            import time as time_module
+            now = int(time_module.time())
+            
+            # Récupérer le status actuel ou en créer un nouveau
+            current_status = tracker.statuses.get("send_chat_message")
+            
+            if current_status:
+                # Décrémenter le remaining
+                remaining = max(0, current_status.remaining - 1)
+            else:
+                # Première requête, initialiser à 20
+                remaining = 19  # 20 - 1 (on vient d'envoyer)
+            
+            # Mettre à jour avec les nouvelles valeurs
+            headers = {
+                "Ratelimit-Limit": "20",
+                "Ratelimit-Remaining": str(remaining),
+                "Ratelimit-Reset": str(now + 60)
+            }
+            
+            status = tracker.update_from_response_headers("send_chat_message", headers)
+            
+            if status:
+                if status.remaining < 5:
+                    # Warning critique si moins de 5 requêtes restantes
+                    LOGGER.warning(
+                        f"🚨 Rate-limit CRITIQUE: "
+                        f"send_chat_message {status.remaining}/{status.limit} remaining"
+                    )
+                elif status.remaining < 10:
+                    # Warning si moins de 10
+                    LOGGER.info(
+                        f"⚠️ Rate-limit WARNING: "
+                        f"send_chat_message {status.remaining}/{status.limit} remaining"
+                    )
+        except Exception as e:
+            LOGGER.debug(f"⚠️ Could not update rate-limit: {e}")
+    
     async def _handle_outbound_message(self, msg: OutboundMessage) -> None:
         """
         Envoie un message via Helix API send_chat_message.
@@ -312,6 +596,10 @@ class EventSubChatClient:
         - Badge chatbot officiel (si scope user:bot + channel:bot)
         - Rate limit API séparé
         - Plus fiable
+        - Détection AutoMod/drop_reason pour meilleur debug
+        
+        IMPORTANT: Le bot doit avoir le scope channel:bot OU être mod sur le channel.
+        Sans l'un des deux, l'API retournera msg_rejected par AutoMod.
         
         Args:
             msg: Message à envoyer
@@ -328,25 +616,53 @@ class EventSubChatClient:
             return
         
         try:
-            LOGGER.info(f"📤 Envoi Helix API à #{channel}: {msg.text[:50]}...")
+            LOGGER.debug(f"📤 Envoi Helix API à #{channel}: {msg.text[:50]}...")
+            
+            # Appliquer le reformatage anti-AutoMod si activé
+            message_to_send = msg.text
+            if self._anti_automod_enabled and ANTI_AUTOMOD_AVAILABLE:
+                should_reformat, reformatted, score = should_reformat_message(msg.text)
+                
+                if should_reformat:
+                    message_to_send = reformatted
+                    LOGGER.info(
+                        f"🛡️ Anti-AutoMod: Message reformatted (score={score:.1f}) | "
+                        f"Original: {msg.text[:40]}... | "
+                        f"Reformatted: {reformatted[:40]}..."
+                    )
             
             # Envoyer via Helix API avec timeout
-            await asyncio.wait_for(
+            response = await asyncio.wait_for(
                 self.twitch.send_chat_message(
                     broadcaster_id=broadcaster_id,
                     sender_id=self.bot_user_id,
-                    message=msg.text,
+                    message=message_to_send,
                     reply_parent_message_id=msg.reply_to
                 ),
                 timeout=self.send_timeout
             )
             
-            LOGGER.info(f"✅ Sent to #{channel}: {msg.text[:50]}...")
+            # Log le résultat détaillé (est-ce que is_sent=True/False, drop_reason, etc.)
+            self._log_send_result(channel, response, message_to_send)
+            
+            # Publier les métriques d'envoi pour le dashboard
+            await self._publish_send_metrics(channel, response, message_to_send)
+            
+            # Tracker le rate-limit Twitch
+            self._update_ratelimit_from_response(response)
             
         except asyncio.TimeoutError:
-            LOGGER.error(f"⏱️ Timeout envoi à #{channel} après {self.send_timeout}s")
+            LOGGER.error(
+                f"⏱️ Timeout envoi à #{channel} après {self.send_timeout}s | "
+                f"Texte: {msg.text[:60]} | "
+                f"💡 Vérifier: connexion Twitch, charge API, broadcaster_id"
+            )
         except Exception as e:
-            LOGGER.error(f"❌ Erreur envoi à #{channel}: {e}", exc_info=True)
+            LOGGER.error(
+                f"❌ Erreur envoi à #{channel}: {type(e).__name__}: {e} | "
+                f"Texte: {msg.text[:60]}",
+                exc_info=True
+            )
     
     async def _health_check_loop(self) -> None:
         """
@@ -491,5 +807,8 @@ class EventSubChatClient:
             "last_keepalive_ago": elapsed,
             "keepalive_count": self._keepalive_count,
             "channels_subscribed": len(self._subscribed_channels),
-            "channels_expected": len(self.channels)
+            "channels_expected": len(self.channels),
+            "session_id": self._session_id,
+            "session_status": self._session_status,
+            "keepalive_timeout_seconds": self._keepalive_timeout_seconds
         }

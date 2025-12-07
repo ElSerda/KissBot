@@ -27,16 +27,21 @@ MONITOR_SCRIPT="$SCRIPT_DIR/core/monitor.py"
 MONITOR_PID_FILE="$PID_DIR/monitor.pid"
 MONITOR_LOG="$LOG_DIR/monitor.log"
 MONITOR_SOCKET="/tmp/kissbot_monitor.sock"
-MONITOR_DB="$SCRIPT_DIR/kissbot_monitor.db"
+# DB path will be set after parsing arguments below
+MONITOR_DB=""
 
 # Parse --use-db, --rust, and --mono options
-USE_DB_FLAG=""
+# Default: USE_DB is enabled (can be disabled with --no-db)
+USE_DB_FLAG="--use-db --db $DB_FILE"
 USE_RUST=false
 USE_MONO=false
 for arg in "$@"; do
     case $arg in
         --use-db)
             USE_DB_FLAG="--use-db --db $DB_FILE"
+            ;;
+        --no-db)
+            USE_DB_FLAG=""
             ;;
         --rust)
             USE_RUST=true
@@ -46,6 +51,13 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Set MONITOR_DB based on USE_DB_FLAG
+if [[ "$USE_DB_FLAG" == *"--use-db"* ]]; then
+    MONITOR_DB="$DB_FILE"
+else
+    MONITOR_DB="$SCRIPT_DIR/kissbot_monitor.db"
+fi
 
 # Colors
 GREEN='\033[0;32m'
@@ -294,7 +306,7 @@ start_monitor() {
     # Activate venv and start monitor in background
     cd "$SCRIPT_DIR"
     source "$VENV_PATH/bin/activate"
-    nohup python -m core.monitor > "$MONITOR_LOG" 2>&1 &
+    nohup python -m core.monitor --db "$MONITOR_DB" > "$MONITOR_LOG" 2>&1 &
     
     # Save PID
     MONITOR_PID=$!
@@ -1054,7 +1066,8 @@ case "$1" in
         echo "  logs-monitor [-f]     - Monitor logs"
         echo ""
         echo "⚙️  Options:"
-        echo "  --use-db              - Use database for OAuth tokens"
+        echo "  --use-db              - Use database for OAuth tokens (DEFAULT: enabled)"
+        echo "  --no-db               - Disable database mode (use YAML tokens)"
         echo "  --rust                - Use Rust supervisor (5MB RAM)"
         echo "  --mono                - Mono-process mode (saves RAM)"
         echo ""

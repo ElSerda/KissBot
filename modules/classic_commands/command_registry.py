@@ -123,6 +123,14 @@ class CommandRegistry:
     def _register_user_commands(self) -> None:
         """Enregistre les commandes utilisateur"""
         try:
+            # Test command (debug)
+            from modules.classic_commands.user_commands.test import handle_test
+            self.register("test", handle_test, CommandCategory.USER,
+                         description="Send a test message (debug EventSub)", cooldown=5.0)
+        except ImportError as e:
+            LOGGER.warning(f"⚠️ Could not load test command: {e}")
+        
+        try:
             # Intelligence (ask, joke)
             from modules.classic_commands.user_commands.intelligence import handle_ask, handle_joke
             self.register("ask", handle_ask, CommandCategory.USER, 
@@ -170,6 +178,15 @@ class CommandRegistry:
     
     def _register_mod_commands(self) -> None:
         """Enregistre les commandes modérateur"""
+        try:
+            from modules.classic_commands.mod_commands.debug_eventsub import handle_debug_eventsub, handle_debug_send
+            self.register("debug_eventsub", handle_debug_eventsub, CommandCategory.MOD,
+                         description="Display EventSub session & metrics (mods only)")
+            self.register("debug_send", handle_debug_send, CommandCategory.MOD,
+                         description="Test message send via EventSub (mods only)")
+        except ImportError as e:
+            LOGGER.warning(f"⚠️ Could not load debug commands: {e}")
+        
         try:
             from modules.classic_commands.mod_commands.devlist import handle_adddev, handle_rmdev, handle_listdevs
             self.register("adddev", handle_adddev, CommandCategory.MOD,
