@@ -642,10 +642,15 @@ async def main():
     rate_limiter = RateLimiter()
     
     # EventSub Metrics Collector (for dashboard observability)
-    with profile_block("eventsub_metrics"):
-        from web.core.eventsub_metrics import get_eventsub_metrics
-        eventsub_metrics = get_eventsub_metrics(bus, channel=monitor_channel)
-        LOGGER.info("📊 EventSub Metrics Collector initialized")
+    # Optional: only if web.core module is available
+    try:
+        with profile_block("eventsub_metrics"):
+            from web.core.eventsub_metrics import get_eventsub_metrics
+            eventsub_metrics = get_eventsub_metrics(bus, channel=monitor_channel)
+            LOGGER.info("📊 EventSub Metrics Collector initialized")
+    except ImportError as e:
+        LOGGER.debug(f"⚠️ EventSub Metrics not available (web.core module): {e}")
+        eventsub_metrics = None
     
     # Analytics Handler (conditional)
     analytics = None
