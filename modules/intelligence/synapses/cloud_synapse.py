@@ -5,10 +5,13 @@ Connexions neuronales cloud avec UCB, circuit-breaker et rate limiting intellige
 """
 
 import asyncio
+import json
 import logging
 import random
+import socket
+import threading
 import time
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
@@ -16,7 +19,6 @@ from modules.intelligence.synapses.constants import (
     TWITCH_MAX_CHARS, ASK_PREFIX_LEN, ASK_TARGET_CHARS,
     ASK_PROMPT_RANGE, ASK_MAX_TOKENS_CLOUD, MENTION_MAX_CHARS
 )
-from core.llm_usage_logger import increment_llm_tokens
 
 
 class CloudSynapse:
@@ -172,7 +174,7 @@ class CloudSynapse:
         start_time = time.time()
         try:
             response = await asyncio.wait_for(
-                self._transmit_cloud_signal(optimized_messages, context, correlation_id),
+                self._transmit_cloud_signal(optimized_messages, context, correlation_id, channel_id, stimulus_class),
                 timeout=timeout,
             )
 
@@ -301,7 +303,8 @@ class CloudSynapse:
         return [{"role": "system", "content": system_prompt}, {"role": "user", "content": stimulus}]
 
     async def _transmit_cloud_signal(
-        self, messages: list[dict[str, str]], context: str, correlation_id: str
+        self, messages: list[dict[str, str]], context: str, correlation_id: str,
+        channel_id: str = "", stimulus_class: str = "gen_short"
     ) -> str | None:
         """📡 TRANSMISSION CLOUD OPTIMISÉE"""
         self.logger.warning(f"☁️ DEBUG _transmit_cloud_signal: START")
@@ -356,17 +359,17 @@ class CloudSynapse:
 
                 data = response.json()
                 
-                # 📊 LOG TOKENS USAGE + SAVE TO DB
+                # 📊 LOG TOKENS USAGE + SAVE TO DB VIA MONITOR
                 usage = data.get("usage", {})
                 tokens_in = usage.get("prompt_tokens", 0)
                 tokens_out = usage.get("completion_tokens", 0)
                 if tokens_in or tokens_out:
                     self.logger.info(f"☁️📊 Tokens: {tokens_in} in / {tokens_out} out (total: {tokens_in + tokens_out})")
-                    # Incrémenter en DB
+                    # Fire-and-forget to Monitor (sync call, non-blocking)
                     try:
-                        increment_llm_tokens(tokens_in, tokens_out)
+                        self._log_to_monitor(channel_id, self.model, stimulus_class, tokens_in, tokens_out)
                     except Exception as e:
-                        self.logger.debug(f"Failed to log tokens to DB: {e}")
+                        self.logger.debug(f"Failed to send LLM usage to Monitor: {e}")
                 
                 if "choices" in data and data["choices"]:
                     raw_response = data["choices"][0]["message"]["content"]
@@ -519,6 +522,38 @@ class CloudSynapse:
 
         if "rate limit" not in error.lower():
             self._increase_backoff()
+
+    def _log_to_monitor(self, channel_id: str, model: str, feature: str,
+                        tokens_in: int, tokens_out: int):
+        """
+        Fire-and-forget: envoie les metrics LLM au Monitor via Unix socket.
+        Lance un thread daemon pour ne pas bloquer l'event loop.
+        """
+        def send_to_monitor():
+            try:
+                message = {
+                    "type": "llm_usage",
+                    "channel": channel_id,
+                    "model": model,
+                    "feature": feature,
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out
+                }
+                
+                # Send via Unix STREAM socket (Monitor écoute en STREAM)
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                sock.settimeout(1.0)  # 1s timeout
+                sock.connect("/tmp/kissbot_monitor.sock")
+                sock.sendall((json.dumps(message) + "\n").encode('utf-8'))
+                sock.close()
+                self.logger.debug(f"☁️📤 Sent LLM usage to Monitor: {tokens_in}+{tokens_out} tokens")
+            except Exception as e:
+                # Fail silently - monitoring ne doit pas impacter le bot
+                self.logger.debug(f"Failed to send LLM usage to Monitor: {e}")
+        
+        # Launch as daemon thread to avoid blocking
+        thread = threading.Thread(target=send_to_monitor, daemon=True)
+        thread.start()
 
     def get_bandit_stats(self) -> dict[str, float]:
         """🎰 STATISTIQUES BANDIT CLOUD"""

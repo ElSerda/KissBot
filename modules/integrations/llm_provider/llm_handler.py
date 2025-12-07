@@ -97,19 +97,8 @@ class LLMHandler:
             latency_ms = (time.perf_counter() - start_time) * 1000
             
             if response:
-                # Estimate output tokens
+                # Estimate output tokens (for logging only, actual tracking done at synapse level)
                 tokens_out = estimate_tokens(response, self.model_name)
-                
-                # Log LLM usage
-                log_llm_usage(
-                    channel=channel,
-                    model=self.model_name,
-                    feature="ask",
-                    tokens_in=tokens_in,
-                    tokens_out=tokens_out,
-                    latency_ms=latency_ms,
-                    monitor_client=self.monitor_client
-                )
                 
                 LOGGER.info(f"✅ LLM response generated ({len(response)} chars, {tokens_out} tokens, {latency_ms:.0f}ms)")
                 return response
@@ -162,17 +151,6 @@ class LLMHandler:
             
             if response:
                 tokens_out = estimate_tokens(response, self.model_name)
-                
-                log_llm_usage(
-                    channel=channel,
-                    model=self.model_name,
-                    feature="mention",
-                    tokens_in=tokens_in,
-                    tokens_out=tokens_out,
-                    latency_ms=latency_ms,
-                    monitor_client=self.monitor_client
-                )
-                
                 return response
             return None
             

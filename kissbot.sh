@@ -20,7 +20,7 @@ HUB_SOCKET="/tmp/kissbot_hub.sock"
 WEB_DIR="$SCRIPT_DIR/web/backend"
 WEB_PID_FILE="$PID_DIR/web.pid"
 WEB_LOG="$SCRIPT_DIR/web.log"
-WEB_PORT="${WEB_PORT:-3000}"
+WEB_PORT="${WEB_PORT:-8000}"
 
 # Monitor
 MONITOR_SCRIPT="$SCRIPT_DIR/core/monitor.py"
@@ -208,7 +208,9 @@ start_web() {
     source "$VENV_PATH/bin/activate"
     
     # Set PYTHONPATH and start uvicorn
-    PYTHONPATH="$WEB_DIR:$SCRIPT_DIR" nohup python -m uvicorn web.backend.main:app \
+    # Pass USE_DB flag to web backend (from kissbot.sh --use-db or --no-db)
+    USE_DB_ENV=$([ "$USE_DB_FLAG" != "" ] && echo "1" || echo "0")
+    PYTHONPATH="$WEB_DIR/backend:$WEB_DIR:$SCRIPT_DIR" USE_DB="$USE_DB_ENV" nohup python -m uvicorn web.backend.main:app \
         --host 0.0.0.0 \
         --port "$WEB_PORT" \
         --workers 1 \
@@ -476,6 +478,7 @@ start() {
     # Count bot PIDs from PID files (more reliable than pgrep)
     BOT_COUNT=0
     BOT_PIDS=""
+    SYSTEM_PIDS=""
     for pidfile in "$PID_DIR"/*.pid; do
         if [ -f "$pidfile" ]; then
             filename=$(basename "$pidfile")
@@ -484,20 +487,34 @@ start() {
                 pid=$(cat "$pidfile" 2>/dev/null)
                 if [ -n "$pid" ] && ps -p "$pid" > /dev/null 2>&1; then
                     channel=${filename%.pid}
-                    BOT_COUNT=$((BOT_COUNT + 1))
-                    BOT_PIDS="$BOT_PIDS\n   - PID $pid: --channel $channel"
+                    # Separate system processes from Twitch bots
+                    if [[ "$channel" == "monitor" ]] || [[ "$channel" == "web" ]]; then
+                        SYSTEM_PIDS="$SYSTEM_PIDS\n   - PID $pid: $channel"
+                    else
+                        BOT_COUNT=$((BOT_COUNT + 1))
+                        BOT_PIDS="$BOT_PIDS\n   - PID $pid: $channel"
+                    fi
                 fi
             fi
         fi
     done
     
-    echo -e "${GREEN}🤖 Started $BOT_COUNT bot processes${NC}"
-    
-    # List bot processes
+    # Display Twitch bots
     if [ "$BOT_COUNT" -gt 0 ]; then
-        echo -e "${GREEN}   Bot processes:${NC}"
+        echo -e "${GREEN}🤖 Started $BOT_COUNT Twitch bot(s):${NC}"
         echo -e "$BOT_PIDS"
     fi
+    
+    # Display system processes
+    if [ -n "$SYSTEM_PIDS" ]; then
+        echo -e "${CYAN}⚙️  System processes:${NC}"
+        echo -e "$SYSTEM_PIDS"
+    fi
+    
+    echo ""
+    
+    # Start Web Dashboard
+    start_web
 }
 
 # Function to stop the supervisor and all bots
