@@ -1170,7 +1170,7 @@ async def main():
         "--broadcaster",
         type=str,
         default=None,
-        help="Broadcaster login to use for EventSub (default: first in config)"
+        help="User login to use for EventSub token (default: serda_bot)"
     )
     
     args = parser.parse_args()
@@ -1190,32 +1190,34 @@ async def main():
     db = DatabaseManager(db_path=args.db, key_file=".kissbot.key")
     
     # IMPORTANT: EventSub WebSocket needs a USER token, not app token
-    # Use --broadcaster arg, or first channel from config
+    # Use --broadcaster arg to specify which user token to use
+    # DEFAULT: Use serda_bot token (bot account has its own USER token!)
     
-    # Determine broadcaster login
+    # Determine which user's token to use for EventSub WebSocket
     if args.broadcaster:
         broadcaster_login = args.broadcaster
     else:
-        # Get first channel from config
-        channels = config_data.get('channels', [])
-        if channels:
-            broadcaster_login = channels[0] if isinstance(channels[0], str) else channels[0].get('name', 'el_serda')
-        else:
-            broadcaster_login = 'el_serda'
+        # DEFAULT: Use bot account token (serda_bot has a USER token!)
+        # This allows EventSub to work across ALL channels where bot is present
+        broadcaster_login = 'serda_bot'
+        LOGGER.info("🤖 No --broadcaster specified, using serda_bot token (bot account)")
     
-    LOGGER.info(f"🎯 Using broadcaster: {broadcaster_login}")
+    LOGGER.info(f"🎯 Using token from: {broadcaster_login}")
     
     try:
-        # Load and decrypt broadcaster token
+        # Load and decrypt bot token (serda_bot uses 'bot' token_type, not 'broadcaster')
         user_info = db.get_user_by_login(broadcaster_login)
         if not user_info:
             LOGGER.error(f"❌ User {broadcaster_login} not found in database")
             sys.exit(1)
         
         user_id = user_info['id']
-        tokens = db.get_tokens(user_id, token_type='broadcaster')
+        # CRITICAL: serda_bot is a bot account → token_type='bot'
+        # Only human broadcasters use token_type='broadcaster' (from Dashboard OAuth)
+        token_type = 'bot' if broadcaster_login == 'serda_bot' else 'broadcaster'
+        tokens = db.get_tokens(user_id, token_type=token_type)
         if not tokens:
-            LOGGER.error(f"❌ No broadcaster token found for {broadcaster_login}")
+            LOGGER.error(f"❌ No {token_type} token found for {broadcaster_login}")
             LOGGER.error("   Run: python scripts/oauth_flow.py to authenticate")
             sys.exit(1)
         

@@ -582,10 +582,8 @@ class MessageHandler:
             LOGGER.warning(
                 f"⚠️ Banword détecté mais broadcaster protégé: {msg.user_login} in #{msg.channel}"
             )
-            safe_msg = (
-                f"🚫 Banword '{matched_word}' détecté mais broadcaster protégé: @" \
-                f"{msg.user_login}"
-            )
+            # Ne PAS afficher le mot banni dans le message public (sécurité)
+            safe_msg = f"🚫 Mot interdit détecté mais broadcaster protégé: @{msg.user_login}"
             await self.bus.publish("chat.outbound", OutboundMessage(
                 channel=msg.channel,
                 channel_id=msg.channel_id,
@@ -604,15 +602,16 @@ class MessageHandler:
         try:
             if dry_run:
                 # MODE DRY-RUN: Juste notifier, ne pas bannir
+                # Ne PAS afficher le mot banni dans le message public (sécurité)
                 if bot_is_mod:
                     notify_msg = (
-                        f"🚫 [DRY-RUN] Banword '{matched_word}' détecté! "
-                        f"Je POURRAIS ban {msg.user_login} (je suis mod)"
+                        f"🚫 [DRY-RUN] Mot interdit détecté! "
+                        f"Je POURRAIS ban @{msg.user_login} (je suis mod)"
                     )
                 else:
                     notify_msg = (
-                        f"🚫 [DRY-RUN] Banword '{matched_word}' détecté! "
-                        f"User: {msg.user_login} — ⚠️ Je ne suis pas mod, ban impossible"
+                        f"🚫 [DRY-RUN] Mot interdit détecté! "
+                        f"User: @{msg.user_login} — ⚠️ Je ne suis pas mod, ban impossible"
                     )
                 
                 await self.bus.publish("chat.outbound", OutboundMessage(

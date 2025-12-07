@@ -215,16 +215,19 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, twitc
         f"message={update_msg[:100]}..."
     )
     
-    # 7. Validation: Twitch client requis (pas de fallback IRC)
-    if not twitch_client:
-        LOGGER.error("❌ Twitch client manquant pour !kbupdate")
-        return f"@{msg.user_login} ❌ Erreur système: Twitch API non disponible"
-    
-    # 8. Utiliser Twitch API /announcements sur TOUS les channels configurés
+    # 7. Utiliser Twitch API /announcements sur TOUS les channels configurés
+    # ARCHITECTURE: Utilise le token BROADCASTER de chaque channel (pas le bot token)
+    # - Charge token depuis DB: token_type='broadcaster'
+    # - Crée Twitch instance temporaire avec ce token
+    # - Appel API avec moderator_id = broadcaster_id (pas besoin de /mod)
     try:
         # Récupérer tous les channels configurés depuis config.yaml
         import yaml
+        import json
         from pathlib import Path
+        from twitchAPI.twitch import Twitch
+        from twitchAPI.oauth import AuthScope
+        from database.manager import DatabaseManager
         
         # Trouver le répertoire racine du projet (où se trouve config/)
         current_file = Path(__file__).resolve()
@@ -247,51 +250,96 @@ async def cmd_kbupdate(msg: ChatMessage, args: list[str], bus: MessageBus, twitc
             LOGGER.warning("⚠️ Aucun channel configuré dans config.yaml")
             return f"@{msg.user_login} ❌ Aucun channel configuré"
         
+        # Load DB credentials
+        client_id = config['twitch']['client_id']
+        client_secret = config['twitch']['client_secret']
+        db_path = project_root / "kissbot.db"
+        key_path = project_root / ".kissbot.key"
+        
+        # Initialize DB manager
+        db = DatabaseManager(str(db_path), str(key_path))
+        
         success_count = 0
         failed_channels = []
         
-        LOGGER.info(f"📢 Broadcasting announce to {len(all_channels)} channels via API Helix")
+        LOGGER.info(f"📢 Broadcasting announce to {len(all_channels)} channels via BROADCASTER tokens")
         
         # Itérer sur tous les channels configurés (liste de strings)
         for channel_login in all_channels:
             # Normaliser le nom (enlever # si présent, lowercase)
             channel_login = channel_login.strip().lstrip('#').lower()
             
-            # Récupérer l'ID du channel via l'API (nécessaire pour send_chat_announcement)
             try:
-                async for user in twitch_client.get_users(logins=[channel_login]):
-                    channel_id = user.id
-                    
-                    # Appel à l'API Helix: send_chat_announcement
-                    await twitch_client.send_chat_announcement(
-                        broadcaster_id=channel_id,
-                        moderator_id="1209350837",  # Bot ID (serda_bot)
-                        message=announce_msg,
-                        color="purple"  # 👑 KissBot color
-                    )
-                    
-                    success_count += 1
-                    LOGGER.info(f"✅ Announce sent to #{channel_login} (ID: {channel_id})")
-                    break  # get_users retourne async generator, on prend le premier
+                # 1. Get broadcaster user from DB
+                broadcaster_user = db.get_user_by_login(channel_login)
+                if not broadcaster_user:
+                    LOGGER.warning(f"⚠️ User {channel_login} not found in DB, skipping")
+                    failed_channels.append(channel_login)
+                    continue
+                
+                # 2. Get broadcaster token from DB
+                broadcaster_token = db.get_tokens(broadcaster_user['id'], token_type='broadcaster')
+                if not broadcaster_token:
+                    LOGGER.warning(f"⚠️ No broadcaster token for {channel_login}, skipping")
+                    failed_channels.append(channel_login)
+                    continue
+                
+                # 3. Parse scopes (stored as JSON array string)
+                scopes_str = broadcaster_token['scopes']
+                if isinstance(scopes_str, str):
+                    scopes_list = json.loads(scopes_str)
+                else:
+                    scopes_list = scopes_str
+                
+                # Convert to AuthScope enums
+                scope_enums = []
+                for scope_str in scopes_list:
+                    for auth_scope in AuthScope:
+                        if auth_scope.value == scope_str:
+                            scope_enums.append(auth_scope)
+                            break
+                
+                # 4. Create temporary Twitch instance with broadcaster token
+                temp_twitch = Twitch(client_id, client_secret)
+                await temp_twitch.set_user_authentication(
+                    token=broadcaster_token['access_token'],
+                    scope=scope_enums,
+                    refresh_token=broadcaster_token['refresh_token'],
+                    validate=True
+                )
+                
+                # 5. Get broadcaster ID (field is 'twitch_user_id' in DB schema)
+                broadcaster_id = str(broadcaster_user['twitch_user_id'])
+                
+                # 6. Send announcement with broadcaster token + moderator_id = broadcaster_id
+                await temp_twitch.send_chat_announcement(
+                    broadcaster_id=broadcaster_id,
+                    moderator_id=broadcaster_id,  # CRITICAL: broadcaster acts on own channel
+                    message=announce_msg,
+                    color="purple"  # 👑 KissBot color
+                )
+                
+                await temp_twitch.close()
+                
+                success_count += 1
+                LOGGER.info(f"✅ Announce sent to #{channel_login} (ID: {broadcaster_id}) via broadcaster token")
                     
             except Exception as channel_error:
                 failed_channels.append(channel_login)
                 LOGGER.error(f"❌ Failed to send announce to #{channel_login}: {channel_error}")
         
-        # Résultat final
+        # Résultat final - Ne pas envoyer de réponse sur le channel source
+        # Seulement logger le résultat (pas de spam dans le chat)
         total = len(all_channels)
         if success_count == total:
-            return (
-                f"@{msg.user_login} 📢 Annonce officielle envoyée sur {success_count}/{total} channels ! "
-                f"(via /announcements API)"
-            )
+            LOGGER.info(f"✅ !kbupdate: {success_count}/{total} annonces envoyées avec succès")
+            return None  # Pas de réponse dans le chat
         elif success_count > 0:
             failed_str = ", ".join(failed_channels[:3])
-            return (
-                f"@{msg.user_login} ⚠️ Broadcast partiel: {success_count}/{total} channels. "
-                f"Échecs: {failed_str}{'...' if len(failed_channels) > 3 else ''}"
-            )
+            LOGGER.warning(f"⚠️ !kbupdate: {success_count}/{total} envoyés. Échecs: {failed_str}")
+            return None  # Pas de réponse dans le chat
         else:
+            # Seulement si échec total, on informe l'owner
             return f"@{msg.user_login} ❌ Aucune annonce envoyée (erreur sur tous les channels)"
             
     except Exception as e:
